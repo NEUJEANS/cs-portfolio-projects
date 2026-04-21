@@ -12,9 +12,11 @@ from library_manager import (
     build_borrower_trend_snapshot,
     build_dashboard_snapshot,
     build_genre_heatmap_snapshot,
+    build_policy_snapshot,
     build_genre_share_snapshot,
     build_genre_trend_snapshot,
     build_trend_snapshot,
+    format_policy,
     main,
     render_borrower_trends_csv,
     render_borrower_trends_svg,
@@ -22,6 +24,8 @@ from library_manager import (
     render_dashboard_markdown,
     render_genre_heatmap_csv,
     render_genre_heatmap_svg,
+    render_policy_html,
+    render_policy_markdown,
     render_genre_share_csv,
     render_genre_share_svg,
     render_genre_trends_csv,
@@ -117,6 +121,7 @@ class LibraryTests(unittest.TestCase):
 
         lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
         lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 10))
+        lib.set_policy(block_overdue_borrowers=False)
         lib.checkout(3, 'Alex', loan_days=21, checkout_date=date(2026, 4, 12))
         lib.return_book(3, return_date=date(2026, 4, 20))
 
@@ -159,6 +164,125 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(stats['average_return_days'], 8.0)
         self.assertEqual(stats['top_borrowers'][0]['borrower'], 'Alex')
         self.assertEqual(stats['top_borrowers'][0]['total_loans'], 2)
+
+    def test_policy_defaults_and_checkout_blocks_limit_and_overdue_until_relaxed(self):
+        lib, _ = self.make_library()
+        for title in ['B1', 'B2', 'B3', 'B4']:
+            lib.add_book(title, 'Author')
+
+        self.assertEqual(lib.get_policy()['max_active_loans'], 3)
+        self.assertTrue(lib.get_policy()['block_overdue_borrowers'])
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Alex', loan_days=7, checkout_date=date(2026, 4, 2))
+        lib.checkout(3, 'Alex', loan_days=7, checkout_date=date(2026, 4, 3))
+
+        with self.assertRaisesRegex(LibraryError, r'Alex already has 3 active loan\(s\), limit is 3'):
+            lib.checkout(4, 'Alex', loan_days=7, checkout_date=date(2026, 4, 4))
+
+        lib.return_book(3, return_date=date(2026, 4, 4))
+        with self.assertRaisesRegex(LibraryError, r'Alex has 2 overdue loan\(s\) and is blocked from checkout'):
+            lib.checkout(4, 'Alex', loan_days=7, checkout_date=date(2026, 4, 10))
+
+        updated = lib.set_policy(max_active_loans=4, block_overdue_borrowers=False)
+        self.assertEqual(updated['max_active_loans'], 4)
+        self.assertFalse(updated['block_overdue_borrowers'])
+
+        due_day = lib.checkout(4, 'Alex', loan_days=7, checkout_date=date(2026, 4, 10))
+        self.assertEqual(due_day.isoformat(), '2026-04-17')
+
+    def test_policy_snapshot_and_renderers_include_borrower_compliance_sections(self):
+        lib, _ = self.make_library()
+        for title in ['B1', 'B2', 'B3', 'B4']:
+            lib.add_book(title, 'Author')
+        lib.set_policy(max_active_loans=2)
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Alex', loan_days=14, checkout_date=date(2026, 4, 5))
+        lib.checkout(3, 'Sam', loan_days=21, checkout_date=date(2026, 4, 10))
+        lib.checkout(4, 'Priya', loan_days=14, checkout_date=date(2026, 4, 12))
+
+        snapshot = build_policy_snapshot(
+            lib,
+            reference_date=date(2026, 4, 12),
+            title='Policy pack',
+            generated_at='2026-04-12T09:00:00Z',
+        )
+
+        self.assertEqual(snapshot['policy']['max_active_loans'], 2)
+        self.assertEqual(snapshot['summary']['tracked_borrowers'], 3)
+        self.assertEqual(snapshot['summary']['blocked_borrowers'], 1)
+        self.assertEqual(snapshot['summary']['borrowers_with_overdue'], 1)
+        self.assertEqual(snapshot['summary']['borrowers_at_limit'], 2)
+        self.assertEqual(snapshot['borrowers'][0]['borrower'], 'Alex')
+        self.assertEqual(snapshot['borrowers'][0]['status'], 'blocked-overdue')
+        self.assertEqual(snapshot['borrowers'][1]['status'], 'at-limit')
+
+        markdown = render_policy_markdown(snapshot)
+        self.assertIn('# Policy pack', markdown)
+        self.assertIn('## Policy settings', markdown)
+        self.assertIn('Max active loans per borrower: 2', markdown)
+        self.assertIn('blocked by overdue items', markdown)
+
+        html = render_policy_html(snapshot)
+        self.assertIn('Policy pack', html)
+        self.assertIn('Borrower policy status', html)
+        self.assertIn('blocked by overdue items', html)
+        self.assertIn('one slot remaining', html)
+
+        formatted = format_policy(snapshot)
+        self.assertIn('policy: max active loans 2', formatted)
+        self.assertIn('summary: 3 borrower(s) tracked | 1 blocked', formatted)
+
+    def test_cli_policy_updates_settings_and_writes_artifacts(self):
+        lib, db = self.make_library()
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 3))
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        markdown_path = Path(tmp.name) / 'artifacts' / 'policy.md'
+        html_path = Path(tmp.name) / 'artifacts' / 'policy.html'
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(
+                [
+                    '--db',
+                    str(db),
+                    'policy',
+                    '--set-max-active-loans',
+                    '4',
+                    '--allow-overdue-borrowers',
+                    '--date',
+                    '2026-04-10',
+                    '--markdown-out',
+                    str(markdown_path),
+                    '--html-out',
+                    str(html_path),
+                    '--title',
+                    'CLI policy report',
+                    '--generated-at',
+                    '2026-04-10T09:00:00Z',
+                ]
+            )
+        command_output = buffer.getvalue()
+        self.assertIn('policy report written:', command_output)
+        self.assertTrue(markdown_path.exists())
+        self.assertTrue(html_path.exists())
+        self.assertIn('CLI policy report', markdown_path.read_text())
+        self.assertIn('CLI policy report', html_path.read_text())
+
+        self.assertEqual(lib.get_policy()['max_active_loans'], 4)
+        self.assertFalse(lib.get_policy()['block_overdue_borrowers'])
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'policy', '--date', '2026-04-10'])
+        stdout_policy = buffer.getvalue()
+        self.assertIn('policy: max active loans 4 | overdue checkout block disabled', stdout_policy)
 
     def test_rejects_invalid_checkout_return_search_and_history_requests(self):
         lib, _ = self.make_library()

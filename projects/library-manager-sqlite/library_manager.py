@@ -52,6 +52,7 @@ class Library:
                 'UPDATE books SET genre = "General" WHERE genre IS NULL OR trim(genre) = ""'
             )
             self._init_circulation_schema(conn)
+            self._init_policy_schema(conn)
             self._backfill_active_loans(conn)
             self.fts_enabled = self._init_search_index(conn)
 
@@ -87,6 +88,188 @@ class Library:
             'CREATE INDEX IF NOT EXISTS idx_loans_due_active '
             'ON loans(due_date, book_id) WHERE returned_at IS NULL'
         )
+
+    def _init_policy_schema(self, conn):
+        conn.execute(
+            'CREATE TABLE IF NOT EXISTS circulation_policy ('
+            'id INTEGER PRIMARY KEY CHECK (id = 1), '
+            'max_active_loans INTEGER NOT NULL DEFAULT 3 CHECK (max_active_loans > 0), '
+            'block_overdue_borrowers INTEGER NOT NULL DEFAULT 1 CHECK (block_overdue_borrowers IN (0, 1)), '
+            'updated_at TEXT NOT NULL'
+            ')'
+        )
+        conn.execute(
+            'INSERT INTO circulation_policy(id, max_active_loans, block_overdue_borrowers, updated_at) '
+            'VALUES (1, 3, 1, ?) '
+            'ON CONFLICT(id) DO NOTHING',
+            (_utc_timestamp_iso(),),
+        )
+
+    def _get_policy_row(self, conn):
+        row = conn.execute(
+            'SELECT max_active_loans, block_overdue_borrowers, updated_at '
+            'FROM circulation_policy WHERE id = 1'
+        ).fetchone()
+        if row is None:
+            self._init_policy_schema(conn)
+            row = conn.execute(
+                'SELECT max_active_loans, block_overdue_borrowers, updated_at '
+                'FROM circulation_policy WHERE id = 1'
+            ).fetchone()
+        policy = dict(row)
+        policy['block_overdue_borrowers'] = bool(policy['block_overdue_borrowers'])
+        return policy
+
+    @staticmethod
+    def _classify_policy_status(policy, active_loans, overdue_loans):
+        limit = policy['max_active_loans']
+        remaining_slots = max(limit - active_loans, 0)
+        if policy['block_overdue_borrowers'] and overdue_loans > 0:
+            return {
+                'status': 'blocked-overdue',
+                'status_label': 'blocked by overdue items',
+                'can_checkout': False,
+                'note': f'{overdue_loans} overdue loan(s) must be cleared before another checkout',
+                'remaining_slots': remaining_slots,
+            }
+        if active_loans >= limit:
+            return {
+                'status': 'blocked-limit',
+                'status_label': 'blocked at active-loan limit',
+                'can_checkout': False,
+                'note': f'borrower is already using all {limit} active-loan slot(s)',
+                'remaining_slots': remaining_slots,
+            }
+        if active_loans > 0 and remaining_slots == 1:
+            return {
+                'status': 'at-limit',
+                'status_label': 'one slot remaining',
+                'can_checkout': True,
+                'note': 'next checkout would hit the configured borrower limit',
+                'remaining_slots': remaining_slots,
+            }
+        return {
+            'status': 'ok',
+            'status_label': 'clear to checkout',
+            'can_checkout': True,
+            'note': f'{remaining_slots} checkout slot(s) remain under the current policy',
+            'remaining_slots': remaining_slots,
+        }
+
+    def _borrower_policy_counters(self, conn, borrower_name, reference_date, policy=None):
+        policy = policy or self._get_policy_row(conn)
+        reference_iso = reference_date.isoformat()
+        row = conn.execute(
+            'SELECT '
+            'COALESCE(COUNT(l.id), 0) AS total_loans, '
+            'COALESCE(SUM(CASE '
+            'WHEN l.checked_out_at <= ? AND (l.returned_at IS NULL OR l.returned_at > ?) '
+            'THEN 1 ELSE 0 END), 0) AS active_loans, '
+            'COALESCE(SUM(CASE '
+            'WHEN l.checked_out_at <= ? AND (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date < ? '
+            'THEN 1 ELSE 0 END), 0) AS overdue_loans, '
+            'MAX(CASE WHEN l.checked_out_at <= ? THEN l.checked_out_at END) AS last_checkout_at '
+            'FROM borrowers AS br '
+            'LEFT JOIN loans AS l ON l.borrower_id = br.id '
+            'WHERE br.name = ? COLLATE NOCASE',
+            (
+                reference_iso,
+                reference_iso,
+                reference_iso,
+                reference_iso,
+                reference_iso,
+                reference_iso,
+                borrower_name,
+            ),
+        ).fetchone()
+        counters = {
+            'borrower': borrower_name.strip(),
+            'total_loans': row['total_loans'] if row else 0,
+            'active_loans': row['active_loans'] if row else 0,
+            'overdue_loans': row['overdue_loans'] if row else 0,
+            'last_checkout_at': row['last_checkout_at'] if row else None,
+        }
+        counters.update(
+            self._classify_policy_status(
+                policy,
+                counters['active_loans'],
+                counters['overdue_loans'],
+            )
+        )
+        return counters
+
+    def get_policy(self):
+        with self._connect() as conn:
+            return self._get_policy_row(conn)
+
+    def set_policy(self, max_active_loans=None, block_overdue_borrowers=None):
+        if max_active_loans is not None and max_active_loans <= 0:
+            raise LibraryError('max_active_loans must be positive')
+        with self._connect() as conn:
+            current = self._get_policy_row(conn)
+            next_max = current['max_active_loans'] if max_active_loans is None else max_active_loans
+            next_block = (
+                current['block_overdue_borrowers']
+                if block_overdue_borrowers is None
+                else bool(block_overdue_borrowers)
+            )
+            updated_at = _utc_timestamp_iso()
+            conn.execute(
+                'UPDATE circulation_policy '
+                'SET max_active_loans = ?, block_overdue_borrowers = ?, updated_at = ? '
+                'WHERE id = 1',
+                (next_max, 1 if next_block else 0, updated_at),
+            )
+            return {
+                'max_active_loans': next_max,
+                'block_overdue_borrowers': next_block,
+                'updated_at': updated_at,
+            }
+
+    def borrower_policy_status(self, reference_date=None):
+        reference_day = reference_date or date.today()
+        reference_iso = reference_day.isoformat()
+        with self._connect() as conn:
+            policy = self._get_policy_row(conn)
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    'SELECT '
+                    'br.name AS borrower, '
+                    'COUNT(l.id) AS total_loans, '
+                    'COALESCE(SUM(CASE '
+                    'WHEN l.checked_out_at <= ? AND (l.returned_at IS NULL OR l.returned_at > ?) '
+                    'THEN 1 ELSE 0 END), 0) AS active_loans, '
+                    'COALESCE(SUM(CASE '
+                    'WHEN l.checked_out_at <= ? AND (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date < ? '
+                    'THEN 1 ELSE 0 END), 0) AS overdue_loans, '
+                    'MAX(CASE WHEN l.checked_out_at <= ? THEN l.checked_out_at END) AS last_checkout_at '
+                    'FROM borrowers AS br '
+                    'LEFT JOIN loans AS l ON l.borrower_id = br.id '
+                    'GROUP BY br.id, br.name '
+                    'HAVING COUNT(l.id) > 0 '
+                    'ORDER BY overdue_loans DESC, active_loans DESC, total_loans DESC, br.name COLLATE NOCASE',
+                    (
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                    ),
+                )
+            ]
+
+        statuses = []
+        for row in rows:
+            status = self._classify_policy_status(policy, row['active_loans'], row['overdue_loans'])
+            statuses.append(
+                {
+                    **row,
+                    **status,
+                }
+            )
+        return statuses
 
     def _init_search_index(self, conn):
         try:
@@ -207,6 +390,17 @@ class Library:
         due_day = checkout_day + timedelta(days=loan_days)
 
         with self._connect() as conn:
+            policy = self._get_policy_row(conn)
+            policy_view = self._borrower_policy_counters(conn, borrower, checkout_day, policy=policy)
+            if not policy_view['can_checkout']:
+                if policy_view['status'] == 'blocked-overdue':
+                    raise LibraryError(
+                        f'{borrower} has {policy_view["overdue_loans"]} overdue loan(s) and is blocked from checkout'
+                    )
+                raise LibraryError(
+                    f'{borrower} already has {policy_view["active_loans"]} active loan(s), '
+                    f'limit is {policy["max_active_loans"]}'
+                )
             book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
             if not book:
                 raise LibraryError(f'book #{book_id} not found')
@@ -1018,6 +1212,38 @@ def format_stats(stats):
     return '\n'.join(lines)
 
 
+def format_policy(snapshot):
+    policy = snapshot['policy']
+    summary = snapshot['summary']
+    lines = [
+        (
+            'policy: '
+            f'max active loans {policy["max_active_loans"]} | '
+            f'overdue checkout block {"enabled" if policy["block_overdue_borrowers"] else "disabled"} | '
+            f'updated {policy["updated_at"]}'
+        ),
+        (
+            'summary: '
+            f'{summary["tracked_borrowers"]} borrower(s) tracked | '
+            f'{summary["blocked_borrowers"]} blocked | '
+            f'{summary["borrowers_with_overdue"]} with overdue items | '
+            f'{summary["borrowers_at_limit"]} with one slot remaining'
+        ),
+    ]
+    if snapshot['borrowers']:
+        lines.append('borrower status:')
+        for row in snapshot['borrowers']:
+            lines.append(
+                '  '
+                f"{row['borrower']} — {row['status_label']} | active {row['active_loans']} | "
+                f"overdue {row['overdue_loans']} | remaining {row['remaining_slots']} | "
+                f"last checkout {row['last_checkout_at'] or '-'}"
+            )
+    else:
+        lines.append('borrower status: no borrower history yet')
+    return '\n'.join(lines)
+
+
 
 def _utc_timestamp_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
@@ -1192,6 +1418,10 @@ def _status_badge_class(status):
         'returned': 'status-returned',
         'checkout': 'status-checkout',
         'return': 'status-returned',
+        'ok': 'status-active',
+        'at-limit': 'status-at-limit',
+        'blocked-overdue': 'status-overdue',
+        'blocked-limit': 'status-blocked-limit',
     }.get(status, 'status-neutral')
 
 
@@ -1469,6 +1699,257 @@ def render_dashboard_html(snapshot):
             <th scope="col">Current</th>
             <th scope="col">Overdue</th>
             <th scope="col">Last checkout</th>
+          </tr>
+        </thead>
+        <tbody>{borrower_rows}</tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def build_policy_snapshot(
+    library,
+    reference_date=None,
+    title='Library borrower policy report',
+    generated_at=None,
+):
+    reference_day = reference_date or date.today()
+    policy = library.get_policy()
+    borrowers = library.borrower_policy_status(reference_date=reference_day)
+    return {
+        'title': title.strip() or 'Library borrower policy report',
+        'reference_date': reference_day.isoformat(),
+        'generated_at': generated_at or _utc_timestamp_iso(),
+        'policy': policy,
+        'borrowers': borrowers,
+        'summary': {
+            'tracked_borrowers': len(borrowers),
+            'active_borrowers': sum(1 for row in borrowers if row['active_loans'] > 0),
+            'blocked_borrowers': sum(1 for row in borrowers if not row['can_checkout']),
+            'borrowers_with_overdue': sum(1 for row in borrowers if row['overdue_loans'] > 0),
+            'borrowers_at_limit': sum(1 for row in borrowers if row['status'] == 'at-limit'),
+            'remaining_checkout_slots': sum(row['remaining_slots'] for row in borrowers),
+        },
+    }
+
+
+def render_policy_markdown(snapshot):
+    policy = snapshot['policy']
+    summary = snapshot['summary']
+    lines = [
+        f"# {snapshot['title']}",
+        '',
+        f"- Snapshot date: {snapshot['reference_date']}",
+        f"- Generated at: {snapshot['generated_at']}",
+        '',
+        '## Policy settings',
+        '',
+        f"- Max active loans per borrower: {policy['max_active_loans']}",
+        (
+            '- Overdue checkout block: '
+            f"{'Enabled, borrowers with overdue items cannot check out more books.' if policy['block_overdue_borrowers'] else 'Disabled, overdue borrowers may continue checking out items.'}"
+        ),
+        f"- Policy updated at: {policy['updated_at']}",
+        '',
+        '## Snapshot summary',
+        '',
+        f"- Borrowers tracked: {summary['tracked_borrowers']}",
+        f"- Borrowers with active loans: {summary['active_borrowers']}",
+        f"- Borrowers blocked from checkout: {summary['blocked_borrowers']}",
+        f"- Borrowers with overdue items: {summary['borrowers_with_overdue']}",
+        f"- Borrowers with one slot remaining: {summary['borrowers_at_limit']}",
+        f"- Remaining checkout slots across tracked borrowers: {summary['remaining_checkout_slots']}",
+        '',
+        '## Borrower policy status',
+        '',
+    ]
+    if snapshot['borrowers']:
+        lines.append(
+            _render_markdown_table(
+                ['Borrower', 'Status', 'Active', 'Overdue', 'Remaining slots', 'Total loans', 'Last checkout', 'Note'],
+                [
+                    [
+                        row['borrower'],
+                        row['status_label'],
+                        row['active_loans'],
+                        row['overdue_loans'],
+                        row['remaining_slots'],
+                        row['total_loans'],
+                        row['last_checkout_at'] or '-',
+                        row['note'],
+                    ]
+                    for row in snapshot['borrowers']
+                ],
+            )
+        )
+    else:
+        lines.append('_No borrower history yet._')
+    return '\n'.join(lines).rstrip()
+
+
+def render_policy_html(snapshot):
+    policy = snapshot['policy']
+    summary = snapshot['summary']
+    metric_cards = ''.join(
+        [
+            _render_metric_card('Tracked borrowers', summary['tracked_borrowers']),
+            _render_metric_card('Blocked borrowers', summary['blocked_borrowers']),
+            _render_metric_card('Borrowers with overdue items', summary['borrowers_with_overdue']),
+            _render_metric_card('Borrowers with one slot remaining', summary['borrowers_at_limit']),
+            _render_metric_card('Max active loans', policy['max_active_loans'], 'per borrower'),
+            _render_metric_card('Overdue checkout block', 'Enabled' if policy['block_overdue_borrowers'] else 'Disabled'),
+        ]
+    )
+    borrower_rows = ''.join(
+        (
+            '<tr>'
+            f'<td>{escape(row["borrower"])}</td>'
+            f'<td><span class="status-pill {_status_badge_class(row["status"])}">{escape(row["status_label"])}</span></td>'
+            f'<td>{row["active_loans"]}</td>'
+            f'<td>{row["overdue_loans"]}</td>'
+            f'<td>{row["remaining_slots"]}</td>'
+            f'<td>{row["total_loans"]}</td>'
+            f'<td>{escape(row["last_checkout_at"] or "-")}</td>'
+            f'<td>{escape(row["note"])}</td>'
+            '</tr>'
+        )
+        for row in snapshot['borrowers']
+    )
+    if not borrower_rows:
+        borrower_rows = '<tr><td colspan="8" class="empty-state">No borrower history yet.</td></tr>'
+
+    attention_html = (
+        '<section class="attention attention-warning">'
+        f'<strong>Attention:</strong> {summary["blocked_borrowers"]} borrower(s) are currently blocked from checkout under the configured policy.'
+        '</section>'
+        if summary['blocked_borrowers']
+        else '<section class="attention attention-ok"><strong>Snapshot status:</strong> No borrowers are currently blocked from checkout.</section>'
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(snapshot['title'])}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d6deeb;
+      --shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+      --blue: #1d4ed8;
+      --blue-soft: #dbeafe;
+      --amber: #b45309;
+      --amber-soft: #fef3c7;
+      --green: #166534;
+      --green-soft: #dcfce7;
+      --slate-soft: #e5e7eb;
+      --rose: #be123c;
+      --rose-soft: #ffe4e6;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 240px);
+      color: var(--text);
+    }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 40px 20px 56px; }}
+    .hero, .panel {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }}
+    .panel {{ margin-top: 24px; }}
+    .hero h1, .panel h2 {{ margin: 0 0 10px; }}
+    .hero p, .section-note {{ margin: 0; color: var(--muted); line-height: 1.55; }}
+    .meta {{ display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 18px; color: var(--muted); font-size: 0.95rem; }}
+    .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 22px; }}
+    .metric-card {{ background: #f8fbff; border: 1px solid var(--border); border-radius: 18px; padding: 16px; min-height: 104px; }}
+    .metric-label {{ display: block; color: var(--muted); font-size: 0.92rem; margin-bottom: 10px; }}
+    .metric-value {{ display: block; font-size: 1.8rem; line-height: 1.1; }}
+    .metric-subtitle {{ color: var(--muted); font-size: 0.9rem; margin-top: 8px; }}
+    .attention {{ margin-top: 20px; border-radius: 18px; padding: 14px 16px; border: 1px solid transparent; font-weight: 600; }}
+    .attention-warning {{ background: var(--amber-soft); border-color: #f5d58a; color: #92400e; }}
+    .attention-ok {{ background: var(--green-soft); border-color: #9adeb6; color: var(--green); }}
+    .policy-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 18px; }}
+    .policy-rule {{ border: 1px solid var(--border); border-radius: 18px; padding: 16px; background: #f8fbff; }}
+    .policy-rule strong {{ display: block; margin-bottom: 6px; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 14px; }}
+    caption {{ text-align: left; font-weight: 700; margin-bottom: 10px; }}
+    th, td {{ padding: 12px 10px; border-top: 1px solid #e5ecf6; vertical-align: top; text-align: left; }}
+    th {{ color: var(--muted); font-size: 0.88rem; letter-spacing: 0.01em; }}
+    tbody tr:hover {{ background: #f8fbff; }}
+    .status-pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 0.85rem; font-weight: 700; border: 1px solid transparent; white-space: nowrap; }}
+    .status-ok, .status-active {{ background: var(--green-soft); color: var(--green); border-color: #9adeb6; }}
+    .status-at-limit {{ background: var(--blue-soft); color: var(--blue); border-color: #bfd7ff; }}
+    .status-blocked-overdue, .status-overdue {{ background: var(--amber-soft); color: #92400e; border-color: #f5d58a; }}
+    .status-blocked-limit {{ background: var(--rose-soft); color: var(--rose); border-color: #fecdd3; }}
+    .status-neutral {{ background: var(--slate-soft); color: #334155; border-color: #cbd5e1; }}
+    .empty-state {{ color: var(--muted); font-style: italic; }}
+    @media (max-width: 800px) {{
+      main {{ padding: 24px 12px 40px; }}
+      .hero, .panel {{ padding: 18px; border-radius: 18px; }}
+      th, td {{ padding: 10px 8px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>{escape(snapshot['title'])}</h1>
+      <p>Persistent circulation rules make this SQLite CLI feel more like a real library system. This snapshot shows both the configured borrower policy and the live borrower compliance picture at the chosen date.</p>
+      <div class="meta">
+        <span><strong>Snapshot date:</strong> <time datetime="{escape(snapshot['reference_date'])}">{escape(snapshot['reference_date'])}</time></span>
+        <span><strong>Generated at:</strong> <time datetime="{escape(snapshot['generated_at'])}">{escape(snapshot['generated_at'])}</time></span>
+        <span><strong>Policy updated:</strong> <time datetime="{escape(policy['updated_at'])}">{escape(policy['updated_at'])}</time></span>
+      </div>
+      <div class="metric-grid">{metric_cards}</div>
+      {attention_html}
+    </section>
+
+    <section class="panel">
+      <h2>Policy settings</h2>
+      <div class="policy-grid">
+        <article class="policy-rule">
+          <strong>Max active loans</strong>
+          <span>{policy['max_active_loans']} active loan(s) per borrower</span>
+        </article>
+        <article class="policy-rule">
+          <strong>Overdue behavior</strong>
+          <span>{'Borrowers with overdue items are blocked from new checkouts.' if policy['block_overdue_borrowers'] else 'Borrowers with overdue items may continue checking out books.'}</span>
+        </article>
+        <article class="policy-rule">
+          <strong>Remaining tracked slots</strong>
+          <span>{summary['remaining_checkout_slots']} combined checkout slot(s) remain across tracked borrowers at this snapshot.</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Borrower policy status</h2>
+      <p class="section-note">Borrowers are ordered by current risk first, so overdue blocks and limit pressure stay visible during demos.</p>
+      <table>
+        <caption>Borrower-level policy compliance at the snapshot date</caption>
+        <thead>
+          <tr>
+            <th scope="col">Borrower</th>
+            <th scope="col">Status</th>
+            <th scope="col">Active</th>
+            <th scope="col">Overdue</th>
+            <th scope="col">Remaining slots</th>
+            <th scope="col">Total loans</th>
+            <th scope="col">Last checkout</th>
+            <th scope="col">Note</th>
           </tr>
         </thead>
         <tbody>{borrower_rows}</tbody>
@@ -2672,6 +3153,17 @@ def main(argv=None):
     stats_parser.add_argument('--date', dest='reference_date')
     stats_parser.add_argument('--top', type=int, default=5)
 
+    policy_parser = sub.add_parser('policy', help='Show or update borrower policy rules')
+    policy_parser.add_argument('--date', dest='reference_date')
+    policy_parser.add_argument('--set-max-active-loans', type=int)
+    overdue_group = policy_parser.add_mutually_exclusive_group()
+    overdue_group.add_argument('--block-overdue-borrowers', action='store_true')
+    overdue_group.add_argument('--allow-overdue-borrowers', action='store_true')
+    policy_parser.add_argument('--markdown-out', type=Path)
+    policy_parser.add_argument('--html-out', type=Path)
+    policy_parser.add_argument('--title', default='Library borrower policy report')
+    policy_parser.add_argument('--generated-at')
+
     trends_parser = sub.add_parser('trends', help='Export chart-friendly circulation trends')
     trends_parser.add_argument('--start-date')
     trends_parser.add_argument('--end-date')
@@ -2769,6 +3261,38 @@ def main(argv=None):
             ref = parse_optional_date(args.reference_date, 'reference date')
             stats = library.circulation_stats(reference_date=ref, top_limit=args.top)
             print(format_stats(stats))
+        elif args.cmd == 'policy':
+            if args.block_overdue_borrowers:
+                block_overdue_borrowers = True
+            elif args.allow_overdue_borrowers:
+                block_overdue_borrowers = False
+            else:
+                block_overdue_borrowers = None
+            if args.set_max_active_loans is not None or block_overdue_borrowers is not None:
+                library.set_policy(
+                    max_active_loans=args.set_max_active_loans,
+                    block_overdue_borrowers=block_overdue_borrowers,
+                )
+            ref = parse_optional_date(args.reference_date, 'reference date')
+            generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
+            snapshot = build_policy_snapshot(
+                library,
+                reference_date=ref,
+                title=args.title,
+                generated_at=generated_at,
+            )
+            markdown = render_policy_markdown(snapshot)
+            written = []
+            if args.markdown_out:
+                _write_text_output(args.markdown_out, markdown + '\n')
+                written.append(str(args.markdown_out))
+            if args.html_out:
+                _write_text_output(args.html_out, render_policy_html(snapshot) + '\n')
+                written.append(str(args.html_out))
+            if written:
+                print('policy report written: ' + ', '.join(written))
+            else:
+                print(format_policy(snapshot))
         elif args.cmd == 'trends':
             start_day = parse_optional_date(args.start_date, 'start date')
             end_day = parse_optional_date(args.end_date, 'end date')

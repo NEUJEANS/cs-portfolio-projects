@@ -1,7 +1,7 @@
 # library-manager-sqlite
 
 ## Overview
-A SQLite-backed CLI for managing a small library catalog with real circulation flows: add books, tag them by genre, search the catalog, check books out to borrowers, return them, and report overdue loans.
+A SQLite-backed CLI for managing a small library catalog with real circulation flows: add books, tag them by genre, search the catalog, check books out to borrowers, return them, report overdue loans, and enforce persistent borrower policy rules.
 
 ## Why it is portfolio-worthy
 - shows persistent state management with SQLite
@@ -10,6 +10,7 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - keeps an auditable borrower and loan-history trail instead of only the current checked-out row state
 - now includes ranked SQLite FTS5 search with prefix and phrase-query support
 - now includes genre metadata plus genre-level trend, heatmap, and share-composition exports so the analytics pack can tell subject-level circulation stories from multiple angles
+- now includes persistent borrower policy rules plus a recruiter-friendly policy snapshot, so the project demonstrates constraint enforcement instead of passive reporting only
 - exposes history, circulation analytics, and recruiter-friendly dashboard exports that are easy to demo in interviews
 - keeps the stack lightweight and easy to run locally
 
@@ -24,10 +25,12 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - full-text search supports prefix-style free-text queries like `distr tanen` and advanced phrase queries like `"distributed systems"`
 - `--search-mode auto` prefers FTS when available and safely falls back to substring matching on SQLite builds without FTS5
 - checkout with borrower name and configurable loan duration
+- persisted circulation policy settings with a configurable max active-loan limit per borrower and an optional overdue-checkout block
 - return flow that clears the current book-row loan metadata while preserving an audit trail in a dedicated `loans` table
 - borrower records are normalized into their own table so repeat borrowers can be summarized cleanly
 - `history` shows active, overdue, or returned circulation records with lateness context
 - `stats` summarizes total loans, overdue activity, return-time averages, and top borrowers
+- `policy` shows or updates borrower policy rules, enforces them during checkout, and exports Markdown/HTML borrower-compliance snapshots
 - `dashboard` exports Markdown and HTML circulation snapshots with accessible tables, status pills, and machine-readable timestamps
 - `trends` exports daily circulation analytics as chart-friendly CSV plus an accessible SVG small-multiples report for portfolio screenshots
 - `borrower-trends` exports top-borrower daily breakdowns as CSV plus a recruiter-friendly SVG cohort dashboard
@@ -52,6 +55,11 @@ python3 library_manager.py --db library.db list --query '"distributed systems"' 
 python3 library_manager.py --db library.db overdue --date 2026-04-30
 python3 library_manager.py --db library.db history --status overdue --date 2026-04-30
 python3 library_manager.py --db library.db stats --date 2026-04-30 --top 5
+python3 library_manager.py --db library.db policy --set-max-active-loans 4 --allow-overdue-borrowers
+python3 library_manager.py --db library.db policy --date 2026-04-30 \
+  --markdown-out ../../docs/artifacts/library-manager-sqlite/sample_policy_report.md \
+  --html-out ../../docs/artifacts/library-manager-sqlite/sample_policy_report.html \
+  --generated-at 2026-04-30T12:00:00Z
 python3 library_manager.py --db library.db trends --start-date 2026-04-01 --end-date 2026-04-30 \
   --csv-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_trends.csv \
   --svg-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_trends.svg \
@@ -96,6 +104,8 @@ python3 library_manager.py --db library.db return 1
 - sample genre heatmap SVG: `docs/artifacts/library-manager-sqlite/sample_genre_heatmap.svg`
 - sample genre share CSV: `docs/artifacts/library-manager-sqlite/sample_genre_share.csv`
 - sample genre share SVG: `docs/artifacts/library-manager-sqlite/sample_genre_share.svg`
+- sample policy report Markdown: `docs/artifacts/library-manager-sqlite/sample_policy_report.md`
+- sample policy report HTML: `docs/artifacts/library-manager-sqlite/sample_policy_report.html`
 
 ## Test
 ```bash
@@ -103,6 +113,6 @@ python3 -m unittest test_library_manager.py
 ```
 
 ## Future Improvements
-- support borrower borrowing limits or policy rules
 - add import/export for seed catalogs
 - package the project as an installable CLI
+- add borrower categories or item-type-specific policies so the rules can vary by patron or collection
