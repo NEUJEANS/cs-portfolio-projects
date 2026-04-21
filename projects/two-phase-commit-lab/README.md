@@ -14,7 +14,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - blocked-case termination hints that explain what a prepared participant can still ask peers while the coordinator is unavailable
 - peer-to-peer termination-resolution mode that actually plays out what happens when a blocked participant reaches a decisive peer (or proves that everyone is still stuck)
 - committed sample scenarios for happy-path commit, participant veto abort, coordinator blocking before the decision log, durable-decision replay after a crash, one-peer-visible `COMMIT` after a crash, blocked-after-`ABORT` resolution via a non-prepared peer, and participant-side reconnect after a missed `COMMIT`
-- protocol comparison mode that contrasts the same business incident as plain 2PC versus an orchestrated saga, making the blocking-vs-compensation trade-off visible in Markdown, JSON, and static HTML dashboard artifacts
+- protocol comparison mode that contrasts the same business incident as plain 2PC, textbook 3PC, and an orchestrated saga, making the blocking-vs-timeout-vs-compensation trade-off visible in Markdown, JSON, and static HTML dashboard artifacts
 - Markdown report export for recruiter-friendly artifacts under `docs/artifacts/two-phase-commit-lab/`
 - static HTML comparison dashboards for recruiter screenshots, GitHub Pages browsing, or interview walkthrough links
 - standalone SVG and HTML timeline exports for peer-termination walkthroughs, so blocked incidents have a visual sequence artifact as well as Markdown
@@ -25,7 +25,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - clean CLI commands for validation, single-scenario simulation, protocol comparison, termination walkthroughs, and bundle generation
 
 ## Project structure
-- `two_phase_commit_lab.py` - validator, simulator, peer-resolution/2PC-vs-saga artifact generators (Markdown/JSON/HTML), catalog generator, and CLI entrypoint
+- `two_phase_commit_lab.py` - validator, simulator, peer-resolution/2PC-vs-3PC-vs-saga artifact generators (Markdown/JSON/HTML), catalog generator, and CLI entrypoint
 - `order_success.json` - all participants vote YES and the transaction commits
 - `payment_validation_abort.json` - one participant votes NO so the transaction aborts globally
 - `coordinator_crash_before_decision.json` - all participants prepare, but the coordinator crashes before a durable outcome exists
@@ -117,7 +117,7 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py run \
   --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_partial_commit_delivery_report.md
 ```
 
-### Compare 2PC with an orchestrated saga for the same incident
+### Compare 2PC, 3PC, and an orchestrated saga for the same incident
 ```bash
 python3 projects/two-phase-commit-lab/two_phase_commit_lab.py compare \
   projects/two-phase-commit-lab/coordinator_crash_before_decision.json \
@@ -204,9 +204,9 @@ Available presets currently include `incident-review`, `peer-assisted`, `recover
 - `incident_response_dashboard.html`
   - a compact on-call style triage view for only the blocked scenarios, grouped into recovery-required, peer-visible `COMMIT`, and safe-`ABORT` evidence buckets
 - `coordinator_crash_before_decision_protocol_compare.md` / `.html`
-  - a side-by-side 2PC vs saga artifact for the classic blocking crash, useful when interviewers ask why microservices often avoid plain 2PC
+  - a side-by-side 2PC vs 3PC vs saga artifact for the classic blocking crash, useful when interviewers ask why microservices often avoid plain 2PC and why 3PC mostly stays a textbook protocol
 - `coordinator_crash_partial_commit_delivery_protocol_compare.md` / `.html`
-  - a peer-visible-decision comparison artifact showing that some blocked 2PC incidents still have an actionable termination-protocol story before coordinator recovery
+  - a peer-visible-decision comparison artifact showing how the same incident reads as blocked under 2PC, timeout-assisted under 3PC assumptions, and compensation-friendly under saga orchestration
 - `coordinator_crash_partial_commit_delivery_termination.md`
   - the blocked-after-decision case fully resolves via peer queries because `inventory` already knows the durable `COMMIT`
 - `coordinator_crash_partial_commit_delivery_termination_timeline.svg` / `.html`
@@ -226,5 +226,4 @@ python3 -m unittest tests.test_two_phase_commit_lab -v
 ```
 
 ## Future ideas
-- add a side-by-side 2PC vs 3PC comparison mode to explain why non-blocking atomic commit is harder
 - add PNG/social-preview export for the timeline artifacts so the visuals are easy to drop into README thumbnails or slide decks

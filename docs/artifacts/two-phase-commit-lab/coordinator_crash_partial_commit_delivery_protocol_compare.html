@@ -55,6 +55,7 @@
       .protocol-card { padding: 22px; }
       .protocol-card--primary { background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }
       .protocol-card--secondary { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }
+      .protocol-card--tertiary { background: linear-gradient(180deg, #ffffff 0%, #f5f3ff 100%); border-color: #ddd6fe; }
       .protocol-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 16px; }
       .outcome-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 12px; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.02em; }
       .outcome-pill--success { background: var(--success-soft); color: var(--success); }
@@ -85,11 +86,12 @@
       <section class="hero">
         <p class="eyebrow">Protocol comparison dashboard</p>
         <h1>Coordinator crash after one COMMIT delivery</h1>
-        <p class="lede">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery. This static dashboard makes the 2PC-versus-saga trade-off browsable in one recruiter-friendly artifact: what the coordinator logged, who got stuck in PREPARED, what a saga would do instead, and whether any peer already knows the durable decision.</p>
+        <p class="lede">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery. This static dashboard makes the 2PC-versus-3PC-versus-saga trade-off browsable in one recruiter-friendly artifact: what the coordinator logged, where PREPARED blocking appears, when bounded-delay timeout recovery helps, and what a saga would do instead.</p>
         <div class="meta">
           <span class="chip">transaction order-5120</span>
           <span class="chip chip--warning">2PC blocked</span>
-          <span class="chip chip--warning">saga paused-not-blocked</span>
+          <span class="chip chip--success">3PC timeout-assisted-commit</span>
+          <span class="chip chip--warning">Saga paused-not-blocked</span>
           <span class="chip chip--warning">crash after-decision-log</span>
         </div>
       </section>
@@ -99,6 +101,10 @@
       <p class="summary-label">2PC baseline</p>
       <strong>blocked</strong>
       <p>The coordinator-owned durable decision plus PREPARED participants determine whether the system commits, aborts, or blocks.</p>
+    </article><article class="summary-card summary-card--success">
+      <p class="summary-label">3PC contrast</p>
+      <strong>timeout-assisted-commit</strong>
+      <p>Adds a pre-commit checkpoint so timeout-driven recovery can avoid indefinite waits, but only under bounded-delay and no-partition assumptions.</p>
     </article><article class="summary-card summary-card--warning">
       <p class="summary-label">Saga contrast</p>
       <strong>paused-not-blocked</strong>
@@ -191,6 +197,35 @@
           <li>easy to explain when interviewers ask how a durable decision log enforces atomic commit</li><li>participants may hold PREPARED state while waiting on the coordinator or an authoritative replay</li><li>fits tightly coupled all-or-nothing workflows better than high-availability microservice traffic</li>
         </ul>
       </section>
+    </article><article class="protocol-card protocol-card--tertiary">
+      <div class="protocol-card-header">
+        <div>
+          <p class="eyebrow">3PC</p>
+          <h2>3PC</h2>
+        </div>
+        <span class="outcome-pill outcome-pill--success">timeout-assisted-commit</span>
+      </div>
+      <p class="protocol-blurb">coordinator-led canCommit, preCommit, and doCommit phases with timeout-driven recovery under bounded-delay assumptions</p>
+      <dl class="metric-grid">
+        <div><dt>Consistency model</dt><dd>atomic-commit intent with less blocking than 2PC only when the network is synchronous enough to trust timeout decisions</dd></div>
+        <div><dt>Atomicity</dt><dd>stronger atomic shape than saga, but practical safety depends on timing assumptions that break down under partitions</dd></div>
+        <div><dt>Blocking behavior</dt><dd>tries to avoid indefinite blocking once participants are commit-ready, but only under bounded delays and no partitions</dd></div>
+        <div><dt>Recovery story</dt><dd>after the commit-ready checkpoint, the textbook bounded-delay model lets participants use timeout-driven recovery to finish commit without waiting forever for the original coordinator</dd></div>
+      </dl>
+      <section class="callout">
+        <h3>Participant story</h3>
+        <p>participants that already crossed the commit-ready phase can often drive COMMIT after timeout in the textbook model, instead of staying stuck in PREPARED</p>
+      </section>
+      <section class="callout">
+        <h3>Interview hook</h3>
+        <p>3PC improves the coordinator-crash story versus 2PC, but real network partitions are exactly why it is more famous in textbooks than in production stacks.</p>
+      </section>
+      <section>
+        <h3>Tradeoffs</h3>
+        <ul>
+          <li>adds an extra network round and more coordinator/participant states than plain 2PC</li><li>uses timing assumptions to reduce blocking, which is why it is much rarer in partition-prone production systems</li><li>sits between 2PC and saga: less coordinator blocking than 2PC in the happy synchrony model, but still far tighter coupling than compensation-first workflows</li>
+        </ul>
+      </section>
     </article><article class="protocol-card protocol-card--secondary">
       <div class="protocol-card-header">
         <div>
@@ -226,10 +261,10 @@
       <section class="panel">
         <div class="panel-header">
           <h2>Interview takeaways</h2>
-          <p>Use these bullets when explaining why the same business incident feels coordinator-blocking under 2PC but resumable or compensatable under saga orchestration.</p>
+          <p>Use these bullets when explaining why the same business incident feels coordinator-blocking under 2PC, timeout-assisted under 3PC, or resumable/compensatable under saga orchestration.</p>
         </div>
         <ul class="takeaway-list">
-          <li>In this scenario, plain 2PC resolves as `blocked`, which is driven by one coordinator-owned durable decision and the PREPARED states around it.</li><li>An orchestrated saga would avoid PREPARED lock blocking by committing local work independently and using retries/compensations instead of a global commit barrier.</li><li>Use this comparison to explain why high-availability microservice systems often choose sagas when temporary inconsistency is acceptable but indefinite coordinator blocking is not.</li><li>Here, 1 participant already heard the durable COMMIT before the crash, so the blocked 2PC case becomes a peer-assisted incident-response story rather than pure blind waiting.</li><li>The simulator&#x27;s termination hint (`COMMIT visible via inventory`) makes that concrete: a prepared participant can ask an informed peer instead of inventing a local outcome.</li><li>The configured crash point (`after-decision-log`) is the teaching lever here: it shows that the same business transaction can become either coordinator-blocked (2PC) or resumable/compensatable (saga).</li>
+          <li>In this scenario, plain 2PC resolves as `blocked`, which is driven by one coordinator-owned durable decision and the PREPARED states around it.</li><li>3PC is the middle-ground teaching protocol here: it adds a pre-commit checkpoint so timeout-driven recovery can avoid indefinite waits, but only when bounded-delay and no-partition assumptions hold.</li><li>An orchestrated saga would avoid PREPARED lock blocking by committing local work independently and using retries/compensations instead of a global commit barrier.</li><li>Use this comparison to explain why high-availability microservice systems often skip from blocking-prone 2PC straight to sagas or consensus-backed designs instead of betting production safety on 3PC timing assumptions.</li><li>Here, 1 participant already heard the durable COMMIT before the crash, so the blocked 2PC case becomes a peer-assisted incident-response story rather than pure blind waiting.</li><li>The simulator&#x27;s termination hint (`COMMIT visible via inventory`) makes that concrete: a prepared participant can ask an informed peer instead of inventing a local outcome.</li><li>The configured crash point (`after-decision-log`) is the teaching lever here: it shows that the same business transaction can become coordinator-blocked (2PC), timeout-assisted under synchrony assumptions (3PC), or resumable/compensatable (saga).</li>
         </ul>
       </section>
     </main>

@@ -15,6 +15,7 @@
 - [x] Add reusable scenario tags plus catalog theme-group sections so the sample bundle is easier to browse by blocking/recovery/reconnect story
 - [x] Add tag-filtered catalog generation plus a committed peer-assisted subset bundle so recruiters can browse a smaller scenario pack without hand-curating file lists
 - [x] Add saved named bundle presets on top of the tag-filtered catalog flow so common walkthrough bundles are one flag away
+- [x] Extend protocol comparison artifacts from 2PC-vs-saga to 2PC-vs-3PC-vs-saga so the lab explains why timeout-assisted atomic commit is still mostly a teaching protocol
 
 ## Next candidate slices
 - [ ] add PNG/social-preview export for the timeline artifacts so they are easy to reuse in README hero images or slide decks

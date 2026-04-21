@@ -17,6 +17,7 @@ Every participant votes YES and enters PREPARED, but the coordinator crashes bef
 | Protocol | Outcome in this scenario | Consistency model | Atomicity | Blocking behavior | Recovery story |
 | --- | --- | --- | --- | --- | --- |
 | 2PC | `blocked` | strong atomic commit when the decision completes; every participant follows the same global outcome | global all-or-nothing across participants once the coordinator's durable decision is known | blocking once PREPARED participants cannot prove the coordinator's final decision | needs coordinator recovery or a safe termination-protocol answer from an authoritative peer |
+| 3PC | `timeout-assisted-abort` | atomic-commit intent with less blocking than 2PC only when the network is synchronous enough to trust timeout decisions | stronger atomic shape than saga, but practical safety depends on timing assumptions that break down under partitions | avoids indefinite PREPARED blocking only if timeout and bounded-delay assumptions are trustworthy | if the coordinator dies before a commit-ready phase is durable, the textbook bounded-delay model lets participants time out toward abort or elect new leadership instead of waiting forever |
 | Saga (orchestrated) | `paused-not-blocked` | eventual consistency across services, with explicit compensations when later steps fail | no single global atomic commit; earlier local success is repaired by compensation instead of a shared PREPARE/COMMIT barrier | non-blocking for participant resources; the workflow can pause, but services do not sit on PREPARED locks waiting for a global decision | resume from the last durable saga step or compensate the already-finished steps; no global prepare barrier needs to be unblocked |
 
 ## Protocol notes
@@ -29,6 +30,15 @@ Every participant votes YES and enters PREPARED, but the coordinator crashes bef
   - participants may hold PREPARED state while waiting on the coordinator or an authoritative replay
   - fits tightly coupled all-or-nothing workflows better than high-availability microservice traffic
 
+### 3PC
+- coordination model: coordinator-led canCommit, preCommit, and doCommit phases with timeout-driven recovery under bounded-delay assumptions
+- participant story: participants have not crossed a commit-ready barrier yet, so the textbook timeout path is to roll back rather than hold locks indefinitely
+- interview hook: This is the teaching-friendly 3PC pitch: another phase turns 'wait forever in PREPARED' into 'time out and abort' under synchronous-network assumptions.
+- tradeoffs:
+  - adds an extra network round and more coordinator/participant states than plain 2PC
+  - uses timing assumptions to reduce blocking, which is why it is much rarer in partition-prone production systems
+  - sits between 2PC and saga: less coordinator blocking than 2PC in the happy synchrony model, but still far tighter coupling than compensation-first workflows
+
 ### Saga (orchestrated)
 - coordination model: ordered local transactions plus compensating actions, typically driven by an orchestrator or event flow
 - participant story: already-finished local transactions stay committed, unfinished steps pause for orchestrator recovery or operator action, and peers continue serving other work
@@ -40,6 +50,7 @@ Every participant votes YES and enters PREPARED, but the coordinator crashes bef
 
 ## Interview takeaways
 - In this scenario, plain 2PC resolves as `blocked`, which is driven by one coordinator-owned durable decision and the PREPARED states around it.
+- 3PC is the middle-ground teaching protocol here: it adds a pre-commit checkpoint so timeout-driven recovery can avoid indefinite waits, but only when bounded-delay and no-partition assumptions hold.
 - An orchestrated saga would avoid PREPARED lock blocking by committing local work independently and using retries/compensations instead of a global commit barrier.
-- Use this comparison to explain why high-availability microservice systems often choose sagas when temporary inconsistency is acceptable but indefinite coordinator blocking is not.
-- The configured crash point (`before-decision`) is the teaching lever here: it shows that the same business transaction can become either coordinator-blocked (2PC) or resumable/compensatable (saga).
+- Use this comparison to explain why high-availability microservice systems often skip from blocking-prone 2PC straight to sagas or consensus-backed designs instead of betting production safety on 3PC timing assumptions.
+- The configured crash point (`before-decision`) is the teaching lever here: it shows that the same business transaction can become coordinator-blocked (2PC), timeout-assisted under synchrony assumptions (3PC), or resumable/compensatable (saga).

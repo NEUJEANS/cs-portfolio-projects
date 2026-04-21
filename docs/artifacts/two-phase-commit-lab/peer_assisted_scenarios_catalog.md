@@ -5,6 +5,7 @@ A recruiter-friendly landing page for the committed 2PC scenarios, showing how t
 Need the blocked-case triage view first? Open the [incident-response dashboard](peer_assisted_scenarios_catalog_incident_response_dashboard.html).
 
 ## Active filters
+- bundle preset: `peer-assisted` (only the blocked incidents that can be resolved with decisive peer evidence.)
 - scenario tags: `any` of `peer-assisted-commit`, `peer-assisted-abort`
 - this bundle is a recruiter-friendly subset of the provided scenario set rather than the full catalog
 

@@ -720,11 +720,14 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
     def test_protocol_comparison_calls_out_blocking_vs_saga_pause(self) -> None:
         comparison = build_protocol_comparison(load_scenario(BLOCKED_SCENARIO))
         self.assertEqual(comparison.scenario_snapshot["two_phase_outcome"], "blocked")
-        self.assertEqual([item.protocol for item in comparison.comparisons], ["2PC", "Saga (orchestrated)"])
+        self.assertEqual([item.protocol for item in comparison.comparisons], ["2PC", "3PC", "Saga (orchestrated)"])
         two_pc = comparison.comparisons[0]
-        saga = comparison.comparisons[1]
+        three_pc = comparison.comparisons[1]
+        saga = comparison.comparisons[2]
         self.assertEqual(two_pc.outcome, "blocked")
         self.assertIn("PREPARED participants", two_pc.blocking_behavior)
+        self.assertEqual(three_pc.outcome, "timeout-assisted-abort")
+        self.assertIn("bounded-delay", three_pc.blocking_behavior)
         self.assertEqual(saga.outcome, "paused-not-blocked")
         self.assertIn("do not sit on PREPARED locks", saga.blocking_behavior)
 
@@ -750,7 +753,9 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertIn("# Coordinator crash before durable decision protocol comparison", report)
         self.assertIn("## Protocol contrast", report)
         self.assertIn("| 2PC | `blocked` |", report)
+        self.assertIn("| 3PC | `timeout-assisted-abort` |", report)
         self.assertIn("| Saga (orchestrated) | `paused-not-blocked` |", report)
+        self.assertIn("timing assumptions", report)
         self.assertIn("resumable workflow state instead of coordinator-driven prepared-lock blocking", report)
 
     def test_comparison_markdown_exposes_peer_visible_commit_details(self) -> None:
@@ -768,6 +773,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertIn('Protocol comparison dashboard', report)
         self.assertIn('COMMIT visible via inventory', report)
         self.assertIn('inventory already knows the final 2PC outcome.', report)
+        self.assertIn('timeout-assisted-commit', report)
         self.assertIn('paused-not-blocked', report)
         self.assertIn('peer-assisted incident-response story rather than pure blind waiting', report)
 
@@ -829,10 +835,12 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             )
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["scenario_snapshot"]["two_phase_outcome"], "blocked")
-            self.assertEqual(len(payload["comparisons"]), 2)
-            self.assertEqual(payload["comparisons"][1]["protocol"], "Saga (orchestrated)")
+            self.assertEqual(len(payload["comparisons"]), 3)
+            self.assertEqual(payload["comparisons"][1]["protocol"], "3PC")
+            self.assertEqual(payload["comparisons"][2]["protocol"], "Saga (orchestrated)")
             report = report_path.read_text()
             self.assertIn("## Interview takeaways", report)
+            self.assertIn("3PC", report)
             self.assertIn("Saga (orchestrated)", report)
 
     def test_compare_command_writes_markdown_html_and_json(self) -> None:
@@ -863,6 +871,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn('Coordinator crash after one COMMIT delivery', html)
             self.assertIn('COMMIT visible via inventory', html)
             self.assertIn('inventory already knows the final 2PC outcome.', html)
+            self.assertIn('3PC timeout-assisted-commit', html)
             self.assertTrue(report_path.exists())
 
     def test_terminate_command_writes_markdown_and_json(self) -> None:

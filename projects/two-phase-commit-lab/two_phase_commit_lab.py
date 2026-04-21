@@ -550,6 +550,7 @@ def build_protocol_comparison(scenario: Scenario) -> ComparisonResult:
     snapshot = _build_scenario_snapshot(scenario, two_phase_result)
     comparisons = [
         _build_two_phase_protocol_comparison(two_phase_result),
+        _build_three_phase_protocol_comparison(scenario, snapshot),
         _build_saga_protocol_comparison(scenario, snapshot),
     ]
     interview_takeaways = _build_comparison_takeaways(snapshot, two_phase_result)
@@ -885,6 +886,10 @@ def render_comparison_markdown(result: ComparisonResult) -> str:
 
 def render_comparison_html(result: ComparisonResult) -> str:
     snapshot = result.scenario_snapshot
+    three_phase_outcome = next(
+        (comparison.outcome for comparison in result.comparisons if comparison.protocol.startswith('3PC')),
+        'n/a',
+    )
     saga_outcome = next(
         (comparison.outcome for comparison in result.comparisons if comparison.protocol.startswith('Saga')),
         'n/a',
@@ -903,6 +908,12 @@ def render_comparison_html(result: ComparisonResult) -> str:
             snapshot['two_phase_outcome'],
             'The coordinator-owned durable decision plus PREPARED participants determine whether the system commits, aborts, or blocks.',
             _comparison_outcome_tone(snapshot['two_phase_outcome']),
+        ),
+        (
+            '3PC contrast',
+            three_phase_outcome,
+            'Adds a pre-commit checkpoint so timeout-driven recovery can avoid indefinite waits, but only under bounded-delay and no-partition assumptions.',
+            _comparison_outcome_tone(three_phase_outcome),
         ),
         (
             'Saga contrast',
@@ -1045,6 +1056,7 @@ def render_comparison_html(result: ComparisonResult) -> str:
       .protocol-card {{ padding: 22px; }}
       .protocol-card--primary {{ background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }}
       .protocol-card--secondary {{ background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }}
+      .protocol-card--tertiary {{ background: linear-gradient(180deg, #ffffff 0%, #f5f3ff 100%); border-color: #ddd6fe; }}
       .protocol-card-header {{ display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 16px; }}
       .outcome-pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 12px; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.02em; }}
       .outcome-pill--success {{ background: var(--success-soft); color: var(--success); }}
@@ -1075,11 +1087,12 @@ def render_comparison_html(result: ComparisonResult) -> str:
       <section class="hero">
         <p class="eyebrow">Protocol comparison dashboard</p>
         <h1>{_html_escape(result.title)}</h1>
-        <p class="lede">{_html_escape(result.description)} This static dashboard makes the 2PC-versus-saga trade-off browsable in one recruiter-friendly artifact: what the coordinator logged, who got stuck in PREPARED, what a saga would do instead, and whether any peer already knows the durable decision.</p>
+        <p class="lede">{_html_escape(result.description)} This static dashboard makes the 2PC-versus-3PC-versus-saga trade-off browsable in one recruiter-friendly artifact: what the coordinator logged, where PREPARED blocking appears, when bounded-delay timeout recovery helps, and what a saga would do instead.</p>
         <div class="meta">
           <span class="chip">transaction {_html_escape(result.transaction_id)}</span>
           <span class="chip chip--{_html_escape(two_phase_chip_tone)}">2PC {_html_escape(snapshot['two_phase_outcome'])}</span>
-          <span class="chip chip--warning">saga {_html_escape(saga_outcome)}</span>
+          <span class="chip chip--{_html_escape(_comparison_outcome_tone(three_phase_outcome))}">3PC {_html_escape(three_phase_outcome)}</span>
+          <span class="chip chip--{_html_escape(_comparison_outcome_tone(saga_outcome))}">Saga {_html_escape(saga_outcome)}</span>
           <span class="chip chip--{_html_escape(crash_chip_tone)}">crash {_html_escape(snapshot['coordinator_crash'])}</span>
         </div>
       </section>
@@ -1105,7 +1118,7 @@ def render_comparison_html(result: ComparisonResult) -> str:
       <section class="panel">
         <div class="panel-header">
           <h2>Interview takeaways</h2>
-          <p>Use these bullets when explaining why the same business incident feels coordinator-blocking under 2PC but resumable or compensatable under saga orchestration.</p>
+          <p>Use these bullets when explaining why the same business incident feels coordinator-blocking under 2PC, timeout-assisted under 3PC, or resumable/compensatable under saga orchestration.</p>
         </div>
         <ul class="takeaway-list">
           {takeaways_html}
@@ -1119,7 +1132,12 @@ def render_comparison_html(result: ComparisonResult) -> str:
 
 def _render_protocol_comparison_card_html(comparison: ProtocolComparison) -> str:
     tone = _comparison_outcome_tone(comparison.outcome)
-    protocol_variant = 'primary' if comparison.protocol == '2PC' else 'secondary'
+    if comparison.protocol == '2PC':
+        protocol_variant = 'primary'
+    elif comparison.protocol.startswith('3PC'):
+        protocol_variant = 'tertiary'
+    else:
+        protocol_variant = 'secondary'
     tradeoffs_html = ''.join(f'<li>{_html_escape(item)}</li>' for item in comparison.tradeoffs)
     return f'''<article class="protocol-card protocol-card--{protocol_variant}">
       <div class="protocol-card-header">
@@ -2468,7 +2486,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     compare_parser = subparsers.add_parser(
         "compare",
-        help="contrast 2PC with a saga-style alternative for the same scenario",
+        help="contrast 2PC with 3PC and a saga-style alternative for the same scenario",
     )
     compare_parser.add_argument("scenario", type=Path)
     compare_parser.add_argument("--json", action="store_true", help="emit full JSON output")
@@ -2953,6 +2971,67 @@ def _build_two_phase_protocol_comparison(result: SimulationResult) -> ProtocolCo
     )
 
 
+def _build_three_phase_protocol_comparison(
+    scenario: Scenario,
+    snapshot: dict[str, Any],
+) -> ProtocolComparison:
+    abort_names = snapshot["abort_participants"]
+    timeout_names = snapshot["timeout_participants"]
+    crash_point = scenario.failures.coordinator_crash
+    recover = scenario.failures.recover_after_crash
+
+    if abort_names or timeout_names:
+        blocked_names = abort_names + timeout_names
+        outcome = "abort"
+        blocking_behavior = "designed to avoid indefinite PREPARED waits with timeout-driven abort/election logic, assuming bounded delays and no partition"
+        recovery_story = "participants can still time out toward abort before a commit-ready phase becomes durable, instead of waiting forever on one coordinator"
+        participant_story = (
+            f"{_format_name_list(blocked_names)} stops the flow before any commit-ready phase fully settles, so peers can roll back rather than sit in plain 2PC limbo"
+        )
+        interview_hook = "3PC narrows the uncertainty window that makes 2PC block, but it still depends on stronger timing assumptions than most production networks can promise."
+    elif crash_point == "none":
+        outcome = "commit"
+        blocking_behavior = "usually not blocked, but pays an extra round trip to move participants through a commit-ready checkpoint before final COMMIT"
+        recovery_story = "canCommit, preCommit, and doCommit all finish normally, so the extra phase mainly buys a clearer crash boundary"
+        participant_story = "participants move from vote collection into a commit-ready state, then finish COMMIT once the final message arrives"
+        interview_hook = "On a clean run, 3PC mostly looks like 2PC plus an extra network round, which is why the simpler protocol often wins when blocking risk is acceptable."
+    elif recover:
+        outcome = "recovered-commit"
+        blocking_behavior = "bounded-wait rather than indefinite wait when timing assumptions hold; recovery can continue from the last durable phase"
+        recovery_story = "a recovered coordinator or new leader can resume from the last durable phase, using the pre-commit boundary to reduce ambiguity"
+        participant_story = "participants treat the pre-commit checkpoint as commit-ready, so restart logic knows more than plain PREPARED-only 2PC does"
+        interview_hook = "3PC is the classic middle ground story: extra coordination to shrink the blocking window without abandoning atomic-commit style reasoning."
+    elif crash_point == "before-decision":
+        outcome = "timeout-assisted-abort"
+        blocking_behavior = "avoids indefinite PREPARED blocking only if timeout and bounded-delay assumptions are trustworthy"
+        recovery_story = "if the coordinator dies before a commit-ready phase is durable, the textbook bounded-delay model lets participants time out toward abort or elect new leadership instead of waiting forever"
+        participant_story = "participants have not crossed a commit-ready barrier yet, so the textbook timeout path is to roll back rather than hold locks indefinitely"
+        interview_hook = "This is the teaching-friendly 3PC pitch: another phase turns 'wait forever in PREPARED' into 'time out and abort' under synchronous-network assumptions."
+    else:
+        outcome = "timeout-assisted-commit"
+        blocking_behavior = "tries to avoid indefinite blocking once participants are commit-ready, but only under bounded delays and no partitions"
+        recovery_story = "after the commit-ready checkpoint, the textbook bounded-delay model lets participants use timeout-driven recovery to finish commit without waiting forever for the original coordinator"
+        participant_story = "participants that already crossed the commit-ready phase can often drive COMMIT after timeout in the textbook model, instead of staying stuck in PREPARED"
+        interview_hook = "3PC improves the coordinator-crash story versus 2PC, but real network partitions are exactly why it is more famous in textbooks than in production stacks."
+
+    return ProtocolComparison(
+        protocol="3PC",
+        outcome=outcome,
+        coordination_model="coordinator-led canCommit, preCommit, and doCommit phases with timeout-driven recovery under bounded-delay assumptions",
+        consistency_model="atomic-commit intent with less blocking than 2PC only when the network is synchronous enough to trust timeout decisions",
+        atomicity="stronger atomic shape than saga, but practical safety depends on timing assumptions that break down under partitions",
+        blocking_behavior=blocking_behavior,
+        recovery_story=recovery_story,
+        participant_story=participant_story,
+        interview_hook=interview_hook,
+        tradeoffs=[
+            "adds an extra network round and more coordinator/participant states than plain 2PC",
+            "uses timing assumptions to reduce blocking, which is why it is much rarer in partition-prone production systems",
+            "sits between 2PC and saga: less coordinator blocking than 2PC in the happy synchrony model, but still far tighter coupling than compensation-first workflows",
+        ],
+    )
+
+
 def _build_saga_protocol_comparison(
     scenario: Scenario,
     snapshot: dict[str, Any],
@@ -3014,19 +3093,20 @@ def _build_comparison_takeaways(
 ) -> list[str]:
     lines = [
         f"In this scenario, plain 2PC resolves as `{two_phase_result.outcome}`, which is driven by one coordinator-owned durable decision and the PREPARED states around it.",
+        "3PC is the middle-ground teaching protocol here: it adds a pre-commit checkpoint so timeout-driven recovery can avoid indefinite waits, but only when bounded-delay and no-partition assumptions hold.",
         "An orchestrated saga would avoid PREPARED lock blocking by committing local work independently and using retries/compensations instead of a global commit barrier.",
     ]
     if two_phase_result.outcome == "blocked":
         lines.append(
-            "Use this comparison to explain why high-availability microservice systems often choose sagas when temporary inconsistency is acceptable but indefinite coordinator blocking is not."
+            "Use this comparison to explain why high-availability microservice systems often skip from blocking-prone 2PC straight to sagas or consensus-backed designs instead of betting production safety on 3PC timing assumptions."
         )
     elif two_phase_result.outcome == "abort":
         lines.append(
-            "This is a good interview story for contrasting immediate atomic ABORT in 2PC with compensation-based unwind logic in saga-style workflows."
+            "This is a good interview story for contrasting immediate atomic ABORT in 2PC, timeout-assisted abort logic in 3PC, and compensation-based unwind logic in saga-style workflows."
         )
     else:
         lines.append(
-            "Even on a clean commit path, the comparison shows the core trade-off: 2PC keeps stronger atomic semantics, while saga keeps participants looser and easier to recover operationally."
+            "Even on a clean commit path, the comparison shows the core trade-off: 2PC keeps the simplest strong atomic story, 3PC pays another round to shrink the crash window, and saga keeps participants looser and easier to recover operationally."
         )
     if snapshot["successful_decision_deliveries_before_crash"] and two_phase_result.decision:
         lines.append(
@@ -3041,7 +3121,7 @@ def _build_comparison_takeaways(
         )
     if snapshot["coordinator_crash"] != "none":
         lines.append(
-            f"The configured crash point (`{snapshot['coordinator_crash']}`) is the teaching lever here: it shows that the same business transaction can become either coordinator-blocked (2PC) or resumable/compensatable (saga)."
+            f"The configured crash point (`{snapshot['coordinator_crash']}`) is the teaching lever here: it shows that the same business transaction can become coordinator-blocked (2PC), timeout-assisted under synchrony assumptions (3PC), or resumable/compensatable (saga)."
         )
     return lines
 

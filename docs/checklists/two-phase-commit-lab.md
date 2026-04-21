@@ -17,5 +17,6 @@
 - [x] cross-link the scenario catalog to any committed comparison dashboards and peer-termination walkthroughs so recruiters can jump between related artifacts without manual file hunting
 - [x] add tag-filtered catalog generation plus a committed peer-assisted subset bundle so the growing scenario set can publish smaller recruiter-friendly packs without hand-curating file lists
 - [x] add saved named bundle presets so common recruiter walkthrough bundles can reuse the tag-filtered catalog flow with one preset flag
+- [x] extend the protocol comparison artifacts to cover 3PC alongside 2PC and saga so the lab teaches the textbook timeout-assisted middle ground too
 - [x] run at least 3 review passes and fix issues found
 - [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice
