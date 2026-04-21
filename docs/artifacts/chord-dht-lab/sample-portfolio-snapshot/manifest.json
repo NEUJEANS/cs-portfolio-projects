@@ -1,0 +1,93 @@
+{
+  "ring_file": "projects/chord-dht-lab/ring.json",
+  "churn_events_file": "projects/chord-dht-lab/churn_events.json",
+  "keys": [
+    "compiler",
+    "slides",
+    "final-project",
+    "report.pdf",
+    "internship-notes"
+  ],
+  "benchmark_start_nodes": [
+    "alpha",
+    "charlie"
+  ],
+  "sample_size": 3,
+  "sample_seeds": [
+    17,
+    29,
+    43
+  ],
+  "rounds": 3,
+  "finger_repair_mode": "all",
+  "finger_repair_seed": null,
+  "output_dir": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot",
+  "artifacts": [
+    {
+      "name": "benchmark",
+      "format": "markdown",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/benchmark.md"
+    },
+    {
+      "name": "benchmark",
+      "format": "csv",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/benchmark.csv"
+    },
+    {
+      "name": "benchmark-samples",
+      "format": "markdown",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/benchmark-samples.md"
+    },
+    {
+      "name": "benchmark-samples",
+      "format": "csv",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/benchmark-samples.csv"
+    },
+    {
+      "name": "benchmark-key-variance",
+      "format": "markdown",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/benchmark-key-variance.md"
+    },
+    {
+      "name": "benchmark-key-variance",
+      "format": "csv",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/benchmark-key-variance.csv"
+    },
+    {
+      "name": "churn-summary",
+      "format": "markdown",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/churn-summary.md"
+    },
+    {
+      "name": "churn-summary",
+      "format": "csv",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/churn-summary.csv"
+    },
+    {
+      "name": "portfolio-snapshot-index",
+      "format": "markdown",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/README.md"
+    },
+    {
+      "name": "portfolio-snapshot-manifest",
+      "format": "json",
+      "path": "docs/artifacts/chord-dht-lab/sample-portfolio-snapshot/manifest.json"
+    }
+  ],
+  "summary": {
+    "benchmark_cases": 10,
+    "benchmark_total_hop_savings": 8,
+    "sample_hop_savings_spread": 1,
+    "sample_count": 3,
+    "most_sensitive_keys": [
+      "internship-notes",
+      "final-project",
+      "report.pdf",
+      "slides",
+      "compiler"
+    ],
+    "churn_event_count": 3,
+    "churn_fully_stabilized_steps": 3,
+    "churn_final_node_count": 6
+  }
+}

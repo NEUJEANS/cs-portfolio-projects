@@ -1780,6 +1780,145 @@ def emit_text_output(text: str, output_path: Path | None = None) -> None:
     output_path.write_text(text + ("" if text.endswith("\n") else "\n"), encoding="utf-8")
 
 
+def render_portfolio_snapshot_index_markdown(snapshot: dict[str, object]) -> str:
+    summary = snapshot["summary"]
+    artifact_rows = snapshot["artifacts"]
+    lines = [
+        "# Chord portfolio snapshot bundle",
+        "",
+        f"- Ring file: `{snapshot['ring_file']}`",
+        f"- Churn events file: `{snapshot['churn_events_file']}`",
+        f"- Keys: {', '.join(f'`{key}`' for key in snapshot['keys'])}",
+        f"- Benchmark start nodes: {', '.join(f'`{name}`' for name in snapshot['benchmark_start_nodes'])}",
+        f"- Sample size: `{snapshot['sample_size']}`",
+        f"- Sample seeds: {', '.join(f'`{seed}`' for seed in snapshot['sample_seeds'])}",
+        f"- Churn rounds default: `{snapshot['rounds']}`",
+        f"- Finger repair mode: `{snapshot['finger_repair_mode']}`",
+        f"- Finger repair seed: `{snapshot['finger_repair_seed']}`"
+        if snapshot.get("finger_repair_seed") is not None
+        else "- Finger repair seed: `none`",
+        "",
+        "## Highlights",
+        "",
+        f"- Benchmark cases: `{summary['benchmark_cases']}`",
+        f"- Total hop savings: `{summary['benchmark_total_hop_savings']}`",
+        f"- Sample comparison spread: `{summary['sample_hop_savings_spread']}`",
+        f"- Most sensitive key(s): {', '.join(f'`{key}`' for key in summary['most_sensitive_keys'])}",
+        f"- Churn fully stabilized steps: `{summary['churn_fully_stabilized_steps']}` / `{summary['churn_event_count']}`",
+        f"- Final churn node count: `{summary['churn_final_node_count']}`",
+        "",
+        "## Artifact files",
+        "",
+        "| Artifact | Format | Path |",
+        "| --- | --- | --- |",
+    ]
+    for artifact in artifact_rows:
+        lines.append(
+            f"| `{artifact['name']}` | `{artifact['format']}` | `{artifact['path']}` |"
+        )
+    return "\n".join(lines)
+
+
+def generate_portfolio_snapshot_bundle(
+    ring_file: Path,
+    churn_events_file: Path,
+    keys: list[str],
+    *,
+    start_nodes: Iterable[str] | None = None,
+    sample_size: int = 3,
+    sample_seeds: Iterable[int] | None = None,
+    rounds: int = 3,
+    finger_repair_mode: FingerRepairMode = "single",
+    finger_repair_seed: int | None = None,
+    output_dir: Path,
+) -> dict[str, object]:
+    ring = load_ring(ring_file)
+    selected_sample_seeds = list(sample_seeds or [17, 29, 43])
+    benchmark = ring.benchmark_lookups(keys, start_nodes=start_nodes)
+    sample_comparison = compare_benchmark_start_node_samples(
+        ring,
+        keys,
+        sample_size=sample_size,
+        sample_seeds=selected_sample_seeds,
+    )
+    key_variance = summarize_benchmark_key_variance(sample_comparison)
+    churn_report = ring.churn_report(
+        load_churn_events(churn_events_file),
+        rounds=rounds,
+        finger_repair_mode=finger_repair_mode,
+        finger_repair_seed=finger_repair_seed,
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    artifacts: list[dict[str, str]] = []
+    file_payloads = [
+        ("benchmark", "markdown", "benchmark.md", render_benchmark_report_markdown(benchmark)),
+        ("benchmark", "csv", "benchmark.csv", render_benchmark_report_csv(benchmark)),
+        (
+            "benchmark-samples",
+            "markdown",
+            "benchmark-samples.md",
+            render_benchmark_sample_comparison_markdown(sample_comparison),
+        ),
+        (
+            "benchmark-samples",
+            "csv",
+            "benchmark-samples.csv",
+            render_benchmark_sample_comparison_csv(sample_comparison),
+        ),
+        (
+            "benchmark-key-variance",
+            "markdown",
+            "benchmark-key-variance.md",
+            render_benchmark_key_variance_markdown(key_variance),
+        ),
+        (
+            "benchmark-key-variance",
+            "csv",
+            "benchmark-key-variance.csv",
+            render_benchmark_key_variance_csv(key_variance),
+        ),
+        ("churn-summary", "markdown", "churn-summary.md", render_churn_report_markdown(churn_report)),
+        ("churn-summary", "csv", "churn-summary.csv", render_churn_report_csv(churn_report)),
+    ]
+    for name, format_name, filename, text in file_payloads:
+        path = output_dir / filename
+        emit_text_output(text, path)
+        artifacts.append({"name": name, "format": format_name, "path": str(path)})
+
+    snapshot = {
+        "ring_file": str(ring_file),
+        "churn_events_file": str(churn_events_file),
+        "keys": list(keys),
+        "benchmark_start_nodes": benchmark["start_nodes"],
+        "sample_size": sample_comparison["sample_size"],
+        "sample_seeds": sample_comparison["sample_seeds"],
+        "rounds": rounds,
+        "finger_repair_mode": finger_repair_mode,
+        "finger_repair_seed": finger_repair_seed,
+        "output_dir": str(output_dir),
+        "artifacts": artifacts,
+        "summary": {
+            "benchmark_cases": benchmark["summary"]["case_count"],
+            "benchmark_total_hop_savings": benchmark["summary"]["total_hop_savings"],
+            "sample_hop_savings_spread": sample_comparison["summary"]["hop_savings_spread"],
+            "sample_count": sample_comparison["summary"]["sample_count"],
+            "most_sensitive_keys": key_variance["summary"]["most_sensitive_keys"],
+            "churn_event_count": churn_report["event_count"],
+            "churn_fully_stabilized_steps": churn_report["summary"]["fully_stabilized_steps"],
+            "churn_final_node_count": churn_report["summary"]["final_node_count"],
+        },
+    }
+    index_path = output_dir / "README.md"
+    manifest_path = output_dir / "manifest.json"
+    snapshot["artifacts"].append({"name": "portfolio-snapshot-index", "format": "markdown", "path": str(index_path)})
+    snapshot["artifacts"].append({"name": "portfolio-snapshot-manifest", "format": "json", "path": str(manifest_path)})
+    emit_text_output(render_portfolio_snapshot_index_markdown(snapshot), index_path)
+    manifest_text = json.dumps(snapshot, indent=2)
+    emit_text_output(manifest_text, manifest_path)
+    return snapshot
+
+
 def load_ring(path: Path) -> ChordRing:
     payload = json.loads(path.read_text(encoding="utf-8"))
     m_bits = payload["m_bits"]
@@ -2175,6 +2314,55 @@ def parse_args() -> argparse.Namespace:
     )
     synth_parser.add_argument("--pretty", action="store_true")
 
+    portfolio_snapshot_parser = subparsers.add_parser(
+        "portfolio-snapshot",
+        help="write a portfolio-ready bundle of benchmark, variance, and churn artifacts into one directory",
+    )
+    portfolio_snapshot_parser.add_argument("ring_file", type=Path)
+    portfolio_snapshot_parser.add_argument("churn_events_file", type=Path)
+    portfolio_snapshot_parser.add_argument("keys", nargs="+", help="keys to reuse across benchmark snapshot artifacts")
+    portfolio_snapshot_parser.add_argument(
+        "--start-node",
+        dest="start_nodes",
+        action="append",
+        default=None,
+        help="optional benchmark start node; may be provided multiple times",
+    )
+    portfolio_snapshot_parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=3,
+        help="number of start nodes per seeded sample-comparison snapshot",
+    )
+    portfolio_snapshot_parser.add_argument(
+        "--sample-seed",
+        dest="sample_seeds",
+        action="append",
+        type=int,
+        default=None,
+        help="seed for one benchmark sample; may be provided multiple times",
+    )
+    portfolio_snapshot_parser.add_argument("--rounds", type=int, default=3)
+    portfolio_snapshot_parser.add_argument(
+        "--finger-repair-mode",
+        choices=["single", "all", "random"],
+        default="single",
+        help="finger repair policy for the bundled churn summary",
+    )
+    portfolio_snapshot_parser.add_argument(
+        "--finger-repair-seed",
+        type=int,
+        default=None,
+        help="seed for random finger repair mode; required when random mode is used",
+    )
+    portfolio_snapshot_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="directory where the bundled portfolio artifacts should be written",
+    )
+    portfolio_snapshot_parser.add_argument("--pretty", action="store_true")
+
     graphviz_parser = subparsers.add_parser(
         "graphviz",
         help="export Graphviz DOT for the ring, a lookup route, or stabilization rounds",
@@ -2321,6 +2509,22 @@ def main() -> None:
                 start_nodes=args.start_nodes,
                 start_node_sample_mode=args.start_node_sample_mode,
                 start_node_seed=args.start_node_seed,
+            ),
+        }
+    elif args.command == "portfolio-snapshot":
+        payload = {
+            "command": "portfolio-snapshot",
+            **generate_portfolio_snapshot_bundle(
+                args.ring_file,
+                args.churn_events_file,
+                args.keys,
+                start_nodes=args.start_nodes,
+                sample_size=args.sample_size,
+                sample_seeds=args.sample_seeds,
+                rounds=args.rounds,
+                finger_repair_mode=args.finger_repair_mode,
+                finger_repair_seed=args.finger_repair_seed,
+                output_dir=args.output_dir,
             ),
         }
     elif args.command == "churn":

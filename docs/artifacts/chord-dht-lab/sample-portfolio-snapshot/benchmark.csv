@@ -1,0 +1,11 @@
+start_node,key,key_id,responsible_node,chord_hops,linear_hops,hop_savings,chord_route,linear_route
+alpha,compiler,99,charlie,1,1,0,alpha->charlie,alpha->charlie
+alpha,slides,76,alpha,0,0,0,alpha,alpha
+alpha,final-project,63,alpha,0,0,0,alpha,alpha
+alpha,report.pdf,23,alpha,0,0,0,alpha,alpha
+alpha,internship-notes,186,bravo,2,4,2,alpha->echo->bravo,alpha->charlie->delta->echo->bravo
+charlie,compiler,99,charlie,0,0,0,charlie,charlie
+charlie,slides,76,alpha,2,4,2,charlie->bravo->alpha,charlie->delta->echo->bravo->alpha
+charlie,final-project,63,alpha,2,4,2,charlie->bravo->alpha,charlie->delta->echo->bravo->alpha
+charlie,report.pdf,23,alpha,2,4,2,charlie->bravo->alpha,charlie->delta->echo->bravo->alpha
+charlie,internship-notes,186,bravo,3,3,0,charlie->delta->echo->bravo,charlie->delta->echo->bravo

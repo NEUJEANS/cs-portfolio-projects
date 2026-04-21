@@ -29,6 +29,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - JSON ring input for reproducible demos and unit tests
 - seeded sample-comparison export for measuring how lookup benchmark results vary across different random start-node subsets
 - per-key variance export that highlights which lookups are most sensitive to start-node selection across benchmark samples
+- one-command portfolio snapshot bundling that regenerates benchmark, sample-comparison, key-variance, and churn artifacts into a single directory
 
 ## Usage
 
@@ -290,6 +291,23 @@ python3 projects/chord-dht-lab/chord_dht.py churn-export \
   --format csv
 ```
 
+Regenerate a full portfolio snapshot bundle in one directory:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py portfolio-snapshot \
+  projects/chord-dht-lab/ring.json \
+  projects/chord-dht-lab/churn_events.json \
+  compiler slides final-project report.pdf internship-notes \
+  --start-node alpha \
+  --start-node charlie \
+  --sample-size 3 \
+  --sample-seed 17 \
+  --sample-seed 29 \
+  --sample-seed 43 \
+  --finger-repair-mode all \
+  --output-dir docs/artifacts/chord-dht-lab/sample-portfolio-snapshot
+```
+
 Compare multiple churn workloads side by side as Markdown:
 
 ```bash
@@ -359,4 +377,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements
-- add direct artifact helpers that bundle benchmark, sample-variance, and churn exports into one command for portfolio snapshot generation
+- add bundled graph exports so a portfolio snapshot can optionally include route and stabilization DOT artifacts alongside the markdown/csv reports

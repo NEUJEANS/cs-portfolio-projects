@@ -1,0 +1,4 @@
+seed,start_nodes,average_chord_hops,average_linear_hops,total_hop_savings,improved_cases,tied_cases,slower_cases,case_count
+17,bravo->echo->charlie,1.533,2,7,4,11,0,15
+29,bravo->alpha->charlie,1.133,1.667,8,4,11,0,15
+43,alpha->delta->echo,1.467,2,8,6,9,0,15

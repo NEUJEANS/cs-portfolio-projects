@@ -1374,6 +1374,87 @@ class ChordDhtLabTests(unittest.TestCase):
             self.assertTrue(file_output.exists())
             self.assertIn("# Chord churn workload comparison", file_output.read_text(encoding="utf-8"))
 
+    def test_generate_portfolio_snapshot_bundle_writes_expected_files(self) -> None:
+        churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "snapshot"
+            snapshot = module.generate_portfolio_snapshot_bundle(
+                RING_PATH,
+                churn_path,
+                ["compiler", "slides", "final-project"],
+                start_nodes=["alpha", "charlie"],
+                sample_size=2,
+                sample_seeds=[17, 29],
+                rounds=3,
+                finger_repair_mode="all",
+                output_dir=output_dir,
+            )
+
+            self.assertEqual(snapshot["benchmark_start_nodes"], ["alpha", "charlie"])
+            self.assertEqual(snapshot["sample_seeds"], [17, 29])
+            self.assertEqual(snapshot["summary"]["sample_count"], 2)
+            self.assertEqual(snapshot["summary"]["churn_event_count"], 3)
+            self.assertTrue((output_dir / "benchmark.md").exists())
+            self.assertTrue((output_dir / "benchmark-key-variance.csv").exists())
+            self.assertTrue((output_dir / "churn-summary.md").exists())
+            self.assertTrue((output_dir / "README.md").exists())
+            self.assertTrue((output_dir / "manifest.json").exists())
+            manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+            artifact_names = {item["name"] for item in manifest["artifacts"]}
+            self.assertIn("portfolio-snapshot-index", artifact_names)
+            self.assertIn("portfolio-snapshot-manifest", artifact_names)
+            self.assertIn("benchmark", artifact_names)
+            readme = (output_dir / "README.md").read_text(encoding="utf-8")
+            self.assertIn("# Chord portfolio snapshot bundle", readme)
+            self.assertIn("| `benchmark` | `markdown` |", readme)
+
+    def test_cli_portfolio_snapshot_writes_bundle_and_returns_manifest(self) -> None:
+        churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "portfolio-bundle"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "portfolio-snapshot",
+                    str(RING_PATH),
+                    str(churn_path),
+                    "compiler",
+                    "slides",
+                    "final-project",
+                    "--start-node",
+                    "alpha",
+                    "--start-node",
+                    "charlie",
+                    "--sample-size",
+                    "2",
+                    "--sample-seed",
+                    "17",
+                    "--sample-seed",
+                    "29",
+                    "--finger-repair-mode",
+                    "all",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "portfolio-snapshot")
+            self.assertEqual(payload["output_dir"], str(output_dir))
+            self.assertEqual(payload["benchmark_start_nodes"], ["alpha", "charlie"])
+            self.assertEqual(payload["sample_seeds"], [17, 29])
+            self.assertEqual(payload["summary"]["churn_event_count"], 3)
+            self.assertTrue((output_dir / "benchmark-samples.md").exists())
+            self.assertTrue((output_dir / "manifest.json").exists())
+            self.assertTrue((output_dir / "README.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

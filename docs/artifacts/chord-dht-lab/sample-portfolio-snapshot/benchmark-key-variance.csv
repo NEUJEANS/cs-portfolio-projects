@@ -1,0 +1,6 @@
+key,key_id,responsible_node,sample_count,average_chord_hops,average_linear_hops,average_hop_savings,min_chord_hops,max_chord_hops,chord_hop_spread,min_linear_hops,max_linear_hops,linear_hop_spread,min_hop_savings,max_hop_savings,hop_savings_spread,start_nodes,best_seed_cases,worst_seed_cases
+internship-notes,186,bravo,9,1.5556,2.0,0.4444,0,3,3,0,4,4,0,2,2,alpha->bravo->charlie->delta->echo,29:alpha:2;43:alpha:2,17:bravo:0;17:charlie:0;17:echo:0;29:bravo:0;29:charlie:0;43:delta:0;43:echo:0
+final-project,63,alpha,9,1.3333,1.8889,0.5556,0,2,2,0,4,4,0,2,2,alpha->bravo->charlie->delta->echo,17:charlie:2;29:charlie:2,17:bravo:0;17:echo:0;29:alpha:0;29:bravo:0;43:alpha:0;43:echo:0
+report.pdf,23,alpha,9,1.3333,1.8889,0.5556,0,2,2,0,4,4,0,2,2,alpha->bravo->charlie->delta->echo,17:charlie:2;29:charlie:2,17:bravo:0;17:echo:0;29:alpha:0;29:bravo:0;43:alpha:0;43:echo:0
+slides,76,alpha,9,1.3333,1.8889,0.5556,0,2,2,0,4,4,0,2,2,alpha->bravo->charlie->delta->echo,17:charlie:2;29:charlie:2,17:bravo:0;17:echo:0;29:alpha:0;29:bravo:0;43:alpha:0;43:echo:0
+compiler,99,charlie,9,1.3333,1.7778,0.4444,0,2,2,0,4,4,0,2,2,alpha->bravo->charlie->delta->echo,43:delta:2,17:bravo:0;17:charlie:0;29:alpha:0;29:bravo:0;29:charlie:0;43:alpha:0

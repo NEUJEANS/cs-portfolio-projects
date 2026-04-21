@@ -1,0 +1,4 @@
+step,action,node,rounds_requested,finger_repair_mode,stabilized_round,fully_stabilized,final_finger_progress_ratio,final_successor_matches,target_node_count,final_predecessor_matches,final_finger_matches,total_fingers,ending_node_count
+1,join,foxtrot,4,all,1,true,1.000000,6,6,6,48,48,6
+2,fail,charlie,3,all,0,true,1.000000,5,5,5,40,40,5
+3,recover,charlie,3,all,1,true,1.000000,6,6,6,48,48,6
