@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CPU Scheduler Comparison — interactive-bursts</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+    }
+    body {
+      margin: 2rem auto;
+      max-width: 1100px;
+      padding: 0 1.25rem 3rem;
+    }
+    h1, h2, h3 { margin-bottom: 0.45rem; }
+    ul { padding-left: 1.2rem; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0 1.75rem;
+    }
+    .card {
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      border-radius: 14px;
+      padding: 1rem;
+      background: color-mix(in srgb, Canvas 92%, currentColor 3%);
+    }
+    .experience-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .experience-card table {
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      padding: 0.65rem 0.55rem;
+      text-align: right;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <h1>CPU Scheduler Comparison — interactive-bursts</h1>
+  <ul>
+    <li><strong>Preset:</strong> interactive-bursts — staggered short requests compete with a background batch job, making response-time tradeoffs visible</li><li><strong>Workload source:</strong> <code>artifacts/cpu-scheduler-simulator/presets/interactive-bursts.json</code></li><li><strong>Processes:</strong> 6</li><li><strong>Algorithms:</strong> SRTF, RR (q=2), MLFQ interactive (q=1/2/4, boost=8), MLFQ balanced (q=2/4/8, boost=12), MLFQ throughput (q=4/8/16, boost=off)</li><li><strong>Round-robin quantum:</strong> 2</li><li><strong>Priority aging interval:</strong> 0</li><li><strong>MLFQ variant pack:</strong> portfolio</li><li><strong>MLFQ tuning roster:</strong> MLFQ interactive (q=1/2/4, boost=8): faster boosts plus a short top quantum favor quick foreground response; MLFQ balanced (q=2/4/8, boost=12): the default queue ladder balances short-job response with moderate churn; MLFQ throughput (q=4/8/16, boost=off): longer quanta and no periodic boost reduce dispatch churn for batch-heavy mixes</li><li><strong>Context-switch cost:</strong> 1</li>
+  </ul>
+
+  <div class="cards">
+    <div class='card'><h3>Lowest average turnaround</h3><p>SRTF</p></div><div class='card'><h3>Lowest average waiting</h3><p>SRTF</p></div><div class='card'><h3>Lowest average response</h3><p>MLFQ balanced (q=2/4/8, boost=12)</p></div><div class='card'><h3>Lowest worst-case waiting time</h3><p>SRTF, RR (q=2)</p></div><div class='card'><h3>Lowest average slowdown</h3><p>MLFQ balanced (q=2/4/8, boost=12)</p></div><div class='card'><h3>Lowest worst slowdown</h3><p>MLFQ balanced (q=2/4/8, boost=12)</p></div><div class='card'><h3>Most even slowdown distribution</h3><p>MLFQ balanced (q=2/4/8, boost=12)</p></div><div class='card'><h3>Highest useful CPU utilization</h3><p>MLFQ throughput (q=4/8/16, boost=off)</p></div><div class='card'><h3>Highest throughput</h3><p>MLFQ throughput (q=4/8/16, boost=off)</p></div><div class='card'><h3>Lowest scheduler overhead</h3><p>MLFQ throughput (q=4/8/16, boost=off)</p></div><div class='card'><h3>Shortest total completion time</h3><p>MLFQ throughput (q=4/8/16, boost=off)</p></div>
+  </div>
+
+  <h2>Side-by-side metrics</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Algorithm</th>
+        <th>Avg turnaround</th>
+        <th>Avg waiting</th>
+        <th>Avg response</th>
+        <th>Max wait</th>
+        <th>CPU util %</th>
+        <th>Throughput</th>
+        <th>Overhead %</th>
+        <th>Total time</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>SRTF</td><td>9.0</td><td>6.5</td><td>4.5</td><td>13</td><td>65.22</td><td>0.2609</td><td>34.78</td><td>23</td></tr><tr><td>RR (q=2)</td><td>10.17</td><td>7.67</td><td>5.67</td><td>13</td><td>65.22</td><td>0.2609</td><td>34.78</td><td>23</td></tr><tr><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>12.17</td><td>9.67</td><td>3.83</td><td>18</td><td>57.69</td><td>0.2308</td><td>42.31</td><td>26</td></tr><tr><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>9.17</td><td>6.67</td><td>2.67</td><td>17</td><td>65.22</td><td>0.2609</td><td>34.78</td><td>23</td></tr><tr><td>MLFQ throughput (q=4/8/16, boost=off)</td><td>9.67</td><td>7.17</td><td>4.67</td><td>15</td><td>71.43</td><td>0.2857</td><td>28.57</td><td>21</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Fairness and slowdown snapshot</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Algorithm</th>
+        <th>Avg slowdown</th>
+        <th>Max slowdown</th>
+        <th>Slowdown spread</th>
+        <th>Slowdown stddev</th>
+        <th>Waiting stddev</th>
+        <th>Most delayed process</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>SRTF</td><td>3.96</td><td>7.0</td><td>5.0</td><td>1.7</td><td>4.5</td><td><strong>P6</strong> slowdown=7, wait=6</td></tr><tr><td>RR (q=2)</td><td>5.38</td><td>12.0</td><td>9.5</td><td>3.3</td><td>3.73</td><td><strong>P6</strong> slowdown=12, wait=11</td></tr><tr><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>5.33</td><td>9.0</td><td>7.0</td><td>2.13</td><td>5.91</td><td><strong>P6</strong> slowdown=9, wait=8</td></tr><tr><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>3.76</td><td>6.0</td><td>4.0</td><td>1.21</td><td>5.56</td><td><strong>P6</strong> slowdown=6, wait=5</td></tr><tr><td>MLFQ throughput (q=4/8/16, boost=off)</td><td>5.0</td><td>10.0</td><td>7.5</td><td>2.53</td><td>3.89</td><td><strong>P6</strong> slowdown=10, wait=9</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Per-process experience</h2>
+  <div class="experience-grid">
+    <section class='card experience-card'><h3>SRTF</h3><table><thead><tr><th>PID</th><th>Waiting</th><th>Response</th><th>Turnaround</th><th>Slowdown</th></tr></thead><tbody><tr><td>P1</td><td>12</td><td>0</td><td>18</td><td>3</td></tr><tr><td>P2</td><td>1</td><td>1</td><td>2</td><td>2</td></tr><tr><td>P3</td><td>3</td><td>3</td><td>5</td><td>2.5</td></tr><tr><td>P4</td><td>4</td><td>4</td><td>5</td><td>5</td></tr><tr><td>P5</td><td>13</td><td>13</td><td>17</td><td>4.25</td></tr><tr><td>P6</td><td>6</td><td>6</td><td>7</td><td>7</td></tr></tbody></table></section><section class='card experience-card'><h3>RR (q=2)</h3><table><thead><tr><th>PID</th><th>Waiting</th><th>Response</th><th>Turnaround</th><th>Slowdown</th></tr></thead><tbody><tr><td>P1</td><td>9</td><td>0</td><td>15</td><td>2.5</td></tr><tr><td>P2</td><td>2</td><td>2</td><td>3</td><td>3</td></tr><tr><td>P3</td><td>5</td><td>5</td><td>7</td><td>3.5</td></tr><tr><td>P4</td><td>6</td><td>6</td><td>7</td><td>7</td></tr><tr><td>P5</td><td>13</td><td>10</td><td>17</td><td>4.25</td></tr><tr><td>P6</td><td>11</td><td>11</td><td>12</td><td>12</td></tr></tbody></table></section><section class='card experience-card'><h3>MLFQ interactive (q=1/2/4, boost=8)</h3><table><thead><tr><th>PID</th><th>Waiting</th><th>Response</th><th>Turnaround</th><th>Slowdown</th></tr></thead><tbody><tr><td>P1</td><td>18</td><td>0</td><td>24</td><td>4</td></tr><tr><td>P2</td><td>1</td><td>1</td><td>2</td><td>2</td></tr><tr><td>P3</td><td>10</td><td>3</td><td>12</td><td>6</td></tr><tr><td>P4</td><td>5</td><td>5</td><td>6</td><td>6</td></tr><tr><td>P5</td><td>16</td><td>6</td><td>20</td><td>5</td></tr><tr><td>P6</td><td>8</td><td>8</td><td>9</td><td>9</td></tr></tbody></table></section><section class='card experience-card'><h3>MLFQ balanced (q=2/4/8, boost=12)</h3><table><thead><tr><th>PID</th><th>Waiting</th><th>Response</th><th>Turnaround</th><th>Slowdown</th></tr></thead><tbody><tr><td>P1</td><td>17</td><td>0</td><td>23</td><td>3.83</td></tr><tr><td>P2</td><td>2</td><td>2</td><td>3</td><td>3</td></tr><tr><td>P3</td><td>2</td><td>2</td><td>4</td><td>2</td></tr><tr><td>P4</td><td>3</td><td>3</td><td>4</td><td>4</td></tr><tr><td>P5</td><td>11</td><td>4</td><td>15</td><td>3.75</td></tr><tr><td>P6</td><td>5</td><td>5</td><td>6</td><td>6</td></tr></tbody></table></section><section class='card experience-card'><h3>MLFQ throughput (q=4/8/16, boost=off)</h3><table><thead><tr><th>PID</th><th>Waiting</th><th>Response</th><th>Turnaround</th><th>Slowdown</th></tr></thead><tbody><tr><td>P1</td><td>15</td><td>0</td><td>21</td><td>3.5</td></tr><tr><td>P2</td><td>4</td><td>4</td><td>5</td><td>5</td></tr><tr><td>P3</td><td>4</td><td>4</td><td>6</td><td>3</td></tr><tr><td>P4</td><td>5</td><td>5</td><td>6</td><td>6</td></tr><tr><td>P5</td><td>6</td><td>6</td><td>10</td><td>2.5</td></tr><tr><td>P6</td><td>9</td><td>9</td><td>10</td><td>10</td></tr></tbody></table></section>
+  </div>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CPU Scheduler Benchmark Pack — portfolio-batch</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+    }
+    body {
+      margin: 2rem auto;
+      max-width: 1180px;
+      padding: 0 1.25rem 3rem;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0 1.75rem;
+    }
+    .card {
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      border-radius: 14px;
+      padding: 1rem;
+      background: color-mix(in srgb, Canvas 92%, currentColor 3%);
+    }
+    .scorecards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .heatmap {
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+    .heatmap svg {
+      width: 100%;
+      height: auto;
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      border-radius: 16px;
+      background: #f8fafc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      padding: 0.65rem 0.55rem;
+      text-align: right;
+      vertical-align: top;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <h1>CPU Scheduler Benchmark Pack — portfolio-batch</h1>
+  <div class="cards">
+    <div class="card"><h3>Family</h3><p>classic preset stories plus deterministic generated workload families for broader scheduler comparisons</p></div>
+    <div class="card"><h3>Scenarios</h3><p>6</p></div>
+    <div class="card"><h3>Algorithms</h3><p>SRTF, RR (q=2), MLFQ interactive (q=1/2/4, boost=8), MLFQ balanced (q=2/4/8, boost=12), MLFQ throughput (q=4/8/16, boost=off)</p></div>
+    <div class="card"><h3>Run settings</h3><p>q=2, aging=0, mlfq pack=portfolio, switch cost=1</p></div>
+    <div class='card'><h3>MLFQ tuning roster</h3><p>MLFQ interactive (q=1/2/4, boost=8): faster boosts plus a short top quantum favor quick foreground response; MLFQ balanced (q=2/4/8, boost=12): the default queue ladder balances short-job response with moderate churn; MLFQ throughput (q=4/8/16, boost=off): longer quanta and no periodic boost reduce dispatch churn for batch-heavy mixes</p></div>
+  </div>
+
+  <h2>Scenario roster</h2>
+  <table>
+    <thead><tr><th>Scenario</th><th>Kind</th><th>Processes</th><th>Description</th><th>Source</th></tr></thead>
+    <tbody><tr><td>convoy-mix</td><td>preset</td><td>5</td><td>one long CPU-bound job arrives first, then several short interactive jobs queue behind it</td><td><code>artifacts/cpu-scheduler-simulator/presets/convoy-mix.json</code></td></tr><tr><td>interactive-bursts</td><td>preset</td><td>6</td><td>staggered short requests compete with a background batch job, making response-time tradeoffs visible</td><td><code>artifacts/cpu-scheduler-simulator/presets/interactive-bursts.json</code></td></tr><tr><td>aging-pressure</td><td>preset</td><td>5</td><td>high-priority arrivals keep showing up while a low-priority batch job waits, stressing priority aging</td><td><code>artifacts/cpu-scheduler-simulator/presets/aging-pressure.json</code></td></tr><tr><td>balanced-seed-17</td><td>generated</td><td>6</td><td>balanced arrivals and bursts for a neutral mixed workload baseline</td><td><code>generated/balanced/seed-17</code></td></tr><tr><td>convoy-spike-seed-23</td><td>generated</td><td>6</td><td>one heavy batch job lands beside short arrivals to stress convoy risk and dispatch overhead</td><td><code>generated/convoy-spike/seed-23</code></td></tr><tr><td>latency-burst-seed-31</td><td>generated</td><td>7</td><td>many short interactive jobs with one medium batch tail, emphasizing response-time and fairness tails</td><td><code>generated/latency-burst/seed-31</code></td></tr></tbody>
+  </table>
+
+  <h2>Aggregate scoreboard</h2>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Avg turnaround</th><th>Avg waiting</th><th>Avg response</th><th>Avg slowdown</th><th>Slowdown stddev</th><th>Avg overhead %</th><th>Avg throughput</th><th>Max wait seen</th><th>Max slowdown seen</th><th>Score points</th></tr></thead>
+    <tbody><tr><td>SRTF</td><td>9.22</td><td>5.93</td><td>4.86</td><td>3.07</td><td>1.4</td><td>24.74</td><td>0.2417</td><td>23</td><td>7.0</td><td>31.5</td></tr><tr><td>RR (q=2)</td><td>14.66</td><td>11.38</td><td>5.31</td><td>5.52</td><td>2.73</td><td>32.12</td><td>0.2223</td><td>33</td><td>13.0</td><td>0.0</td></tr><tr><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>17.47</td><td>14.18</td><td>3.18</td><td>5.62</td><td>1.97</td><td>39.16</td><td>0.2012</td><td>43</td><td>9.0</td><td>4.5</td></tr><tr><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>13.68</td><td>10.4</td><td>3.69</td><td>4.58</td><td>1.66</td><td>30.12</td><td>0.2295</td><td>33</td><td>10.0</td><td>6.5</td></tr><tr><td>MLFQ throughput (q=4/8/16, boost=off)</td><td>12.59</td><td>9.3</td><td>5.88</td><td>5.09</td><td>2.67</td><td>25.11</td><td>0.2429</td><td>26</td><td>13.0</td><td>5.5</td></tr></tbody>
+  </table>
+
+  <h2>Portfolio scorecards</h2>
+  <div class="scorecards"><article class='card'><h3>SRTF</h3><p><strong>Headline:</strong> wins concentrated at turnaround 6/6, waiting 6/6</p><p><strong>Use when:</strong> best when total batch completion time matters most</p><p><strong>Signature scenarios:</strong> convoy-mix, interactive-bursts, aging-pressure</p><p><strong>Watch out:</strong> watch out for slower first-response time across the pack</p></article><article class='card'><h3>RR (q=2)</h3><p><strong>Headline:</strong> strongest relative showing on low overhead, response without outright pack wins</p><p><strong>Use when:</strong> best when minimizing dispatch churn matters most</p><p><strong>Signature scenarios:</strong> none yet</p><p><strong>Watch out:</strong> watch out for a less even slowdown spread across processes</p></article><article class='card'><h3>MLFQ interactive (q=1/2/4, boost=8)</h3><p><strong>Headline:</strong> wins concentrated at response 5/6</p><p><strong>Use when:</strong> best when interactive first-response speed matters most</p><p><strong>Signature scenarios:</strong> convoy-mix, aging-pressure, balanced-seed-17</p><p><strong>Watch out:</strong> watch out for higher queueing delay across the pack</p></article><article class='card'><h3>MLFQ balanced (q=2/4/8, boost=12)</h3><p><strong>Headline:</strong> wins concentrated at fairness 2/6, response 1/6</p><p><strong>Use when:</strong> best when per-process fairness matters most</p><p><strong>Signature scenarios:</strong> interactive-bursts, aging-pressure</p><p><strong>Watch out:</strong> watch out for slower total turnaround across the pack</p></article><article class='card'><h3>MLFQ throughput (q=4/8/16, boost=off)</h3><p><strong>Headline:</strong> wins concentrated at low overhead 3/6, throughput 3/6</p><p><strong>Use when:</strong> best when minimizing dispatch churn matters most</p><p><strong>Signature scenarios:</strong> convoy-mix, interactive-bursts, aging-pressure</p><p><strong>Watch out:</strong> watch out for slower first-response time across the pack</p></article></div>
+
+  <h2>Goal heatmap</h2>
+  <p>Win rates below show how often each algorithm ties or leads that headline goal across the benchmark roster.</p>
+  <div class="heatmap"><svg xmlns='http://www.w3.org/2000/svg' width='1016' height='590' viewBox='0 0 1016 590' role='img' aria-labelledby='title desc'>
+  <title id='title'>CPU Scheduler benchmark goal heatmap for portfolio-batch</title>
+  <desc id='desc'>Win-rate heatmap showing how often each algorithm leads on turnaround, waiting, response, fairness, throughput, and low-overhead goals across the benchmark scenarios.</desc>
+  <rect width='1016' height='590' fill='#f8fafc' />
+  <text x='40' y='56' font-size='28' font-weight='700' fill='#0f172a'>CPU Scheduler benchmark goal heatmap</text>
+  <text x='40' y='84' font-size='15' fill='#334155'>classic preset stories plus deterministic generated workload families for broader scheduler comparisons</text>
+  <text x='40' y='106' font-size='13' fill='#475569'>Win rate = scenarios where the algorithm ties or leads that goal. Higher is darker.</text>
+  <text x='348.00' y='132' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>Turnaround</text>
+  <text x='464.00' y='132' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>Waiting</text>
+  <text x='580.00' y='132' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>Response</text>
+  <text x='696.00' y='132' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>Fairness</text>
+  <text x='812.00' y='132' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>Throughput</text>
+  <text x='928.00' y='132' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>Low overhead</text>
+  <text x='40' y='174' font-size='15' font-weight='700' fill='#0f172a'>SRTF</text>
+  <text x='40' y='194' font-size='12' fill='#475569'>score points 31.5</text>
+  <rect x='290' y='150' width='106' height='54' rx='12' ry='12' fill='#0f766e' stroke='#cbd5e1' />
+  <text x='343.00' y='174' text-anchor='middle' font-size='16' font-weight='700' fill='#f8fafc'>6/6</text>
+  <text x='343.00' y='194' text-anchor='middle' font-size='12' fill='#f8fafc'>100%</text>
+  <rect x='406' y='150' width='106' height='54' rx='12' ry='12' fill='#0f766e' stroke='#cbd5e1' />
+  <text x='459.00' y='174' text-anchor='middle' font-size='16' font-weight='700' fill='#f8fafc'>6/6</text>
+  <text x='459.00' y='194' text-anchor='middle' font-size='12' fill='#f8fafc'>100%</text>
+  <rect x='522' y='150' width='106' height='54' rx='12' ry='12' fill='#bfd5da' stroke='#cbd5e1' />
+  <text x='575.00' y='174' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>1/6</text>
+  <text x='575.00' y='194' text-anchor='middle' font-size='12' fill='#0f172a'>16.7%</text>
+  <rect x='638' y='150' width='106' height='54' rx='12' ry='12' fill='#559c99' stroke='#cbd5e1' />
+  <text x='691.00' y='174' text-anchor='middle' font-size='16' font-weight='700' fill='#f8fafc'>4/6</text>
+  <text x='691.00' y='194' text-anchor='middle' font-size='12' fill='#f8fafc'>66.7%</text>
+  <rect x='754' y='150' width='106' height='54' rx='12' ry='12' fill='#559c99' stroke='#cbd5e1' />
+  <text x='807.00' y='174' text-anchor='middle' font-size='16' font-weight='700' fill='#f8fafc'>4/6</text>
+  <text x='807.00' y='194' text-anchor='middle' font-size='12' fill='#f8fafc'>66.7%</text>
+  <rect x='870' y='150' width='106' height='54' rx='12' ry='12' fill='#559c99' stroke='#cbd5e1' />
+  <text x='923.00' y='174' text-anchor='middle' font-size='16' font-weight='700' fill='#f8fafc'>4/6</text>
+  <text x='923.00' y='194' text-anchor='middle' font-size='12' fill='#f8fafc'>66.7%</text>
+  <text x='40' y='238' font-size='15' font-weight='700' fill='#0f172a'>RR (q=2)</text>
+  <text x='40' y='258' font-size='12' fill='#475569'>score points 0</text>
+  <rect x='290' y='214' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='343.00' y='238' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='343.00' y='258' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='406' y='214' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='459.00' y='238' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='459.00' y='258' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='522' y='214' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='575.00' y='238' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='575.00' y='258' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='638' y='214' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='691.00' y='238' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='691.00' y='258' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='754' y='214' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='807.00' y='238' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='807.00' y='258' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='870' y='214' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='923.00' y='238' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='923.00' y='258' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <text x='40' y='302' font-size='15' font-weight='700' fill='#0f172a'>MLFQ interactive (q=1/2/4, boost=8)</text>
+  <text x='40' y='322' font-size='12' fill='#475569'>score points 4.5</text>
+  <rect x='290' y='278' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='343.00' y='302' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='343.00' y='322' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='406' y='278' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='459.00' y='302' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='459.00' y='322' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='522' y='278' width='106' height='54' rx='12' ry='12' fill='#328984' stroke='#cbd5e1' />
+  <text x='575.00' y='302' text-anchor='middle' font-size='16' font-weight='700' fill='#f8fafc'>5/6</text>
+  <text x='575.00' y='322' text-anchor='middle' font-size='12' fill='#f8fafc'>83.3%</text>
+  <rect x='638' y='278' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='691.00' y='302' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='691.00' y='322' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='754' y='278' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='807.00' y='302' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='807.00' y='322' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='870' y='278' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='923.00' y='302' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='923.00' y='322' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <text x='40' y='366' font-size='15' font-weight='700' fill='#0f172a'>MLFQ balanced (q=2/4/8, boost=12)</text>
+  <text x='40' y='386' font-size='12' fill='#475569'>score points 6.5</text>
+  <rect x='290' y='342' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='343.00' y='366' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='343.00' y='386' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='406' y='342' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='459.00' y='366' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='459.00' y='386' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='522' y='342' width='106' height='54' rx='12' ry='12' fill='#bfd5da' stroke='#cbd5e1' />
+  <text x='575.00' y='366' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>1/6</text>
+  <text x='575.00' y='386' text-anchor='middle' font-size='12' fill='#0f172a'>16.7%</text>
+  <rect x='638' y='342' width='106' height='54' rx='12' ry='12' fill='#9cc2c5' stroke='#cbd5e1' />
+  <text x='691.00' y='366' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>2/6</text>
+  <text x='691.00' y='386' text-anchor='middle' font-size='12' fill='#0f172a'>33.3%</text>
+  <rect x='754' y='342' width='106' height='54' rx='12' ry='12' fill='#9cc2c5' stroke='#cbd5e1' />
+  <text x='807.00' y='366' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>2/6</text>
+  <text x='807.00' y='386' text-anchor='middle' font-size='12' fill='#0f172a'>33.3%</text>
+  <rect x='870' y='342' width='106' height='54' rx='12' ry='12' fill='#9cc2c5' stroke='#cbd5e1' />
+  <text x='923.00' y='366' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>2/6</text>
+  <text x='923.00' y='386' text-anchor='middle' font-size='12' fill='#0f172a'>33.3%</text>
+  <text x='40' y='430' font-size='15' font-weight='700' fill='#0f172a'>MLFQ throughput (q=4/8/16, boost=off)</text>
+  <text x='40' y='450' font-size='12' fill='#475569'>score points 5.5</text>
+  <rect x='290' y='406' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='343.00' y='430' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='343.00' y='450' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='406' y='406' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='459.00' y='430' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='459.00' y='450' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='522' y='406' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='575.00' y='430' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='575.00' y='450' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='638' y='406' width='106' height='54' rx='12' ry='12' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='691.00' y='430' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>0/6</text>
+  <text x='691.00' y='450' text-anchor='middle' font-size='12' fill='#0f172a'>0%</text>
+  <rect x='754' y='406' width='106' height='54' rx='12' ry='12' fill='#78afaf' stroke='#cbd5e1' />
+  <text x='807.00' y='430' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>3/6</text>
+  <text x='807.00' y='450' text-anchor='middle' font-size='12' fill='#0f172a'>50%</text>
+  <rect x='870' y='406' width='106' height='54' rx='12' ry='12' fill='#78afaf' stroke='#cbd5e1' />
+  <text x='923.00' y='430' text-anchor='middle' font-size='16' font-weight='700' fill='#0f172a'>3/6</text>
+  <text x='923.00' y='450' text-anchor='middle' font-size='12' fill='#0f172a'>50%</text>
+  <rect x='40' y='546' width='96' height='18' rx='9' ry='9' fill='#e2e8f0' stroke='#cbd5e1' />
+  <text x='146' y='559' font-size='12' fill='#334155'>0%</text>
+  <rect x='164' y='546' width='96' height='18' rx='9' ry='9' fill='#78afaf' stroke='#cbd5e1' />
+  <text x='270' y='559' font-size='12' fill='#334155'>50%</text>
+  <rect x='288' y='546' width='96' height='18' rx='9' ry='9' fill='#0f766e' stroke='#cbd5e1' />
+  <text x='394' y='559' font-size='12' fill='#334155'>100%</text>
+</svg></div>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Turnaround</th><th>Waiting</th><th>Response</th><th>Fairness</th><th>Throughput</th><th>Low overhead</th></tr></thead>
+    <tbody><tr><td>SRTF</td><td>6/6 (100%)</td><td>6/6 (100%)</td><td>1/6 (16.7%)</td><td>4/6 (66.7%)</td><td>4/6 (66.7%)</td><td>4/6 (66.7%)</td></tr><tr><td>RR (q=2)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td></tr><tr><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>5/6 (83.3%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td></tr><tr><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>1/6 (16.7%)</td><td>2/6 (33.3%)</td><td>2/6 (33.3%)</td><td>2/6 (33.3%)</td></tr><tr><td>MLFQ throughput (q=4/8/16, boost=off)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>0/6 (0%)</td><td>3/6 (50%)</td><td>3/6 (50%)</td></tr></tbody>
+  </table>
+
+  <h2>Win counts</h2>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Turnaround wins</th><th>Waiting wins</th><th>Response wins</th><th>Slowdown wins</th><th>Even-slowdown wins</th><th>Throughput wins</th><th>Overhead wins</th><th>Completion wins</th><th>Total wins</th></tr></thead>
+    <tbody><tr><td>SRTF</td><td>6</td><td>6</td><td>1</td><td>5</td><td>4</td><td>4</td><td>4</td><td>4</td><td>34</td></tr><tr><td>RR (q=2)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr><tr><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>0</td><td>0</td><td>5</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>5</td></tr><tr><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>0</td><td>0</td><td>1</td><td>1</td><td>2</td><td>2</td><td>2</td><td>2</td><td>10</td></tr><tr><td>MLFQ throughput (q=4/8/16, boost=off)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>3</td><td>3</td><td>3</td><td>9</td></tr></tbody>
+  </table>
+
+  <h2>Scenario highlights</h2>
+  <table>
+    <thead><tr><th>Scenario</th><th>Best response</th><th>Best waiting</th><th>Best fairness</th><th>Best throughput</th></tr></thead>
+    <tbody><tr><td>convoy-mix</td><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>SRTF</td><td>SRTF</td><td>SRTF, MLFQ balanced (q=2/4/8, boost=12), MLFQ throughput (q=4/8/16, boost=off)</td></tr><tr><td>interactive-bursts</td><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>SRTF</td><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>MLFQ throughput (q=4/8/16, boost=off)</td></tr><tr><td>aging-pressure</td><td>SRTF, MLFQ interactive (q=1/2/4, boost=8)</td><td>SRTF</td><td>MLFQ balanced (q=2/4/8, boost=12)</td><td>MLFQ balanced (q=2/4/8, boost=12), MLFQ throughput (q=4/8/16, boost=off)</td></tr><tr><td>balanced-seed-17</td><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>SRTF</td><td>SRTF</td><td>SRTF</td></tr><tr><td>convoy-spike-seed-23</td><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>SRTF</td><td>SRTF</td><td>SRTF</td></tr><tr><td>latency-burst-seed-31</td><td>MLFQ interactive (q=1/2/4, boost=8)</td><td>SRTF</td><td>SRTF</td><td>SRTF</td></tr></tbody>
+  </table>
+</body>
+</html>

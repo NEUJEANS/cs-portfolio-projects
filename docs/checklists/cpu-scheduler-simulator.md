@@ -136,3 +136,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, MLFQ tuning benchmark pack
+- [x] inspect the current scheduler benchmark bundle and confirm the next weak spot is policy-tuning storytelling after the scorecard slice
+- [x] skip external web research because this slice extends the current compare and benchmark architecture directly
+- [x] self-test the benchmark flow before editing
+- [x] add a resumable slice checklist entry
+- [x] implement named MLFQ variant-pack expansion for compare and benchmark mode
+- [x] generate and commit a focused MLFQ tuning benchmark bundle with deterministic artifacts
+- [x] refresh README and checklist notes for the new tuning-pack flow
+- [x] run tests and deterministic artifact checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

@@ -1,0 +1,1673 @@
+{
+  "mode": "compare",
+  "workload_label": "balanced-seed-17",
+  "workload_source": "generated/balanced/seed-17",
+  "preset": null,
+  "process_count": 6,
+  "algorithms": [
+    {
+      "algorithm": "srtf",
+      "base_algorithm": "srtf",
+      "label": "SRTF",
+      "mlfq_quantums": null,
+      "mlfq_boost_interval": null,
+      "mlfq_variant_pack": "off",
+      "mlfq_variant_name": null,
+      "mlfq_variant_headline": null,
+      "summary": {
+        "avg_turnaround": 14.5,
+        "avg_waiting": 9.33,
+        "avg_response": 8.33,
+        "max_waiting": 23,
+        "waiting_spread": 23,
+        "response_spread": 23,
+        "waiting_stddev": 8.3,
+        "avg_slowdown": 2.46,
+        "max_slowdown": 4.29,
+        "slowdown_spread": 3.29,
+        "slowdown_stddev": 1.17,
+        "cpu_utilization": 81.58,
+        "throughput": 0.1579,
+        "context_switches": 5,
+        "context_switch_overhead_time": 5,
+        "scheduler_overhead_pct": 13.16,
+        "total_time": 38,
+        "timeline_slices": 14
+      },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 9,
+          "response": 9,
+          "turnaround": 14,
+          "slowdown": 2.8
+        },
+        {
+          "pid": "P2",
+          "waiting": 1,
+          "response": 1,
+          "turnaround": 5,
+          "slowdown": 1.25
+        },
+        {
+          "pid": "P3",
+          "waiting": 23,
+          "response": 23,
+          "turnaround": 30,
+          "slowdown": 4.29
+        },
+        {
+          "pid": "P4",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 2,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 17,
+          "response": 17,
+          "turnaround": 24,
+          "slowdown": 3.43
+        },
+        {
+          "pid": "P6",
+          "waiting": 6,
+          "response": 0,
+          "turnaround": 12,
+          "slowdown": 2.0
+        }
+      ],
+      "result": {
+        "processes": [
+          {
+            "pid": "P1",
+            "arrival": 8,
+            "burst": 5,
+            "priority": 2,
+            "start": 17,
+            "completion": 22,
+            "turnaround": 14,
+            "waiting": 9,
+            "response": 9
+          },
+          {
+            "pid": "P2",
+            "arrival": 5,
+            "burst": 4,
+            "priority": 1,
+            "start": 6,
+            "completion": 10,
+            "turnaround": 5,
+            "waiting": 1,
+            "response": 1
+          },
+          {
+            "pid": "P3",
+            "arrival": 8,
+            "burst": 7,
+            "priority": 2,
+            "start": 31,
+            "completion": 38,
+            "turnaround": 30,
+            "waiting": 23,
+            "response": 23
+          },
+          {
+            "pid": "P4",
+            "arrival": 1,
+            "burst": 2,
+            "priority": 1,
+            "start": 1,
+            "completion": 3,
+            "turnaround": 2,
+            "waiting": 0,
+            "response": 0
+          },
+          {
+            "pid": "P5",
+            "arrival": 6,
+            "burst": 7,
+            "priority": 3,
+            "start": 23,
+            "completion": 30,
+            "turnaround": 24,
+            "waiting": 17,
+            "response": 17
+          },
+          {
+            "pid": "P6",
+            "arrival": 4,
+            "burst": 6,
+            "priority": 2,
+            "start": 4,
+            "completion": 16,
+            "turnaround": 12,
+            "waiting": 6,
+            "response": 0
+          }
+        ],
+        "timeline": [
+          {
+            "start": 0,
+            "end": 1,
+            "pid": "IDLE"
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "pid": "P4"
+          },
+          {
+            "start": 3,
+            "end": 4,
+            "pid": "IDLE"
+          },
+          {
+            "start": 4,
+            "end": 5,
+            "pid": "P6"
+          },
+          {
+            "start": 5,
+            "end": 6,
+            "pid": "CS"
+          },
+          {
+            "start": 6,
+            "end": 10,
+            "pid": "P2"
+          },
+          {
+            "start": 10,
+            "end": 11,
+            "pid": "CS"
+          },
+          {
+            "start": 11,
+            "end": 16,
+            "pid": "P6"
+          },
+          {
+            "start": 16,
+            "end": 17,
+            "pid": "CS"
+          },
+          {
+            "start": 17,
+            "end": 22,
+            "pid": "P1"
+          },
+          {
+            "start": 22,
+            "end": 23,
+            "pid": "CS"
+          },
+          {
+            "start": 23,
+            "end": 30,
+            "pid": "P5"
+          },
+          {
+            "start": 30,
+            "end": 31,
+            "pid": "CS"
+          },
+          {
+            "start": 31,
+            "end": 38,
+            "pid": "P3"
+          }
+        ],
+        "averages": {
+          "turnaround": 14.5,
+          "waiting": 9.33,
+          "response": 8.33,
+          "cpu_utilization": 81.58,
+          "throughput": 0.1579,
+          "context_switches": 5,
+          "context_switch_overhead_time": 5,
+          "scheduler_overhead_pct": 13.16
+        },
+        "total_time": 38,
+        "context_switch_cost": 1,
+        "algorithm": "srtf",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
+      }
+    },
+    {
+      "algorithm": "rr",
+      "base_algorithm": "rr",
+      "label": "RR (q=2)",
+      "mlfq_quantums": null,
+      "mlfq_boost_interval": null,
+      "mlfq_variant_pack": "off",
+      "mlfq_variant_name": null,
+      "mlfq_variant_headline": null,
+      "summary": {
+        "avg_turnaround": 26.67,
+        "avg_waiting": 21.5,
+        "avg_response": 4.17,
+        "max_waiting": 33,
+        "waiting_spread": 33,
+        "response_spread": 11,
+        "waiting_stddev": 11.64,
+        "avg_slowdown": 4.69,
+        "max_slowdown": 6.6,
+        "slowdown_spread": 5.6,
+        "slowdown_stddev": 1.8,
+        "cpu_utilization": 64.58,
+        "throughput": 0.125,
+        "context_switches": 15,
+        "context_switch_overhead_time": 15,
+        "scheduler_overhead_pct": 31.25,
+        "total_time": 48,
+        "timeline_slices": 34
+      },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 28,
+          "response": 8,
+          "turnaround": 33,
+          "slowdown": 6.6
+        },
+        {
+          "pid": "P2",
+          "waiting": 15,
+          "response": 2,
+          "turnaround": 19,
+          "slowdown": 4.75
+        },
+        {
+          "pid": "P3",
+          "waiting": 33,
+          "response": 11,
+          "turnaround": 40,
+          "slowdown": 5.71
+        },
+        {
+          "pid": "P4",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 2,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 33,
+          "response": 4,
+          "turnaround": 40,
+          "slowdown": 5.71
+        },
+        {
+          "pid": "P6",
+          "waiting": 20,
+          "response": 0,
+          "turnaround": 26,
+          "slowdown": 4.33
+        }
+      ],
+      "result": {
+        "processes": [
+          {
+            "pid": "P1",
+            "arrival": 8,
+            "burst": 5,
+            "priority": 2,
+            "start": 16,
+            "completion": 41,
+            "turnaround": 33,
+            "waiting": 28,
+            "response": 8
+          },
+          {
+            "pid": "P2",
+            "arrival": 5,
+            "burst": 4,
+            "priority": 1,
+            "start": 7,
+            "completion": 24,
+            "turnaround": 19,
+            "waiting": 15,
+            "response": 2
+          },
+          {
+            "pid": "P3",
+            "arrival": 8,
+            "burst": 7,
+            "priority": 2,
+            "start": 19,
+            "completion": 48,
+            "turnaround": 40,
+            "waiting": 33,
+            "response": 11
+          },
+          {
+            "pid": "P4",
+            "arrival": 1,
+            "burst": 2,
+            "priority": 1,
+            "start": 1,
+            "completion": 3,
+            "turnaround": 2,
+            "waiting": 0,
+            "response": 0
+          },
+          {
+            "pid": "P5",
+            "arrival": 6,
+            "burst": 7,
+            "priority": 3,
+            "start": 10,
+            "completion": 46,
+            "turnaround": 40,
+            "waiting": 33,
+            "response": 4
+          },
+          {
+            "pid": "P6",
+            "arrival": 4,
+            "burst": 6,
+            "priority": 2,
+            "start": 4,
+            "completion": 30,
+            "turnaround": 26,
+            "waiting": 20,
+            "response": 0
+          }
+        ],
+        "timeline": [
+          {
+            "start": 0,
+            "end": 1,
+            "pid": "IDLE"
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "pid": "P4"
+          },
+          {
+            "start": 3,
+            "end": 4,
+            "pid": "IDLE"
+          },
+          {
+            "start": 4,
+            "end": 6,
+            "pid": "P6"
+          },
+          {
+            "start": 6,
+            "end": 7,
+            "pid": "CS"
+          },
+          {
+            "start": 7,
+            "end": 9,
+            "pid": "P2"
+          },
+          {
+            "start": 9,
+            "end": 10,
+            "pid": "CS"
+          },
+          {
+            "start": 10,
+            "end": 12,
+            "pid": "P5"
+          },
+          {
+            "start": 12,
+            "end": 13,
+            "pid": "CS"
+          },
+          {
+            "start": 13,
+            "end": 15,
+            "pid": "P6"
+          },
+          {
+            "start": 15,
+            "end": 16,
+            "pid": "CS"
+          },
+          {
+            "start": 16,
+            "end": 18,
+            "pid": "P1"
+          },
+          {
+            "start": 18,
+            "end": 19,
+            "pid": "CS"
+          },
+          {
+            "start": 19,
+            "end": 21,
+            "pid": "P3"
+          },
+          {
+            "start": 21,
+            "end": 22,
+            "pid": "CS"
+          },
+          {
+            "start": 22,
+            "end": 24,
+            "pid": "P2"
+          },
+          {
+            "start": 24,
+            "end": 25,
+            "pid": "CS"
+          },
+          {
+            "start": 25,
+            "end": 27,
+            "pid": "P5"
+          },
+          {
+            "start": 27,
+            "end": 28,
+            "pid": "CS"
+          },
+          {
+            "start": 28,
+            "end": 30,
+            "pid": "P6"
+          },
+          {
+            "start": 30,
+            "end": 31,
+            "pid": "CS"
+          },
+          {
+            "start": 31,
+            "end": 33,
+            "pid": "P1"
+          },
+          {
+            "start": 33,
+            "end": 34,
+            "pid": "CS"
+          },
+          {
+            "start": 34,
+            "end": 36,
+            "pid": "P3"
+          },
+          {
+            "start": 36,
+            "end": 37,
+            "pid": "CS"
+          },
+          {
+            "start": 37,
+            "end": 39,
+            "pid": "P5"
+          },
+          {
+            "start": 39,
+            "end": 40,
+            "pid": "CS"
+          },
+          {
+            "start": 40,
+            "end": 41,
+            "pid": "P1"
+          },
+          {
+            "start": 41,
+            "end": 42,
+            "pid": "CS"
+          },
+          {
+            "start": 42,
+            "end": 44,
+            "pid": "P3"
+          },
+          {
+            "start": 44,
+            "end": 45,
+            "pid": "CS"
+          },
+          {
+            "start": 45,
+            "end": 46,
+            "pid": "P5"
+          },
+          {
+            "start": 46,
+            "end": 47,
+            "pid": "CS"
+          },
+          {
+            "start": 47,
+            "end": 48,
+            "pid": "P3"
+          }
+        ],
+        "averages": {
+          "turnaround": 26.67,
+          "waiting": 21.5,
+          "response": 4.17,
+          "cpu_utilization": 64.58,
+          "throughput": 0.125,
+          "context_switches": 15,
+          "context_switch_overhead_time": 15,
+          "scheduler_overhead_pct": 31.25
+        },
+        "total_time": 48,
+        "context_switch_cost": 1,
+        "algorithm": "rr",
+        "quantum": 2,
+        "aging_interval": 0,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
+      }
+    },
+    {
+      "algorithm": "mlfq-interactive",
+      "base_algorithm": "mlfq",
+      "label": "MLFQ interactive (q=1/2/4, boost=8)",
+      "mlfq_quantums": [
+        1,
+        2,
+        4
+      ],
+      "mlfq_boost_interval": 8,
+      "mlfq_variant_pack": "portfolio",
+      "mlfq_variant_name": "interactive",
+      "mlfq_variant_headline": "faster boosts plus a short top quantum favor quick foreground response",
+      "summary": {
+        "avg_turnaround": 36.5,
+        "avg_waiting": 31.33,
+        "avg_response": 2.17,
+        "max_waiting": 43,
+        "waiting_spread": 43,
+        "response_spread": 6,
+        "waiting_stddev": 15.02,
+        "avg_slowdown": 6.46,
+        "max_slowdown": 8.25,
+        "slowdown_spread": 7.25,
+        "slowdown_stddev": 2.47,
+        "cpu_utilization": 53.45,
+        "throughput": 0.1034,
+        "context_switches": 25,
+        "context_switch_overhead_time": 25,
+        "scheduler_overhead_pct": 43.1,
+        "total_time": 58,
+        "timeline_slices": 54
+      },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 32,
+          "response": 4,
+          "turnaround": 37,
+          "slowdown": 7.4
+        },
+        {
+          "pid": "P2",
+          "waiting": 29,
+          "response": 1,
+          "turnaround": 33,
+          "slowdown": 8.25
+        },
+        {
+          "pid": "P3",
+          "waiting": 43,
+          "response": 6,
+          "turnaround": 50,
+          "slowdown": 7.14
+        },
+        {
+          "pid": "P4",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 2,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 43,
+          "response": 2,
+          "turnaround": 50,
+          "slowdown": 7.14
+        },
+        {
+          "pid": "P6",
+          "waiting": 41,
+          "response": 0,
+          "turnaround": 47,
+          "slowdown": 7.83
+        }
+      ],
+      "result": {
+        "processes": [
+          {
+            "pid": "P1",
+            "arrival": 8,
+            "burst": 5,
+            "priority": 2,
+            "start": 12,
+            "completion": 45,
+            "turnaround": 37,
+            "waiting": 32,
+            "response": 4
+          },
+          {
+            "pid": "P2",
+            "arrival": 5,
+            "burst": 4,
+            "priority": 1,
+            "start": 6,
+            "completion": 38,
+            "turnaround": 33,
+            "waiting": 29,
+            "response": 1
+          },
+          {
+            "pid": "P3",
+            "arrival": 8,
+            "burst": 7,
+            "priority": 2,
+            "start": 14,
+            "completion": 58,
+            "turnaround": 50,
+            "waiting": 43,
+            "response": 6
+          },
+          {
+            "pid": "P4",
+            "arrival": 1,
+            "burst": 2,
+            "priority": 1,
+            "start": 1,
+            "completion": 3,
+            "turnaround": 2,
+            "waiting": 0,
+            "response": 0
+          },
+          {
+            "pid": "P5",
+            "arrival": 6,
+            "burst": 7,
+            "priority": 3,
+            "start": 8,
+            "completion": 56,
+            "turnaround": 50,
+            "waiting": 43,
+            "response": 2
+          },
+          {
+            "pid": "P6",
+            "arrival": 4,
+            "burst": 6,
+            "priority": 2,
+            "start": 4,
+            "completion": 51,
+            "turnaround": 47,
+            "waiting": 41,
+            "response": 0
+          }
+        ],
+        "timeline": [
+          {
+            "start": 0,
+            "end": 1,
+            "pid": "IDLE"
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "pid": "P4"
+          },
+          {
+            "start": 3,
+            "end": 4,
+            "pid": "IDLE"
+          },
+          {
+            "start": 4,
+            "end": 5,
+            "pid": "P6"
+          },
+          {
+            "start": 5,
+            "end": 6,
+            "pid": "CS"
+          },
+          {
+            "start": 6,
+            "end": 7,
+            "pid": "P2"
+          },
+          {
+            "start": 7,
+            "end": 8,
+            "pid": "CS"
+          },
+          {
+            "start": 8,
+            "end": 9,
+            "pid": "P5"
+          },
+          {
+            "start": 9,
+            "end": 10,
+            "pid": "CS"
+          },
+          {
+            "start": 10,
+            "end": 11,
+            "pid": "P6"
+          },
+          {
+            "start": 11,
+            "end": 12,
+            "pid": "CS"
+          },
+          {
+            "start": 12,
+            "end": 13,
+            "pid": "P1"
+          },
+          {
+            "start": 13,
+            "end": 14,
+            "pid": "CS"
+          },
+          {
+            "start": 14,
+            "end": 15,
+            "pid": "P3"
+          },
+          {
+            "start": 15,
+            "end": 16,
+            "pid": "CS"
+          },
+          {
+            "start": 16,
+            "end": 17,
+            "pid": "P2"
+          },
+          {
+            "start": 17,
+            "end": 18,
+            "pid": "CS"
+          },
+          {
+            "start": 18,
+            "end": 19,
+            "pid": "P5"
+          },
+          {
+            "start": 19,
+            "end": 20,
+            "pid": "CS"
+          },
+          {
+            "start": 20,
+            "end": 21,
+            "pid": "P6"
+          },
+          {
+            "start": 21,
+            "end": 22,
+            "pid": "CS"
+          },
+          {
+            "start": 22,
+            "end": 24,
+            "pid": "P1"
+          },
+          {
+            "start": 24,
+            "end": 25,
+            "pid": "CS"
+          },
+          {
+            "start": 25,
+            "end": 26,
+            "pid": "P3"
+          },
+          {
+            "start": 26,
+            "end": 27,
+            "pid": "CS"
+          },
+          {
+            "start": 27,
+            "end": 28,
+            "pid": "P2"
+          },
+          {
+            "start": 28,
+            "end": 29,
+            "pid": "CS"
+          },
+          {
+            "start": 29,
+            "end": 30,
+            "pid": "P5"
+          },
+          {
+            "start": 30,
+            "end": 31,
+            "pid": "CS"
+          },
+          {
+            "start": 31,
+            "end": 32,
+            "pid": "P6"
+          },
+          {
+            "start": 32,
+            "end": 33,
+            "pid": "CS"
+          },
+          {
+            "start": 33,
+            "end": 34,
+            "pid": "P1"
+          },
+          {
+            "start": 34,
+            "end": 35,
+            "pid": "CS"
+          },
+          {
+            "start": 35,
+            "end": 36,
+            "pid": "P3"
+          },
+          {
+            "start": 36,
+            "end": 37,
+            "pid": "CS"
+          },
+          {
+            "start": 37,
+            "end": 38,
+            "pid": "P2"
+          },
+          {
+            "start": 38,
+            "end": 39,
+            "pid": "CS"
+          },
+          {
+            "start": 39,
+            "end": 41,
+            "pid": "P5"
+          },
+          {
+            "start": 41,
+            "end": 42,
+            "pid": "CS"
+          },
+          {
+            "start": 42,
+            "end": 43,
+            "pid": "P6"
+          },
+          {
+            "start": 43,
+            "end": 44,
+            "pid": "CS"
+          },
+          {
+            "start": 44,
+            "end": 45,
+            "pid": "P1"
+          },
+          {
+            "start": 45,
+            "end": 46,
+            "pid": "CS"
+          },
+          {
+            "start": 46,
+            "end": 47,
+            "pid": "P3"
+          },
+          {
+            "start": 47,
+            "end": 48,
+            "pid": "CS"
+          },
+          {
+            "start": 48,
+            "end": 49,
+            "pid": "P5"
+          },
+          {
+            "start": 49,
+            "end": 50,
+            "pid": "CS"
+          },
+          {
+            "start": 50,
+            "end": 51,
+            "pid": "P6"
+          },
+          {
+            "start": 51,
+            "end": 52,
+            "pid": "CS"
+          },
+          {
+            "start": 52,
+            "end": 54,
+            "pid": "P3"
+          },
+          {
+            "start": 54,
+            "end": 55,
+            "pid": "CS"
+          },
+          {
+            "start": 55,
+            "end": 56,
+            "pid": "P5"
+          },
+          {
+            "start": 56,
+            "end": 57,
+            "pid": "CS"
+          },
+          {
+            "start": 57,
+            "end": 58,
+            "pid": "P3"
+          }
+        ],
+        "averages": {
+          "turnaround": 36.5,
+          "waiting": 31.33,
+          "response": 2.17,
+          "cpu_utilization": 53.45,
+          "throughput": 0.1034,
+          "context_switches": 25,
+          "context_switch_overhead_time": 25,
+          "scheduler_overhead_pct": 43.1
+        },
+        "total_time": 58,
+        "context_switch_cost": 1,
+        "algorithm": "mlfq",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": [
+          1,
+          2,
+          4
+        ],
+        "mlfq_boost_interval": 8
+      }
+    },
+    {
+      "algorithm": "mlfq-balanced",
+      "base_algorithm": "mlfq",
+      "label": "MLFQ balanced (q=2/4/8, boost=12)",
+      "mlfq_quantums": [
+        2,
+        4,
+        8
+      ],
+      "mlfq_boost_interval": 12,
+      "mlfq_variant_pack": "portfolio",
+      "mlfq_variant_name": "balanced",
+      "mlfq_variant_headline": "the default queue ladder balances short-job response with moderate churn",
+      "summary": {
+        "avg_turnaround": 27.67,
+        "avg_waiting": 22.5,
+        "avg_response": 3.17,
+        "max_waiting": 33,
+        "waiting_spread": 33,
+        "response_spread": 8,
+        "waiting_stddev": 11.73,
+        "avg_slowdown": 4.85,
+        "max_slowdown": 6.6,
+        "slowdown_spread": 5.6,
+        "slowdown_stddev": 1.81,
+        "cpu_utilization": 64.58,
+        "throughput": 0.125,
+        "context_switches": 15,
+        "context_switch_overhead_time": 15,
+        "scheduler_overhead_pct": 31.25,
+        "total_time": 48,
+        "timeline_slices": 34
+      },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 28,
+          "response": 5,
+          "turnaround": 33,
+          "slowdown": 6.6
+        },
+        {
+          "pid": "P2",
+          "waiting": 15,
+          "response": 2,
+          "turnaround": 19,
+          "slowdown": 4.75
+        },
+        {
+          "pid": "P3",
+          "waiting": 33,
+          "response": 8,
+          "turnaround": 40,
+          "slowdown": 5.71
+        },
+        {
+          "pid": "P4",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 2,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 33,
+          "response": 4,
+          "turnaround": 40,
+          "slowdown": 5.71
+        },
+        {
+          "pid": "P6",
+          "waiting": 26,
+          "response": 0,
+          "turnaround": 32,
+          "slowdown": 5.33
+        }
+      ],
+      "result": {
+        "processes": [
+          {
+            "pid": "P1",
+            "arrival": 8,
+            "burst": 5,
+            "priority": 2,
+            "start": 13,
+            "completion": 41,
+            "turnaround": 33,
+            "waiting": 28,
+            "response": 5
+          },
+          {
+            "pid": "P2",
+            "arrival": 5,
+            "burst": 4,
+            "priority": 1,
+            "start": 7,
+            "completion": 24,
+            "turnaround": 19,
+            "waiting": 15,
+            "response": 2
+          },
+          {
+            "pid": "P3",
+            "arrival": 8,
+            "burst": 7,
+            "priority": 2,
+            "start": 16,
+            "completion": 48,
+            "turnaround": 40,
+            "waiting": 33,
+            "response": 8
+          },
+          {
+            "pid": "P4",
+            "arrival": 1,
+            "burst": 2,
+            "priority": 1,
+            "start": 1,
+            "completion": 3,
+            "turnaround": 2,
+            "waiting": 0,
+            "response": 0
+          },
+          {
+            "pid": "P5",
+            "arrival": 6,
+            "burst": 7,
+            "priority": 3,
+            "start": 10,
+            "completion": 46,
+            "turnaround": 40,
+            "waiting": 33,
+            "response": 4
+          },
+          {
+            "pid": "P6",
+            "arrival": 4,
+            "burst": 6,
+            "priority": 2,
+            "start": 4,
+            "completion": 36,
+            "turnaround": 32,
+            "waiting": 26,
+            "response": 0
+          }
+        ],
+        "timeline": [
+          {
+            "start": 0,
+            "end": 1,
+            "pid": "IDLE"
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "pid": "P4"
+          },
+          {
+            "start": 3,
+            "end": 4,
+            "pid": "IDLE"
+          },
+          {
+            "start": 4,
+            "end": 6,
+            "pid": "P6"
+          },
+          {
+            "start": 6,
+            "end": 7,
+            "pid": "CS"
+          },
+          {
+            "start": 7,
+            "end": 9,
+            "pid": "P2"
+          },
+          {
+            "start": 9,
+            "end": 10,
+            "pid": "CS"
+          },
+          {
+            "start": 10,
+            "end": 12,
+            "pid": "P5"
+          },
+          {
+            "start": 12,
+            "end": 13,
+            "pid": "CS"
+          },
+          {
+            "start": 13,
+            "end": 15,
+            "pid": "P1"
+          },
+          {
+            "start": 15,
+            "end": 16,
+            "pid": "CS"
+          },
+          {
+            "start": 16,
+            "end": 18,
+            "pid": "P3"
+          },
+          {
+            "start": 18,
+            "end": 19,
+            "pid": "CS"
+          },
+          {
+            "start": 19,
+            "end": 21,
+            "pid": "P6"
+          },
+          {
+            "start": 21,
+            "end": 22,
+            "pid": "CS"
+          },
+          {
+            "start": 22,
+            "end": 24,
+            "pid": "P2"
+          },
+          {
+            "start": 24,
+            "end": 25,
+            "pid": "CS"
+          },
+          {
+            "start": 25,
+            "end": 27,
+            "pid": "P5"
+          },
+          {
+            "start": 27,
+            "end": 28,
+            "pid": "CS"
+          },
+          {
+            "start": 28,
+            "end": 30,
+            "pid": "P1"
+          },
+          {
+            "start": 30,
+            "end": 31,
+            "pid": "CS"
+          },
+          {
+            "start": 31,
+            "end": 33,
+            "pid": "P3"
+          },
+          {
+            "start": 33,
+            "end": 34,
+            "pid": "CS"
+          },
+          {
+            "start": 34,
+            "end": 36,
+            "pid": "P6"
+          },
+          {
+            "start": 36,
+            "end": 37,
+            "pid": "CS"
+          },
+          {
+            "start": 37,
+            "end": 39,
+            "pid": "P5"
+          },
+          {
+            "start": 39,
+            "end": 40,
+            "pid": "CS"
+          },
+          {
+            "start": 40,
+            "end": 41,
+            "pid": "P1"
+          },
+          {
+            "start": 41,
+            "end": 42,
+            "pid": "CS"
+          },
+          {
+            "start": 42,
+            "end": 44,
+            "pid": "P3"
+          },
+          {
+            "start": 44,
+            "end": 45,
+            "pid": "CS"
+          },
+          {
+            "start": 45,
+            "end": 46,
+            "pid": "P5"
+          },
+          {
+            "start": 46,
+            "end": 47,
+            "pid": "CS"
+          },
+          {
+            "start": 47,
+            "end": 48,
+            "pid": "P3"
+          }
+        ],
+        "averages": {
+          "turnaround": 27.67,
+          "waiting": 22.5,
+          "response": 3.17,
+          "cpu_utilization": 64.58,
+          "throughput": 0.125,
+          "context_switches": 15,
+          "context_switch_overhead_time": 15,
+          "scheduler_overhead_pct": 31.25
+        },
+        "total_time": 48,
+        "context_switch_cost": 1,
+        "algorithm": "mlfq",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": [
+          2,
+          4,
+          8
+        ],
+        "mlfq_boost_interval": 12
+      }
+    },
+    {
+      "algorithm": "mlfq-throughput",
+      "base_algorithm": "mlfq",
+      "label": "MLFQ throughput (q=4/8/16, boost=off)",
+      "mlfq_quantums": [
+        4,
+        8,
+        16
+      ],
+      "mlfq_boost_interval": 0,
+      "mlfq_variant_pack": "portfolio",
+      "mlfq_variant_name": "throughput",
+      "mlfq_variant_headline": "longer quanta and no periodic boost reduce dispatch churn for batch-heavy mixes",
+      "summary": {
+        "avg_turnaround": 21.33,
+        "avg_waiting": 16.17,
+        "avg_response": 6.5,
+        "max_waiting": 26,
+        "waiting_spread": 26,
+        "response_spread": 16,
+        "waiting_stddev": 10.2,
+        "avg_slowdown": 3.69,
+        "max_slowdown": 5.8,
+        "slowdown_spread": 4.8,
+        "slowdown_stddev": 1.66,
+        "cpu_utilization": 75.61,
+        "throughput": 0.1463,
+        "context_switches": 8,
+        "context_switch_overhead_time": 8,
+        "scheduler_overhead_pct": 19.51,
+        "total_time": 41,
+        "timeline_slices": 20
+      },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 24,
+          "response": 11,
+          "turnaround": 29,
+          "slowdown": 5.8
+        },
+        {
+          "pid": "P2",
+          "waiting": 4,
+          "response": 4,
+          "turnaround": 8,
+          "slowdown": 2.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 26,
+          "response": 16,
+          "turnaround": 33,
+          "slowdown": 4.71
+        },
+        {
+          "pid": "P4",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 2,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 22,
+          "response": 8,
+          "turnaround": 29,
+          "slowdown": 4.14
+        },
+        {
+          "pid": "P6",
+          "waiting": 21,
+          "response": 0,
+          "turnaround": 27,
+          "slowdown": 4.5
+        }
+      ],
+      "result": {
+        "processes": [
+          {
+            "pid": "P1",
+            "arrival": 8,
+            "burst": 5,
+            "priority": 2,
+            "start": 19,
+            "completion": 37,
+            "turnaround": 29,
+            "waiting": 24,
+            "response": 11
+          },
+          {
+            "pid": "P2",
+            "arrival": 5,
+            "burst": 4,
+            "priority": 1,
+            "start": 9,
+            "completion": 13,
+            "turnaround": 8,
+            "waiting": 4,
+            "response": 4
+          },
+          {
+            "pid": "P3",
+            "arrival": 8,
+            "burst": 7,
+            "priority": 2,
+            "start": 24,
+            "completion": 41,
+            "turnaround": 33,
+            "waiting": 26,
+            "response": 16
+          },
+          {
+            "pid": "P4",
+            "arrival": 1,
+            "burst": 2,
+            "priority": 1,
+            "start": 1,
+            "completion": 3,
+            "turnaround": 2,
+            "waiting": 0,
+            "response": 0
+          },
+          {
+            "pid": "P5",
+            "arrival": 6,
+            "burst": 7,
+            "priority": 3,
+            "start": 14,
+            "completion": 35,
+            "turnaround": 29,
+            "waiting": 22,
+            "response": 8
+          },
+          {
+            "pid": "P6",
+            "arrival": 4,
+            "burst": 6,
+            "priority": 2,
+            "start": 4,
+            "completion": 31,
+            "turnaround": 27,
+            "waiting": 21,
+            "response": 0
+          }
+        ],
+        "timeline": [
+          {
+            "start": 0,
+            "end": 1,
+            "pid": "IDLE"
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "pid": "P4"
+          },
+          {
+            "start": 3,
+            "end": 4,
+            "pid": "IDLE"
+          },
+          {
+            "start": 4,
+            "end": 8,
+            "pid": "P6"
+          },
+          {
+            "start": 8,
+            "end": 9,
+            "pid": "CS"
+          },
+          {
+            "start": 9,
+            "end": 13,
+            "pid": "P2"
+          },
+          {
+            "start": 13,
+            "end": 14,
+            "pid": "CS"
+          },
+          {
+            "start": 14,
+            "end": 18,
+            "pid": "P5"
+          },
+          {
+            "start": 18,
+            "end": 19,
+            "pid": "CS"
+          },
+          {
+            "start": 19,
+            "end": 23,
+            "pid": "P1"
+          },
+          {
+            "start": 23,
+            "end": 24,
+            "pid": "CS"
+          },
+          {
+            "start": 24,
+            "end": 28,
+            "pid": "P3"
+          },
+          {
+            "start": 28,
+            "end": 29,
+            "pid": "CS"
+          },
+          {
+            "start": 29,
+            "end": 31,
+            "pid": "P6"
+          },
+          {
+            "start": 31,
+            "end": 32,
+            "pid": "CS"
+          },
+          {
+            "start": 32,
+            "end": 35,
+            "pid": "P5"
+          },
+          {
+            "start": 35,
+            "end": 36,
+            "pid": "CS"
+          },
+          {
+            "start": 36,
+            "end": 37,
+            "pid": "P1"
+          },
+          {
+            "start": 37,
+            "end": 38,
+            "pid": "CS"
+          },
+          {
+            "start": 38,
+            "end": 41,
+            "pid": "P3"
+          }
+        ],
+        "averages": {
+          "turnaround": 21.33,
+          "waiting": 16.17,
+          "response": 6.5,
+          "cpu_utilization": 75.61,
+          "throughput": 0.1463,
+          "context_switches": 8,
+          "context_switch_overhead_time": 8,
+          "scheduler_overhead_pct": 19.51
+        },
+        "total_time": 41,
+        "context_switch_cost": 1,
+        "algorithm": "mlfq",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": [
+          4,
+          8,
+          16
+        ],
+        "mlfq_boost_interval": 0
+      }
+    }
+  ],
+  "quantum": 2,
+  "aging_interval": 0,
+  "context_switch_cost": 1,
+  "mlfq_quantums": [
+    2,
+    4,
+    8
+  ],
+  "mlfq_boost_interval": 12,
+  "mlfq_variant_pack": "portfolio",
+  "winners": {
+    "avg_turnaround": [
+      "srtf"
+    ],
+    "avg_waiting": [
+      "srtf"
+    ],
+    "avg_response": [
+      "mlfq-interactive"
+    ],
+    "max_waiting": [
+      "srtf"
+    ],
+    "avg_slowdown": [
+      "srtf"
+    ],
+    "max_slowdown": [
+      "srtf"
+    ],
+    "slowdown_stddev": [
+      "srtf"
+    ],
+    "cpu_utilization": [
+      "srtf"
+    ],
+    "throughput": [
+      "srtf"
+    ],
+    "scheduler_overhead_pct": [
+      "srtf"
+    ],
+    "total_time": [
+      "srtf"
+    ]
+  }
+}

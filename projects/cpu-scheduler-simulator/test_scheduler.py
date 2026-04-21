@@ -12,6 +12,7 @@ from scheduler import (
     benchmark_algorithm_family,
     compare_algorithms,
     format_benchmark_heatmap_svg,
+    format_benchmark_html,
     format_benchmark_markdown,
     format_compare_markdown,
     format_compare_svg,
@@ -326,6 +327,23 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("avg_slowdown", fcfs["summary"])
         self.assertIn("slowdown_stddev", comparison["winners"])
 
+    def test_compare_algorithms_expands_mlfq_variant_pack(self):
+        comparison = compare_algorithms(
+            [Process("P1", arrival=0, burst=9), Process("P2", arrival=1, burst=2)],
+            algorithms=["rr", "mlfq"],
+            quantum=2,
+            mlfq_variant_pack="portfolio",
+            workload_label="tuning-demo",
+            workload_source="tuning.json",
+        )
+        self.assertEqual(
+            [entry["algorithm"] for entry in comparison["algorithms"]],
+            ["rr", "mlfq-interactive", "mlfq-balanced", "mlfq-throughput"],
+        )
+        self.assertTrue(all(entry["base_algorithm"] in {"rr", "mlfq"} for entry in comparison["algorithms"]))
+        self.assertEqual(comparison["mlfq_variant_pack"], "portfolio")
+        self.assertIn("MLFQ interactive", comparison["algorithms"][1]["label"])
+
     def test_format_compare_markdown_mentions_takeaways(self):
         comparison = compare_algorithms(
             [Process("P1", arrival=0, burst=4), Process("P2", arrival=1, burst=1)],
@@ -342,6 +360,20 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("| Algorithm | Avg slowdown | Max slowdown | Slowdown spread | Slowdown stddev | Waiting stddev | Most delayed process |", report)
         self.assertIn("lowest average waiting", report)
         self.assertIn("most even slowdown distribution", report)
+
+    def test_format_compare_markdown_mentions_mlfq_variant_pack(self):
+        comparison = compare_algorithms(
+            [Process("P1", arrival=0, burst=8), Process("P2", arrival=1, burst=1)],
+            algorithms=["rr", "mlfq"],
+            quantum=2,
+            mlfq_variant_pack="portfolio",
+            workload_label="tuning-demo",
+            workload_source="tuning.json",
+        )
+        report = format_compare_markdown(comparison)
+        self.assertIn("mlfq variant pack: portfolio", report)
+        self.assertIn("MLFQ interactive", report)
+        self.assertIn("MLFQ throughput", report)
 
     def test_format_compare_markdown_skips_mlfq_metadata_when_not_selected(self):
         comparison = compare_algorithms(
@@ -402,6 +434,21 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(benchmark["goal_heatmap_columns"][0]["label"], "Turnaround")
         self.assertTrue(any(card["label"].startswith("SRTF") for card in benchmark["scorecards"]))
 
+    def test_benchmark_algorithm_family_supports_mlfq_variant_pack(self):
+        benchmark = benchmark_algorithm_family(
+            "portfolio-batch",
+            algorithms=["srtf", "rr", "mlfq"],
+            quantum=2,
+            context_switch_cost=1,
+            mlfq_variant_pack="portfolio",
+        )
+        self.assertEqual(
+            [entry["algorithm"] for entry in benchmark["algorithms"]],
+            ["srtf", "rr", "mlfq-interactive", "mlfq-balanced", "mlfq-throughput"],
+        )
+        self.assertEqual(benchmark["mlfq_variant_pack"], "portfolio")
+        self.assertTrue(any(entry["mlfq_variant_name"] == "throughput" for entry in benchmark["algorithms"]))
+
     def test_format_benchmark_markdown_mentions_scoreboard(self):
         benchmark = benchmark_algorithm_family(
             "portfolio-batch",
@@ -416,6 +463,31 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("## Scenario highlights", report)
         self.assertIn("Description | Source", report)
         self.assertIn("| Algorithm | Avg turnaround | Avg waiting | Avg response |", report)
+
+    def test_format_benchmark_markdown_mentions_mlfq_variant_pack(self):
+        benchmark = benchmark_algorithm_family(
+            "portfolio-batch",
+            algorithms=["rr", "mlfq"],
+            quantum=2,
+            context_switch_cost=1,
+            mlfq_variant_pack="portfolio",
+        )
+        report = format_benchmark_markdown(benchmark)
+        self.assertIn("mlfq variant pack: portfolio", report)
+        self.assertIn("MLFQ balanced", report)
+        self.assertIn("MLFQ throughput", report)
+
+    def test_format_benchmark_html_mentions_mlfq_tuning_roster(self):
+        benchmark = benchmark_algorithm_family(
+            "portfolio-batch",
+            algorithms=["rr", "mlfq"],
+            quantum=2,
+            context_switch_cost=1,
+            mlfq_variant_pack="portfolio",
+        )
+        report = format_benchmark_html(benchmark)
+        self.assertIn("MLFQ tuning roster", report)
+        self.assertIn("MLFQ interactive", report)
 
     def test_format_benchmark_heatmap_svg_mentions_goals(self):
         benchmark = benchmark_algorithm_family(
@@ -638,7 +710,90 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "benchmark")
         self.assertEqual(payload["family"], "portfolio-batch")
         self.assertEqual(len(payload["scenarios"]), 6)
-        self.assertEqual([entry["algorithm"] for entry in payload["algorithms"]], ["fcfs", "rr"])
+
+    def test_cli_benchmark_json_output_for_mlfq_variant_pack(self):
+        completed = subprocess.run(
+            [
+                "python3",
+                "scheduler.py",
+                "benchmark",
+                "--benchmark-family",
+                "portfolio-batch",
+                "--algorithms",
+                "rr",
+                "mlfq",
+                "--quantum",
+                "2",
+                "--context-switch-cost",
+                "1",
+                "--mlfq-variant-pack",
+                "portfolio",
+                "--json",
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mlfq_variant_pack"], "portfolio")
+        self.assertEqual(
+            [entry["algorithm"] for entry in payload["algorithms"]],
+            ["rr", "mlfq-interactive", "mlfq-balanced", "mlfq-throughput"],
+        )
+
+    def test_cli_compare_json_output_for_mlfq_variant_pack(self):
+        completed = subprocess.run(
+            [
+                "python3",
+                "scheduler.py",
+                "compare",
+                "--preset",
+                "interactive-bursts",
+                "--algorithms",
+                "rr",
+                "mlfq",
+                "--quantum",
+                "2",
+                "--context-switch-cost",
+                "1",
+                "--mlfq-variant-pack",
+                "portfolio",
+                "--json",
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mlfq_variant_pack"], "portfolio")
+        self.assertEqual(
+            [entry["algorithm"] for entry in payload["algorithms"]],
+            ["rr", "mlfq-interactive", "mlfq-balanced", "mlfq-throughput"],
+        )
+
+    def test_cli_run_rejects_mlfq_variant_pack_outside_compare_or_benchmark(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workload.json"
+            path.write_text(json.dumps([
+                {"pid": "P1", "arrival": 0, "burst": 2},
+            ]))
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "scheduler.py",
+                    "fcfs",
+                    str(path),
+                    "--mlfq-variant-pack",
+                    "portfolio",
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("only supported with compare or benchmark mode", completed.stderr)
 
     def test_cli_benchmark_writes_bundle_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
