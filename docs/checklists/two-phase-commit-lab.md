@@ -16,5 +16,6 @@
 - [x] add a compact static HTML dashboard for protocol comparison artifacts so the 2PC-vs-saga story is screenshot-friendly on GitHub Pages or in recruiter walkthroughs
 - [x] cross-link the scenario catalog to any committed comparison dashboards and peer-termination walkthroughs so recruiters can jump between related artifacts without manual file hunting
 - [x] add tag-filtered catalog generation plus a committed peer-assisted subset bundle so the growing scenario set can publish smaller recruiter-friendly packs without hand-curating file lists
+- [x] add saved named bundle presets so common recruiter walkthrough bundles can reuse the tag-filtered catalog flow with one preset flag
 - [x] run at least 3 review passes and fix issues found
 - [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice

@@ -31,6 +31,15 @@ CATALOG_HIGHLIGHT_TAGS = {
 }
 
 
+@dataclass(frozen=True)
+class CatalogBundlePreset:
+    name: str
+    description: str
+    include_tags: tuple[str, ...]
+    require_all_tags: bool = False
+    suggested_catalog_filename: str | None = None
+
+
 @dataclass
 class ParticipantPlan:
     name: str
@@ -106,6 +115,34 @@ class CatalogEntry:
     termination_markdown_path: str | None = None
     termination_timeline_svg_path: str | None = None
     termination_timeline_html_path: str | None = None
+
+
+CATALOG_BUNDLE_PRESETS: dict[str, CatalogBundlePreset] = {
+    "baseline-flows": CatalogBundlePreset(
+        name="baseline-flows",
+        description="happy-path and veto scenarios that establish the normal 2PC commit/abort baseline before crash drills.",
+        include_tags=("baseline",),
+        suggested_catalog_filename="baseline_flow_scenarios_catalog.md",
+    ),
+    "incident-review": CatalogBundlePreset(
+        name="incident-review",
+        description="blocking, coordinator-recovery, and reconnect-heavy incidents for an on-call style walkthrough.",
+        include_tags=("blocking", "recovery", "participant-reconnect"),
+        suggested_catalog_filename="incident_review_scenarios_catalog.md",
+    ),
+    "peer-assisted": CatalogBundlePreset(
+        name="peer-assisted",
+        description="only the blocked incidents that can be resolved with decisive peer evidence.",
+        include_tags=("peer-assisted-commit", "peer-assisted-abort"),
+        suggested_catalog_filename="peer_assisted_scenarios_catalog.md",
+    ),
+    "recovery-story": CatalogBundlePreset(
+        name="recovery-story",
+        description="durable-decision replay plus participant reconnect stories that show how doubt clears after a failure.",
+        include_tags=("recovery", "participant-reconnect"),
+        suggested_catalog_filename="recovery_story_scenarios_catalog.md",
+    ),
+}
 
 
 @dataclass
@@ -1532,6 +1569,7 @@ def render_catalog_markdown(
     incident_dashboard_path: str | None = None,
     include_tags: list[str] | None = None,
     require_all_tags: bool = False,
+    bundle_preset: CatalogBundlePreset | None = None,
 ) -> str:
     if not entries:
         raise ScenarioError("catalog requires at least one scenario")
@@ -1573,14 +1611,23 @@ def render_catalog_markdown(
     )
 
     filter_lines: list[str] = []
-    if include_tags:
+    if include_tags or bundle_preset:
         mode_label = "all" if require_all_tags else "any"
-        filter_lines = [
-            "## Active filters",
-            f"- scenario tags: `{mode_label}` of {_format_tag_list(include_tags)}",
-            "- this bundle is a recruiter-friendly subset of the provided scenario set rather than the full catalog",
-            "",
-        ]
+        filter_lines = ["## Active filters"]
+        if bundle_preset:
+            filter_lines.append(
+                f"- bundle preset: `{bundle_preset.name}` ({bundle_preset.description})"
+            )
+        if include_tags:
+            filter_lines.append(
+                f"- scenario tags: `{mode_label}` of {_format_tag_list(include_tags)}"
+            )
+        filter_lines.extend(
+            [
+                "- this bundle is a recruiter-friendly subset of the provided scenario set rather than the full catalog",
+                "",
+            ]
+        )
 
     comparison_lines = [
         "| Scenario | Tags | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |",
@@ -1677,7 +1724,7 @@ def render_catalog_markdown(
         snapshot_lines.append("")
 
     incident_dashboard_lines: list[str] = []
-    if incident_dashboard_path:
+    if incident_dashboard_path and blocked_count:
         incident_dashboard_lines = [
             "Need the blocked-case triage view first? Open the "
             f"[incident-response dashboard]({incident_dashboard_path}).",
@@ -2209,6 +2256,7 @@ def write_catalog(
     incident_dashboard_path: str | None = None,
     include_tags: list[str] | None = None,
     require_all_tags: bool = False,
+    bundle_preset: CatalogBundlePreset | None = None,
 ) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2218,6 +2266,7 @@ def write_catalog(
             incident_dashboard_path=incident_dashboard_path,
             include_tags=include_tags,
             require_all_tags=require_all_tags,
+            bundle_preset=bundle_preset,
         )
     )
 
@@ -2273,10 +2322,46 @@ def filter_scenario_paths_by_tags(
     return filtered_paths, normalized_tags
 
 
+def resolve_catalog_filters(
+    scenario_paths: list[Path],
+    *,
+    include_tags: list[str] | None = None,
+    require_all_tags: bool = False,
+    bundle_preset: str | None = None,
+) -> tuple[list[Path], list[str], bool, CatalogBundlePreset | None]:
+    preset = CATALOG_BUNDLE_PRESETS.get(bundle_preset) if bundle_preset else None
+    if bundle_preset and preset is None:
+        available = ", ".join(sorted(CATALOG_BUNDLE_PRESETS))
+        raise ScenarioError(
+            f"unknown bundle preset: {bundle_preset} (available: {available})"
+        )
+    if preset and include_tags:
+        raise ScenarioError("cannot combine --bundle-preset with --include-tag")
+    if preset and require_all_tags:
+        raise ScenarioError("cannot combine --bundle-preset with --require-all-tags")
+
+    active_include_tags = list(preset.include_tags) if preset else include_tags
+    active_require_all_tags = preset.require_all_tags if preset else require_all_tags
+    filtered_paths, normalized_tags = filter_scenario_paths_by_tags(
+        scenario_paths,
+        include_tags=active_include_tags,
+        require_all_tags=active_require_all_tags,
+    )
+    return filtered_paths, normalized_tags, active_require_all_tags, preset
+
+
 def _catalog_incident_dashboard_path(catalog_path: Path) -> Path:
     if catalog_path.name == "scenario_catalog.md":
         return catalog_path.parent / "incident_response_dashboard.html"
     return catalog_path.parent / f"{catalog_path.stem}_incident_response_dashboard.html"
+
+
+def _should_generate_catalog_comparison(result: SimulationResult) -> bool:
+    if result.outcome != "blocked":
+        return False
+    if not result.decision_durable:
+        return True
+    return result.failures["successful_decision_deliveries_before_crash"] > 0
 
 
 def _relative_artifact_path(path: Path, *, start: Path) -> str | None:
@@ -2298,11 +2383,23 @@ def build_catalog_entries(
         result = simulate_two_phase_commit(scenario)
         report_path: str | None = None
         report_file = artifact_dir / f"{scenario_path.stem}_report.md"
+        comparison_markdown_file = artifact_dir / f"{scenario_path.stem}_protocol_compare.md"
+        comparison_html_file = artifact_dir / f"{scenario_path.stem}_protocol_compare.html"
         termination_markdown_file = artifact_dir / f"{scenario_path.stem}_termination.md"
         termination_timeline_svg_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.svg"
         termination_timeline_html_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.html"
         if report_dir is not None:
             write_markdown_report(report_file, result)
+            if _should_generate_catalog_comparison(result):
+                comparison_result = build_protocol_comparison(scenario)
+                write_comparison_markdown(
+                    comparison_markdown_file,
+                    comparison_result,
+                )
+                write_comparison_html(
+                    comparison_html_file,
+                    comparison_result,
+                )
             if result.outcome == "blocked":
                 termination_result = build_peer_termination_resolution(scenario)
                 write_termination_resolution_markdown(
@@ -2436,6 +2533,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="optional scenario tag filter; repeat to keep scenarios matching any provided tag",
     )
     catalog_parser.add_argument(
+        "--bundle-preset",
+        choices=sorted(CATALOG_BUNDLE_PRESETS),
+        help=(
+            "saved scenario bundle preset; cannot be combined with --include-tag or "
+            "--require-all-tags"
+        ),
+    )
+    catalog_parser.add_argument(
         "--require-all-tags",
         action="store_true",
         help="when filtering by tags, require every --include-tag instead of the default any-tag match",
@@ -2520,10 +2625,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "catalog":
         scenario_paths = collect_scenario_paths(args.paths)
-        filtered_scenario_paths, normalized_include_tags = filter_scenario_paths_by_tags(
+        (
+            filtered_scenario_paths,
+            normalized_include_tags,
+            active_require_all_tags,
+            active_bundle_preset,
+        ) = resolve_catalog_filters(
             scenario_paths,
             include_tags=args.include_tag,
             require_all_tags=args.require_all_tags,
+            bundle_preset=args.bundle_preset,
         )
         entries = build_catalog_entries(
             filtered_scenario_paths,
@@ -2545,11 +2656,20 @@ def main(argv: list[str] | None = None) -> int:
             entries,
             incident_dashboard_path=incident_dashboard_relative_path,
             include_tags=normalized_include_tags,
-            require_all_tags=args.require_all_tags,
+            require_all_tags=active_require_all_tags,
+            bundle_preset=active_bundle_preset,
         )
         if args.report_dir:
             print(f"wrote {len(entries)} scenario reports to {args.report_dir}")
-        if normalized_include_tags:
+        if active_bundle_preset:
+            print(
+                "applied bundle preset: "
+                + active_bundle_preset.name
+                + " ("
+                + ", ".join(normalized_include_tags)
+                + ")"
+            )
+        elif normalized_include_tags:
             mode_label = "all" if args.require_all_tags else "any"
             print(
                 "applied tag filter ("

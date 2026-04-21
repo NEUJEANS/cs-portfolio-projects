@@ -21,6 +21,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - a compact incident-response HTML dashboard that groups blocked scenarios by recovery-required cases, peer-visible `COMMIT` evidence, and safe-`ABORT` evidence
 - multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, termination hints, thematic tags, and any committed comparison/termination companion artifacts in one place
 - optional tag-filtered catalog generation for smaller recruiter-friendly subsets such as peer-assisted incidents or recovery-only bundles, without hand-curating file lists
+- saved named bundle presets such as `incident-review`, `peer-assisted`, `recovery-story`, and `baseline-flows` so common walkthrough bundles can reuse the catalog filter flow with a single preset flag
 - clean CLI commands for validation, single-scenario simulation, protocol comparison, termination walkthroughs, and bundle generation
 
 ## Project structure
@@ -166,6 +167,17 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
 
 By default, repeated `--include-tag` flags keep scenarios matching **any** of the supplied tags. Add `--require-all-tags` when you want an intersection instead. Filtered catalogs write a stem-specific incident dashboard (for example `peer_assisted_scenarios_catalog_incident_response_dashboard.html`) so the main bundle is not overwritten.
 
+### Generate a saved named bundle preset
+```bash
+python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
+  projects/two-phase-commit-lab \
+  --bundle-preset incident-review \
+  --markdown-out docs/artifacts/two-phase-commit-lab/incident_review_scenarios_catalog.md \
+  --report-dir docs/artifacts/two-phase-commit-lab
+```
+
+Available presets currently include `incident-review`, `peer-assisted`, `recovery-story`, and `baseline-flows`. Presets cannot be combined with manual `--include-tag` filters because they already expand to a saved tag bundle.
+
 ## What the committed samples show
 - `order_success.json`
   - every participant writes a prepared record, the coordinator logs COMMIT, and the second phase finishes cleanly
@@ -185,6 +197,10 @@ By default, repeated `--include-tag` flags keep scenarios matching **any** of th
   - one landing page compares all committed scenarios, groups them by reusable tags like `blocking` or `participant-reconnect`, and deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, timeline visuals, and the blocked-case incident dashboard
 - `peer_assisted_scenarios_catalog.md`
   - a tag-filtered subset bundle for only the peer-assisted incidents, useful when you want a shorter recruiter walk-through focused on evidence-backed blocked-case recovery stories
+- `incident_review_scenarios_catalog.md`
+  - a saved preset bundle that keeps only the blocking, recovery, and reconnect incidents for an on-call style walkthrough without the baseline happy-path/veto scenarios
+- `recovery_story_scenarios_catalog.md`
+  - a saved preset bundle that focuses on coordinator replay plus participant reconnect recovery, useful when you want the shortest "how doubt clears safely" story
 - `incident_response_dashboard.html`
   - a compact on-call style triage view for only the blocked scenarios, grouped into recovery-required, peer-visible `COMMIT`, and safe-`ABORT` evidence buckets
 - `coordinator_crash_before_decision_protocol_compare.md` / `.html`
@@ -211,5 +227,4 @@ python3 -m unittest tests.test_two_phase_commit_lab -v
 
 ## Future ideas
 - add a side-by-side 2PC vs 3PC comparison mode to explain why non-blocking atomic commit is harder
-- add saved named bundle presets (for example `incident-review` or `recovery-story`) on top of the tag-filtered catalog flow
 - add PNG/social-preview export for the timeline artifacts so the visuals are easy to drop into README thumbnails or slide decks

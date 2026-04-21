@@ -33,6 +33,7 @@ build_protocol_comparison = MODULE.build_protocol_comparison
 collect_scenario_paths = MODULE.collect_scenario_paths
 filter_scenario_paths_by_tags = MODULE.filter_scenario_paths_by_tags
 load_scenario = MODULE.load_scenario
+resolve_catalog_filters = MODULE.resolve_catalog_filters
 render_catalog_markdown = MODULE.render_catalog_markdown
 render_comparison_html = MODULE.render_comparison_html
 render_comparison_markdown = MODULE.render_comparison_markdown
@@ -364,6 +365,39 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         with self.assertRaises(ScenarioError):
             filter_scenario_paths_by_tags(paths, include_tags=["not-a-real-tag"])
 
+    def test_resolve_catalog_filters_supports_named_bundle_presets(self) -> None:
+        paths = collect_scenario_paths([SCENARIO_DIR])
+        filtered, normalized_tags, require_all_tags, preset = resolve_catalog_filters(
+            paths,
+            bundle_preset="incident-review",
+        )
+        assert preset is not None
+        self.assertEqual(preset.name, "incident-review")
+        self.assertFalse(require_all_tags)
+        self.assertEqual(
+            normalized_tags,
+            ["blocking", "recovery", "participant-reconnect"],
+        )
+        self.assertEqual(
+            [path.name for path in filtered],
+            [
+                "coordinator_crash_before_decision.json",
+                "coordinator_crash_durable_abort.json",
+                "coordinator_crash_partial_commit_delivery.json",
+                "coordinator_recovery_commit.json",
+                "participant_reconnect_commit.json",
+            ],
+        )
+
+    def test_resolve_catalog_filters_rejects_mixing_preset_and_manual_tags(self) -> None:
+        paths = collect_scenario_paths([SCENARIO_DIR])
+        with self.assertRaises(ScenarioError):
+            resolve_catalog_filters(
+                paths,
+                bundle_preset="incident-review",
+                include_tags=["blocking"],
+            )
+
     def test_render_catalog_markdown_summarizes_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             catalog_path = Path(temp_dir) / "scenario_catalog.md"
@@ -379,7 +413,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("- participant reconnect recoveries: `1`", catalog)
             self.assertIn("- scenario tags: `14` unique", catalog)
             self.assertIn("- blocked scenarios with actionable peer hints: `2`", catalog)
-            self.assertIn("- scenarios with protocol-comparison dashboards: `0`", catalog)
+            self.assertIn("- scenarios with protocol-comparison dashboards: `2`", catalog)
             self.assertIn("- scenarios with peer-termination walkthroughs: `3`", catalog)
             self.assertIn("- scenarios with peer-termination timeline visuals: `3`", catalog)
             self.assertIn("## Theme groups", catalog)
@@ -414,6 +448,55 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("peer_assisted_scenarios_catalog_incident_response_dashboard.html", catalog)
             self.assertIn("- scenarios: `2`", catalog)
             self.assertIn("Peer-visible COMMIT evidence", render_incident_response_html(entries))
+
+    def test_render_catalog_markdown_mentions_named_bundle_preset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "incident_review_scenarios_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            filtered_paths, normalized_tags, require_all_tags, preset = resolve_catalog_filters(
+                collect_scenario_paths([SCENARIO_DIR]),
+                bundle_preset="incident-review",
+            )
+            entries = build_catalog_entries(
+                filtered_paths,
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            catalog = render_catalog_markdown(
+                entries,
+                incident_dashboard_path="incident_review_scenarios_catalog_incident_response_dashboard.html",
+                include_tags=normalized_tags,
+                require_all_tags=require_all_tags,
+                bundle_preset=preset,
+            )
+            self.assertIn("- bundle preset: `incident-review`", catalog)
+            self.assertIn("blocking, coordinator-recovery, and reconnect-heavy incidents", catalog)
+            self.assertIn("- scenario tags: `any` of `blocking`, `recovery`, `participant-reconnect`", catalog)
+            self.assertIn("incident_review_scenarios_catalog_incident_response_dashboard.html", catalog)
+            self.assertNotIn("Order service happy-path commit", catalog)
+
+    def test_render_catalog_markdown_skips_incident_dashboard_prompt_without_blocked_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "recovery_story_scenarios_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            filtered_paths, normalized_tags, require_all_tags, preset = resolve_catalog_filters(
+                collect_scenario_paths([SCENARIO_DIR]),
+                bundle_preset="recovery-story",
+            )
+            entries = build_catalog_entries(
+                filtered_paths,
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            catalog = render_catalog_markdown(
+                entries,
+                incident_dashboard_path="recovery_story_scenarios_catalog_incident_response_dashboard.html",
+                include_tags=normalized_tags,
+                require_all_tags=require_all_tags,
+                bundle_preset=preset,
+            )
+            self.assertNotIn("Need the blocked-case triage view first?", catalog)
+            self.assertIn("- outcomes: `2 commit`, `0 abort`, `0 blocked`", catalog)
 
     def test_catalog_detects_related_compare_and_termination_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -495,6 +578,10 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertTrue((report_dir / "coordinator_crash_durable_abort_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_report.md").exists())
             self.assertTrue((report_dir / "participant_reconnect_commit_report.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_before_decision_protocol_compare.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_before_decision_protocol_compare.html").exists())
+            self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_protocol_compare.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_protocol_compare.html").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_termination.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_termination_timeline.svg").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_termination_timeline.html").exists())
@@ -554,6 +641,44 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertNotIn("Order service happy-path commit", catalog)
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_durable_abort_report.md").exists())
+
+    def test_catalog_command_supports_named_bundle_presets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_dir = Path(temp_dir) / "reports"
+            catalog_path = Path(temp_dir) / "incident_review_scenarios_catalog.md"
+            dashboard_path = Path(temp_dir) / "incident_review_scenarios_catalog_incident_response_dashboard.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "catalog",
+                    str(SCENARIO_DIR),
+                    "--bundle-preset",
+                    "incident-review",
+                    "--markdown-out",
+                    str(catalog_path),
+                    "--report-dir",
+                    str(report_dir),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn(
+                "applied bundle preset: incident-review (blocking, recovery, participant-reconnect)",
+                completed.stdout,
+            )
+            self.assertIn("wrote 5 scenario reports", completed.stdout)
+            self.assertTrue(catalog_path.exists())
+            self.assertTrue(dashboard_path.exists())
+            catalog = catalog_path.read_text()
+            self.assertIn("- bundle preset: `incident-review`", catalog)
+            self.assertIn("Coordinator crash before durable decision", catalog)
+            self.assertIn("Participant reconnect resolves a missed COMMIT", catalog)
+            self.assertNotIn("Order service happy-path commit", catalog)
+            self.assertTrue((report_dir / "participant_reconnect_commit_report.md").exists())
+            self.assertFalse((report_dir / "order_success_report.md").exists())
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
