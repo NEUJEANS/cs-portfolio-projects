@@ -9,5 +9,5 @@
 - [x] review the slice at least 3 times and fix issues found
 - [x] run targeted tests, smoke checks, determinism checks, and `git diff --check`
 - [x] run secret scan before push
-- [ ] commit, push, and append the wrap-up
+- [x] commit, push, and append the wrap-up
 - [ ] next: add side-by-side lookup percentile callouts so the report compares hit and miss tails without reading the full histograms
