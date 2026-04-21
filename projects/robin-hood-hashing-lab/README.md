@@ -1,6 +1,6 @@
 # robin-hood-hashing-lab
 
-A portfolio-friendly Python project that implements a Robin Hood hash table with backward-shift deletion, deterministic snapshots, a benchmark CLI, and fill-only plus delete-heavy benchmark artifacts that make the post-removal probe-distance story easy to explain in interviews.
+A portfolio-friendly Python project that implements a Robin Hood hash table with backward-shift deletion, deterministic snapshots, a benchmark CLI, and fill-only plus delete-heavy benchmark artifacts that now surface both resident probe-distance spread and unsuccessful-lookup cost in interviews.
 
 ## Why it is interesting
 - demonstrates a classic open-addressing strategy that reduces probe-length variance by letting "poorer" keys steal slots from "richer" ones
@@ -15,7 +15,8 @@ A portfolio-friendly Python project that implements a Robin Hood hash table with
 - CLI commands for build, stats, lookup, remove, export, and benchmark
 - benchmark mode for comparing Robin Hood hashing against a linear-probing baseline across load factors and workload shapes
 - optional fill-only and delete-heavy workloads so post-removal clustering/backward-shift behavior is visible in the exported metrics
-- optional Markdown and self-contained HTML benchmark artifacts with probe-distance histograms for portfolio-ready writeups
+- benchmark output now includes unsuccessful-lookup probe metrics plus failed-search histograms, so misses are part of the same interview story as successful lookups and resident probe distances
+- optional Markdown and self-contained HTML benchmark artifacts with probe-distance and unsuccessful-lookup histograms for portfolio-ready writeups
 - committed sample artifacts under `docs/artifacts/robin-hood-hashing-lab/`
 - regression tests covering swaps, deletions, snapshots, CLI flows, and comparison/report generation
 
@@ -64,7 +65,7 @@ python3 robin_hood_hashing_lab.py export \
   --output artifacts/robin-hood-table.csv
 ```
 
-Benchmark Robin Hood hashing against a linear-probing baseline and emit screenshot-friendly artifacts, including both fill-only and delete-heavy workload passes plus probe-distance histograms in the Markdown/HTML reports:
+Benchmark Robin Hood hashing against a linear-probing baseline and emit screenshot-friendly artifacts, including both fill-only and delete-heavy workload passes plus resident probe-distance and unsuccessful-lookup histograms in the Markdown/HTML reports:
 
 ```bash
 python3 robin_hood_hashing_lab.py benchmark \
@@ -97,6 +98,6 @@ python3 -m unittest tests.test_robin_hood_hashing_lab -v
 ```
 
 ## Future improvements
-- add unsuccessful-lookup histograms so search misses become part of the interview story too
 - support string and integer key generators for more workload shapes
 - add a compact PNG export path for the benchmark dashboard so portfolio screenshots can be regenerated automatically
+- add side-by-side lookup percentile callouts so the report can compare hit and miss tails without reading the full histograms

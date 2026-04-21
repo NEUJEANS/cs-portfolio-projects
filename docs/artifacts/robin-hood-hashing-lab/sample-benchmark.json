@@ -12,6 +12,7 @@
     "average_insert_probes": 1.25,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.25,
+    "average_unsuccessful_lookup_probes": 1.625,
     "average_probe_distance": 0.25,
     "probe_distance_stddev": 0.433,
     "max_probe_distance": 1,
@@ -20,6 +21,11 @@
     "probe_distance_histogram": {
       "0": 6,
       "1": 2
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 1,
+      "3": 2
     }
   },
   {
@@ -35,6 +41,7 @@
     "average_insert_probes": 1.25,
     "average_delete_probes": 1.5,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.1667,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -42,6 +49,10 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 6
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 1
     }
   },
   {
@@ -57,6 +68,7 @@
     "average_insert_probes": 1.25,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.25,
+    "average_unsuccessful_lookup_probes": 1.375,
     "average_probe_distance": 0.25,
     "probe_distance_stddev": 0.433,
     "max_probe_distance": 1,
@@ -65,6 +77,11 @@
     "probe_distance_histogram": {
       "0": 6,
       "1": 2
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6,
+      "2": 1,
+      "3": 1
     }
   },
   {
@@ -80,6 +97,7 @@
     "average_insert_probes": 1.25,
     "average_delete_probes": 1.5,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.6667,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -87,6 +105,11 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 6
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 4,
+      "2": 1,
+      "4": 1
     }
   },
   {
@@ -102,6 +125,7 @@
     "average_insert_probes": 1.0,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.375,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -109,6 +133,10 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 8
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 3
     }
   },
   {
@@ -124,6 +152,7 @@
     "average_insert_probes": 1.0,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.0,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -131,6 +160,9 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 6
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6
     }
   },
   {
@@ -146,6 +178,7 @@
     "average_insert_probes": 1.0,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.0,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -153,6 +186,9 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 8
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 8
     }
   },
   {
@@ -168,6 +204,7 @@
     "average_insert_probes": 1.0,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.3333,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -175,6 +212,10 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 6
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "3": 1
     }
   },
   {
@@ -190,6 +231,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.125,
+    "average_unsuccessful_lookup_probes": 1.125,
     "average_probe_distance": 0.125,
     "probe_distance_stddev": 0.3307,
     "max_probe_distance": 1,
@@ -198,6 +240,10 @@
     "probe_distance_histogram": {
       "0": 7,
       "1": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "2": 1
     }
   },
   {
@@ -213,6 +259,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.1667,
+    "average_unsuccessful_lookup_probes": 1.1667,
     "average_probe_distance": 0.1667,
     "probe_distance_stddev": 0.3727,
     "max_probe_distance": 1,
@@ -221,6 +268,10 @@
     "probe_distance_histogram": {
       "0": 5,
       "1": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 1
     }
   },
   {
@@ -236,6 +287,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.125,
+    "average_unsuccessful_lookup_probes": 1.25,
     "average_probe_distance": 0.125,
     "probe_distance_stddev": 0.3307,
     "max_probe_distance": 1,
@@ -244,6 +296,10 @@
     "probe_distance_histogram": {
       "0": 7,
       "1": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6,
+      "2": 2
     }
   },
   {
@@ -259,6 +315,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.1667,
+    "average_unsuccessful_lookup_probes": 1.0,
     "average_probe_distance": 0.1667,
     "probe_distance_stddev": 0.3727,
     "max_probe_distance": 1,
@@ -267,6 +324,9 @@
     "probe_distance_histogram": {
       "0": 5,
       "1": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6
     }
   },
   {
@@ -282,6 +342,7 @@
     "average_insert_probes": 1.3125,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.3125,
+    "average_unsuccessful_lookup_probes": 1.9375,
     "average_probe_distance": 0.3125,
     "probe_distance_stddev": 0.4635,
     "max_probe_distance": 1,
@@ -290,6 +351,11 @@
     "probe_distance_histogram": {
       "0": 11,
       "1": 5
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6,
+      "2": 5,
+      "3": 5
     }
   },
   {
@@ -305,6 +371,7 @@
     "average_insert_probes": 1.3125,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.2727,
+    "average_unsuccessful_lookup_probes": 1.4545,
     "average_probe_distance": 0.2727,
     "probe_distance_stddev": 0.4454,
     "max_probe_distance": 1,
@@ -313,6 +380,11 @@
     "probe_distance_histogram": {
       "0": 8,
       "1": 3
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 8,
+      "2": 1,
+      "3": 2
     }
   },
   {
@@ -328,6 +400,7 @@
     "average_insert_probes": 1.3125,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.3125,
+    "average_unsuccessful_lookup_probes": 2.375,
     "average_probe_distance": 0.3125,
     "probe_distance_stddev": 0.6818,
     "max_probe_distance": 2,
@@ -337,6 +410,13 @@
       "0": 13,
       "1": 1,
       "2": 2
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 5,
+      "3": 2,
+      "4": 3,
+      "5": 1
     }
   },
   {
@@ -352,6 +432,7 @@
     "average_insert_probes": 1.3125,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.2727,
+    "average_unsuccessful_lookup_probes": 1.9091,
     "average_probe_distance": 0.2727,
     "probe_distance_stddev": 0.6166,
     "max_probe_distance": 2,
@@ -361,6 +442,11 @@
       "0": 9,
       "1": 1,
       "2": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 3,
+      "2": 7,
+      "4": 1
     }
   },
   {
@@ -376,6 +462,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.125,
+    "average_unsuccessful_lookup_probes": 1.625,
     "average_probe_distance": 0.125,
     "probe_distance_stddev": 0.3307,
     "max_probe_distance": 1,
@@ -384,6 +471,11 @@
     "probe_distance_histogram": {
       "0": 14,
       "1": 2
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "2": 8,
+      "3": 1
     }
   },
   {
@@ -399,6 +491,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 1.2,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.3636,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -406,6 +499,10 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 11
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "2": 4
     }
   },
   {
@@ -421,6 +518,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.125,
+    "average_unsuccessful_lookup_probes": 2.0,
     "average_probe_distance": 0.125,
     "probe_distance_stddev": 0.3307,
     "max_probe_distance": 1,
@@ -429,6 +527,13 @@
     "probe_distance_histogram": {
       "0": 14,
       "1": 2
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 8,
+      "2": 4,
+      "3": 2,
+      "4": 1,
+      "6": 1
     }
   },
   {
@@ -444,6 +549,7 @@
     "average_insert_probes": 1.125,
     "average_delete_probes": 1.2,
     "average_successful_lookup_probes": 1.0,
+    "average_unsuccessful_lookup_probes": 1.4545,
     "average_probe_distance": 0.0,
     "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
@@ -451,6 +557,10 @@
     "swap_count": 0,
     "probe_distance_histogram": {
       "0": 11
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6,
+      "2": 5
     }
   },
   {
@@ -466,6 +576,7 @@
     "average_insert_probes": 1.1875,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.1875,
+    "average_unsuccessful_lookup_probes": 1.75,
     "average_probe_distance": 0.1875,
     "probe_distance_stddev": 0.3903,
     "max_probe_distance": 1,
@@ -474,6 +585,11 @@
     "probe_distance_histogram": {
       "0": 13,
       "1": 3
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "2": 6,
+      "3": 3
     }
   },
   {
@@ -489,6 +605,7 @@
     "average_insert_probes": 1.1875,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.2727,
+    "average_unsuccessful_lookup_probes": 1.3636,
     "average_probe_distance": 0.2727,
     "probe_distance_stddev": 0.4454,
     "max_probe_distance": 1,
@@ -497,6 +614,11 @@
     "probe_distance_histogram": {
       "0": 8,
       "1": 3
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 8,
+      "2": 2,
+      "3": 1
     }
   },
   {
@@ -512,6 +634,7 @@
     "average_insert_probes": 1.1875,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.1875,
+    "average_unsuccessful_lookup_probes": 2.3125,
     "average_probe_distance": 0.1875,
     "probe_distance_stddev": 0.3903,
     "max_probe_distance": 1,
@@ -520,6 +643,13 @@
     "probe_distance_histogram": {
       "0": 13,
       "1": 3
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "2": 3,
+      "3": 2,
+      "4": 3,
+      "6": 1
     }
   },
   {
@@ -535,6 +665,7 @@
     "average_insert_probes": 1.1875,
     "average_delete_probes": 1.0,
     "average_successful_lookup_probes": 1.2727,
+    "average_unsuccessful_lookup_probes": 1.2727,
     "average_probe_distance": 0.2727,
     "probe_distance_stddev": 0.4454,
     "max_probe_distance": 1,
@@ -543,6 +674,11 @@
     "probe_distance_histogram": {
       "0": 8,
       "1": 3
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 9,
+      "2": 1,
+      "3": 1
     }
   },
   {
@@ -558,6 +694,7 @@
     "average_insert_probes": 1.7391,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.7391,
+    "average_unsuccessful_lookup_probes": 2.4348,
     "average_probe_distance": 0.7391,
     "probe_distance_stddev": 0.7922,
     "max_probe_distance": 2,
@@ -567,6 +704,12 @@
       "0": 11,
       "1": 7,
       "2": 5
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 7,
+      "3": 7,
+      "4": 4
     }
   },
   {
@@ -582,6 +725,7 @@
     "average_insert_probes": 1.7391,
     "average_delete_probes": 1.4286,
     "average_successful_lookup_probes": 1.0625,
+    "average_unsuccessful_lookup_probes": 1.5625,
     "average_probe_distance": 0.0625,
     "probe_distance_stddev": 0.2421,
     "max_probe_distance": 1,
@@ -590,6 +734,10 @@
     "probe_distance_histogram": {
       "0": 15,
       "1": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "2": 9
     }
   },
   {
@@ -605,6 +753,7 @@
     "average_insert_probes": 1.7391,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.7391,
+    "average_unsuccessful_lookup_probes": 5.9565,
     "average_probe_distance": 0.7391,
     "probe_distance_stddev": 1.6995,
     "max_probe_distance": 7,
@@ -617,6 +766,18 @@
       "3": 1,
       "4": 1,
       "7": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 7,
+      "3": 5,
+      "5": 2,
+      "6": 1,
+      "8": 1,
+      "10": 1,
+      "11": 1,
+      "12": 1,
+      "14": 2,
+      "15": 2
     }
   },
   {
@@ -632,6 +793,7 @@
     "average_insert_probes": 1.7391,
     "average_delete_probes": 1.4286,
     "average_successful_lookup_probes": 1.0625,
+    "average_unsuccessful_lookup_probes": 2.0625,
     "average_probe_distance": 0.0625,
     "probe_distance_stddev": 0.2421,
     "max_probe_distance": 1,
@@ -640,6 +802,13 @@
     "probe_distance_histogram": {
       "0": 15,
       "1": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 9,
+      "2": 1,
+      "3": 3,
+      "4": 2,
+      "5": 1
     }
   },
   {
@@ -655,6 +824,7 @@
     "average_insert_probes": 2.3478,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 2.3478,
+    "average_unsuccessful_lookup_probes": 2.6087,
     "average_probe_distance": 1.3478,
     "probe_distance_stddev": 1.4021,
     "max_probe_distance": 5,
@@ -667,6 +837,14 @@
       "3": 2,
       "4": 1,
       "5": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 6,
+      "2": 6,
+      "3": 5,
+      "4": 4,
+      "5": 1,
+      "6": 1
     }
   },
   {
@@ -682,6 +860,7 @@
     "average_insert_probes": 2.3478,
     "average_delete_probes": 1.8571,
     "average_successful_lookup_probes": 1.9375,
+    "average_unsuccessful_lookup_probes": 1.6875,
     "average_probe_distance": 0.9375,
     "probe_distance_stddev": 1.1439,
     "max_probe_distance": 4,
@@ -693,6 +872,12 @@
       "2": 1,
       "3": 1,
       "4": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 9,
+      "2": 5,
+      "3": 1,
+      "5": 1
     }
   },
   {
@@ -708,6 +893,7 @@
     "average_insert_probes": 2.3478,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 2.3478,
+    "average_unsuccessful_lookup_probes": 3.4783,
     "average_probe_distance": 1.3478,
     "probe_distance_stddev": 1.7348,
     "max_probe_distance": 6,
@@ -721,6 +907,15 @@
       "4": 1,
       "5": 1,
       "6": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 10,
+      "2": 1,
+      "3": 3,
+      "5": 3,
+      "6": 1,
+      "7": 2,
+      "8": 3
     }
   },
   {
@@ -736,6 +931,7 @@
     "average_insert_probes": 2.3478,
     "average_delete_probes": 2.0,
     "average_successful_lookup_probes": 1.9375,
+    "average_unsuccessful_lookup_probes": 2.25,
     "average_probe_distance": 0.9375,
     "probe_distance_stddev": 1.2975,
     "max_probe_distance": 4,
@@ -747,6 +943,13 @@
       "2": 1,
       "3": 2,
       "4": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 10,
+      "3": 2,
+      "4": 1,
+      "5": 2,
+      "6": 1
     }
   },
   {
@@ -762,6 +965,7 @@
     "average_insert_probes": 1.6087,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.6087,
+    "average_unsuccessful_lookup_probes": 2.1304,
     "average_probe_distance": 0.6087,
     "probe_distance_stddev": 0.6419,
     "max_probe_distance": 2,
@@ -771,6 +975,12 @@
       "0": 11,
       "1": 10,
       "2": 2
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 9,
+      "2": 4,
+      "3": 8,
+      "4": 2
     }
   },
   {
@@ -786,6 +996,7 @@
     "average_insert_probes": 1.6087,
     "average_delete_probes": 1.5714,
     "average_successful_lookup_probes": 1.3125,
+    "average_unsuccessful_lookup_probes": 1.5,
     "average_probe_distance": 0.3125,
     "probe_distance_stddev": 0.4635,
     "max_probe_distance": 1,
@@ -794,6 +1005,11 @@
     "probe_distance_histogram": {
       "0": 11,
       "1": 5
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 10,
+      "2": 4,
+      "3": 2
     }
   },
   {
@@ -809,6 +1025,7 @@
     "average_insert_probes": 1.6087,
     "average_delete_probes": 0.0,
     "average_successful_lookup_probes": 1.6087,
+    "average_unsuccessful_lookup_probes": 2.6522,
     "average_probe_distance": 0.6087,
     "probe_distance_stddev": 1.2065,
     "max_probe_distance": 5,
@@ -820,6 +1037,14 @@
       "2": 1,
       "3": 1,
       "5": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 9,
+      "2": 4,
+      "3": 5,
+      "5": 2,
+      "6": 2,
+      "7": 1
     }
   },
   {
@@ -835,6 +1060,7 @@
     "average_insert_probes": 1.6087,
     "average_delete_probes": 1.4286,
     "average_successful_lookup_probes": 1.3125,
+    "average_unsuccessful_lookup_probes": 2.1875,
     "average_probe_distance": 0.3125,
     "probe_distance_stddev": 0.768,
     "max_probe_distance": 3,
@@ -844,6 +1070,13 @@
       "0": 13,
       "1": 2,
       "3": 1
+    },
+    "unsuccessful_lookup_probe_histogram": {
+      "1": 5,
+      "2": 6,
+      "3": 3,
+      "4": 1,
+      "5": 1
     }
   }
 ]

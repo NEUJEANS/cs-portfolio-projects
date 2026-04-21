@@ -54,7 +54,7 @@
   <main>
     <section class="hero">
       <h1>Robin Hood hashing benchmark comparison with delete-heavy workloads</h1>
-      <p>Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with probe-distance histograms that make dispersion visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final lookup + histogram pass, so post-removal clustering is visible too.</p>
+      <p>Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with resident probe-distance plus unsuccessful-lookup histograms that make both dispersion and miss cost visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final hit/miss lookup + histogram pass, so post-removal clustering is visible too.</p>
     </section>
     <section class="grid summary-grid">
       <article class="summary-card">
@@ -83,15 +83,17 @@
     <section class="panel">
   <h2>Robin Hood vs linear probing</h2>
   <table>
-    <caption>Per-workload winners and deltas against the linear-probing baseline.</caption>
+    <caption>Per-workload winners and deltas against the linear-probing baseline for both successful and unsuccessful lookups.</caption>
     <thead>
       <tr>
         <th scope="col">Workload</th>
         <th scope="col">Requested load factor</th>
         <th scope="col">Remaining load factor</th>
         <th scope="col">Remaining entries</th>
-        <th scope="col">Lookup winner</th>
-        <th scope="col">Lookup delta vs linear</th>
+        <th scope="col">Successful lookup winner</th>
+        <th scope="col">Success delta vs linear</th>
+        <th scope="col">Unsuccessful lookup winner</th>
+        <th scope="col">Miss delta vs linear</th>
         <th scope="col">Lower probe stddev</th>
         <th scope="col">Stddev delta vs linear</th>
         <th scope="col">Lower delete probes</th>
@@ -106,6 +108,8 @@
   <td>8</td>
   <td>Tie</td>
   <td>0</td>
+  <td>Linear probing</td>
+  <td>-0.1667</td>
   <td>Tie</td>
   <td>0</td>
   <td>—</td>
@@ -117,6 +121,8 @@
   <td>16</td>
   <td>Tie</td>
   <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>0.4584</td>
   <td>Robin Hood hashing</td>
   <td>0.0922</td>
   <td>—</td>
@@ -129,6 +135,8 @@
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
+  <td>1.6377</td>
+  <td>Robin Hood hashing</td>
   <td>0.5469</td>
   <td>—</td>
   <td>—</td>
@@ -139,6 +147,8 @@
   <td>6</td>
   <td>Tie</td>
   <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>0.2222</td>
   <td>Tie</td>
   <td>0</td>
   <td>Tie</td>
@@ -151,6 +161,8 @@
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
+  <td>0.1516</td>
+  <td>Robin Hood hashing</td>
   <td>0.0719</td>
   <td>Tie</td>
   <td>0</td>
@@ -161,6 +173,8 @@
   <td>16</td>
   <td>Tie</td>
   <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>0.5834</td>
   <td>Robin Hood hashing</td>
   <td>0.1413</td>
   <td>Tie</td>
@@ -181,6 +195,7 @@
             <th scope="col">Strategy</th>
             <th scope="col">Deleted entries</th>
             <th scope="col">Avg successful lookup probes</th>
+            <th scope="col">Avg unsuccessful lookup probes</th>
             <th scope="col">Probe-distance stddev</th>
             <th scope="col">Max cluster length</th>
             <th scope="col">Avg insert probes</th>
@@ -199,6 +214,10 @@
   <td>
     <strong>1.125</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:59.3%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>1.375</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:34.1%;background:#0f766e;"></span></div>
   </td>
   <td>
     <strong>0.3307</strong>
@@ -223,6 +242,10 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:59.3%;background:#7c3aed;"></span></div>
   </td>
   <td>
+    <strong>1.2083</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:30.0%;background:#0f766e;"></span></div>
+  </td>
+  <td>
     <strong>0.3307</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:20.7%;background:#0891b2;"></span></div>
   </td>
@@ -243,6 +266,10 @@
   <td>
     <strong>1.2083</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:63.6%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>1.7708</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:44.0%;background:#0f766e;"></span></div>
   </td>
   <td>
     <strong>0.4061</strong>
@@ -267,6 +294,10 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:63.6%;background:#7c3aed;"></span></div>
   </td>
   <td>
+    <strong>2.2292</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:55.3%;background:#0f766e;"></span></div>
+  </td>
+  <td>
     <strong>0.4983</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:31.2%;background:#0891b2;"></span></div>
   </td>
@@ -287,6 +318,10 @@
   <td>
     <strong>1.8986</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>2.3913</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:59.4%;background:#0f766e;"></span></div>
   </td>
   <td>
     <strong>1.0515</strong>
@@ -311,6 +346,10 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
   </td>
   <td>
+    <strong>4.029</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+  </td>
+  <td>
     <strong>1.5984</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0891b2;"></span></div>
   </td>
@@ -331,6 +370,10 @@
   <td>
     <strong>1.0556</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:55.6%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>1.1111</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:27.6%;background:#0f766e;"></span></div>
   </td>
   <td>
     <strong>0.2291</strong>
@@ -355,6 +398,10 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:55.6%;background:#7c3aed;"></span></div>
   </td>
   <td>
+    <strong>1.3333</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:33.1%;background:#0f766e;"></span></div>
+  </td>
+  <td>
     <strong>0.2291</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#0891b2;"></span></div>
   </td>
@@ -375,6 +422,10 @@
   <td>
     <strong>1.1818</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:62.2%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>1.3939</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:34.6%;background:#0f766e;"></span></div>
   </td>
   <td>
     <strong>0.3857</strong>
@@ -399,6 +450,10 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:62.2%;background:#7c3aed;"></span></div>
   </td>
   <td>
+    <strong>1.5455</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:38.4%;background:#0f766e;"></span></div>
+  </td>
+  <td>
     <strong>0.4576</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#0891b2;"></span></div>
   </td>
@@ -421,6 +476,10 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:75.7%;background:#7c3aed;"></span></div>
   </td>
   <td>
+    <strong>1.5833</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:39.3%;background:#0f766e;"></span></div>
+  </td>
+  <td>
     <strong>0.8141</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:50.9%;background:#0891b2;"></span></div>
   </td>
@@ -441,6 +500,10 @@
   <td>
     <strong>1.4375</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:75.7%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>2.1667</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:53.8%;background:#0f766e;"></span></div>
   </td>
   <td>
     <strong>0.9554</strong>
@@ -807,6 +870,497 @@
 </section>
     </section>
     <section>
+      <h2>Unsuccessful lookup probe histograms</h2>
+      <p>Aggregated miss histograms keep the report screenshot-friendly while showing how far each strategy must walk when a key is absent after fill-only and delete-heavy runs.</p>
+      <section class="panel histogram-panel">
+  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.25</h2>
+  <p>8 deterministic missing-key lookup(s) per trial were issued after the workload; 8 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>17</strong>
+  <span class="histogram-meta">70.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:85.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>20</strong>
+  <span class="histogram-meta">83.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>5</strong>
+  <span class="histogram-meta">20.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:25.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">12.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">8.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">4.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.0%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.5</h2>
+  <p>16 deterministic missing-key lookup(s) per trial were issued after the workload; 16 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>20</strong>
+  <span class="histogram-meta">41.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>20</strong>
+  <span class="histogram-meta">41.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>19</strong>
+  <span class="histogram-meta">39.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:95.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>12</strong>
+  <span class="histogram-meta">25.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:60.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>9</strong>
+  <span class="histogram-meta">18.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:45.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">12.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:30.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">14.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:35.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">4.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.75</h2>
+  <p>23 deterministic missing-key lookup(s) per trial were issued after the workload; 23 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>20</strong>
+  <span class="histogram-meta">29.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:76.9%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>26</strong>
+  <span class="histogram-meta">37.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>17</strong>
+  <span class="histogram-meta">24.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:65.4%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>5</strong>
+  <span class="histogram-meta">7.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:19.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>20</strong>
+  <span class="histogram-meta">29.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:76.9%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>13</strong>
+  <span class="histogram-meta">18.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:50.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>10</strong>
+  <span class="histogram-meta">14.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:38.5%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">10.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:26.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">5.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">4.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:11.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">5.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">12</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">14</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">2.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">15</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">2.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.7%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.25</h2>
+  <p>6 deterministic missing-key lookup(s) per trial were issued after the workload; 6 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>16</strong>
+  <span class="histogram-meta">88.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>15</strong>
+  <span class="histogram-meta">83.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:93.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">11.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:12.5%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">5.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">5.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">5.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.3%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.5</h2>
+  <p>11 deterministic missing-key lookup(s) per trial were issued after the workload; 11 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>23</strong>
+  <span class="histogram-meta">69.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>18</strong>
+  <span class="histogram-meta">54.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:78.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>7</strong>
+  <span class="histogram-meta">21.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:30.4%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>13</strong>
+  <span class="histogram-meta">39.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:56.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>3</strong>
+  <span class="histogram-meta">9.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:13.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">3.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">3.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.3%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.75</h2>
+  <p>16 deterministic missing-key lookup(s) per trial were issued after the workload; 16 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>26</strong>
+  <span class="histogram-meta">54.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>24</strong>
+  <span class="histogram-meta">50.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:92.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>18</strong>
+  <span class="histogram-meta">37.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:69.2%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">14.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:26.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>3</strong>
+  <span class="histogram-meta">6.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:11.5%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>8</strong>
+  <span class="histogram-meta">16.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:30.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">8.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">8.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section>
+    </section>
+    <section>
       <h2>Per-slice detail cards</h2>
       <div class="grid detail-grid">
         <article class="detail-card">
@@ -814,8 +1368,10 @@
   <p>8 starting entries across 3 deterministic trial(s); 8 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.125</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.375</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.125</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.6333</strong></li>
     <li>Probe-distance stddev: <strong>0.3307</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>5</strong></li>
@@ -826,8 +1382,10 @@
   <p>8 starting entries across 3 deterministic trial(s); 8 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.125</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.2083</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.125</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.4983</strong></li>
     <li>Probe-distance stddev: <strong>0.3307</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>5</strong></li>
@@ -838,8 +1396,10 @@
   <p>16 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.2083</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.7708</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.2083</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.7427</strong></li>
     <li>Probe-distance stddev: <strong>0.4061</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>7</strong></li>
@@ -850,8 +1410,10 @@
   <p>16 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.2083</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>2.2292</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.2083</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>1.388</strong></li>
     <li>Probe-distance stddev: <strong>0.4983</strong></li>
     <li>Max probe distance: <strong>2</strong></li>
     <li>Max cluster length: <strong>7</strong></li>
@@ -862,8 +1424,10 @@
   <p>23 starting entries across 3 deterministic trial(s); 23 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.8986</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>2.3913</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.8986</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>1.1699</strong></li>
     <li>Probe-distance stddev: <strong>1.0515</strong></li>
     <li>Max probe distance: <strong>5</strong></li>
     <li>Max cluster length: <strong>14</strong></li>
@@ -874,8 +1438,10 @@
   <p>23 starting entries across 3 deterministic trial(s); 23 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.8986</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>4.029</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.8986</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>3.7531</strong></li>
     <li>Probe-distance stddev: <strong>1.5984</strong></li>
     <li>Max probe distance: <strong>7</strong></li>
     <li>Max cluster length: <strong>14</strong></li>
@@ -886,8 +1452,10 @@
   <p>8 starting entries across 3 deterministic trial(s); 6 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.0556</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.1111</strong></li>
     <li>Avg delete probes: <strong>1.1667</strong></li>
     <li>Avg probe distance: <strong>0.0556</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.3143</strong></li>
     <li>Probe-distance stddev: <strong>0.2291</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>4</strong></li>
@@ -898,8 +1466,10 @@
   <p>8 starting entries across 3 deterministic trial(s); 6 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.0556</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.3333</strong></li>
     <li>Avg delete probes: <strong>1.1667</strong></li>
     <li>Avg probe distance: <strong>0.0556</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.8165</strong></li>
     <li>Probe-distance stddev: <strong>0.2291</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>4</strong></li>
@@ -910,8 +1480,10 @@
   <p>16 starting entries across 3 deterministic trial(s); 11 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.1818</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.3939</strong></li>
     <li>Avg delete probes: <strong>1.0667</strong></li>
     <li>Avg probe distance: <strong>0.1818</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.6485</strong></li>
     <li>Probe-distance stddev: <strong>0.3857</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>3</strong></li>
@@ -922,8 +1494,10 @@
   <p>16 starting entries across 3 deterministic trial(s); 11 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.1818</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.5455</strong></li>
     <li>Avg delete probes: <strong>1.0667</strong></li>
     <li>Avg probe distance: <strong>0.1818</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.7003</strong></li>
     <li>Probe-distance stddev: <strong>0.4576</strong></li>
     <li>Max probe distance: <strong>2</strong></li>
     <li>Max cluster length: <strong>3</strong></li>
@@ -934,8 +1508,10 @@
   <p>23 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.4375</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.5833</strong></li>
     <li>Avg delete probes: <strong>1.619</strong></li>
     <li>Avg probe distance: <strong>0.4375</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.7862</strong></li>
     <li>Probe-distance stddev: <strong>0.8141</strong></li>
     <li>Max probe distance: <strong>4</strong></li>
     <li>Max cluster length: <strong>6</strong></li>
@@ -946,8 +1522,10 @@
   <p>23 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.4375</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>2.1667</strong></li>
     <li>Avg delete probes: <strong>1.619</strong></li>
     <li>Avg probe distance: <strong>0.4375</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>1.4337</strong></li>
     <li>Probe-distance stddev: <strong>0.9554</strong></li>
     <li>Max probe distance: <strong>4</strong></li>
     <li>Max cluster length: <strong>6</strong></li>
