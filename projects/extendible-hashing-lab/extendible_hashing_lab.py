@@ -2405,6 +2405,19 @@ def default_benchmark_png_height(summary: dict[str, Any], width: int) -> int:
     return max(1800, min(estimated_height, 7200))
 
 
+def default_visualization_png_height(step_count: int, width: int) -> int:
+    normalized_width = max(960, width)
+    effective_steps = max(1, step_count)
+    if normalized_width >= 1320:
+        per_step_height = 360
+    elif normalized_width >= 1080:
+        per_step_height = 460
+    else:
+        per_step_height = 620
+    estimated_height = 1400 + (effective_steps * per_step_height)
+    return max(1800, min(estimated_height, 9600))
+
+
 def measure_html_document_height(
     html_output_path: str | Path,
     *,
@@ -2415,7 +2428,7 @@ def measure_html_document_height(
     if not html_path.exists():
         return None
     html_text = html_path.read_text(encoding="utf-8")
-    marker_id = "benchmark-png-scroll-height"
+    marker_id = "html-png-scroll-height"
     marker_script = (
         "<script>\n"
         'window.addEventListener("load", () => {\n'
@@ -2433,7 +2446,7 @@ def measure_html_document_height(
     )
     instrumented_html = html_text.replace("</body>", marker_script + "</body>") if "</body>" in html_text else html_text + marker_script
     with tempfile.TemporaryDirectory() as tmp_dir:
-        instrumented_path = Path(tmp_dir) / "benchmark-dashboard-height-probe.html"
+        instrumented_path = Path(tmp_dir) / "html-png-height-probe.html"
         instrumented_path.write_text(instrumented_html, encoding="utf-8")
         command = [
             resolve_chrome_binary(chrome_binary),
@@ -2458,7 +2471,7 @@ def measure_html_document_height(
     return max(numeric_heights) if numeric_heights else None
 
 
-def build_benchmark_png_command(
+def build_html_png_command(
     html_output_path: str | Path,
     png_output_path: str | Path,
     *,
@@ -2479,6 +2492,44 @@ def build_benchmark_png_command(
         f"--screenshot={resolved_png}",
         resolved_html.as_uri(),
     ]
+
+
+def build_benchmark_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    return build_html_png_command(
+        html_output_path,
+        png_output_path,
+        width=width,
+        height=height,
+        capture_ms=capture_ms,
+        chrome_binary=chrome_binary,
+    )
+
+
+def build_visualization_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    return build_html_png_command(
+        html_output_path,
+        png_output_path,
+        width=width,
+        height=height,
+        capture_ms=capture_ms,
+        chrome_binary=chrome_binary,
+    )
 
 
 def render_benchmark_png(
@@ -2520,6 +2571,48 @@ def render_benchmark_png(
         raise RuntimeError(f"PNG capture failed: {detail}")
     if not png_path.exists():
         raise RuntimeError(f"PNG capture did not create the expected output file: {png_path}")
+    return png_path
+
+
+def render_visualization_png(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    step_count: int,
+    width: int = 1440,
+    height: int | None = None,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        raise RuntimeError(f"HTML visualization not found for PNG capture: {html_path}")
+    png_path = Path(png_output_path)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    effective_width = max(960, width)
+    measured_height = None
+    if height is None:
+        measured_height = measure_html_document_height(
+            html_path,
+            capture_ms=max(0, capture_ms),
+            chrome_binary=chrome_binary,
+        )
+    heuristic_height = default_visualization_png_height(step_count, effective_width)
+    effective_height = height if height is not None else max(heuristic_height, (measured_height or 0) + 120)
+    command = build_visualization_png_command(
+        html_path,
+        png_path,
+        width=effective_width,
+        height=max(1200, effective_height),
+        capture_ms=max(0, capture_ms),
+        chrome_binary=chrome_binary,
+    )
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown Chrome headless error"
+        raise RuntimeError(f"Visualization PNG capture failed: {detail}")
+    if not png_path.exists():
+        raise RuntimeError(f"Visualization PNG capture did not create the expected output file: {png_path}")
     return png_path
 
 
@@ -2764,6 +2857,11 @@ def build_parser() -> argparse.ArgumentParser:
     visualize_parser.add_argument("--input", required=True, type=Path, help="workload JSON file")
     visualize_parser.add_argument("--svg-out", type=Path, help="optional self-contained SVG output")
     visualize_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML output")
+    visualize_parser.add_argument("--png-out", type=Path, help="optional PNG screenshot captured from the generated HTML visualization")
+    visualize_parser.add_argument("--png-width", type=int, default=1440, help="viewport width in pixels for visualization PNG capture (default: 1440)")
+    visualize_parser.add_argument("--png-height", type=int, help="optional viewport height override for visualization PNG capture; defaults to an auto-sized visualization height")
+    visualize_parser.add_argument("--png-capture-ms", type=int, default=1500, help="virtual time budget in milliseconds before capturing the visualization PNG screenshot")
+    visualize_parser.add_argument("--chrome-binary", type=Path, help="optional Chrome/Chromium binary for visualization PNG capture")
     visualize_parser.add_argument(
         "--thumbnail-svg-out",
         type=Path,
@@ -2855,8 +2953,8 @@ def command_benchmark(args: argparse.Namespace) -> int:
 
 
 def command_visualize(args: argparse.Namespace) -> int:
-    if not args.svg_out and not args.html_out and not args.thumbnail_svg_out:
-        raise ValueError("visualize requires --svg-out, --html-out, and/or --thumbnail-svg-out")
+    if not args.svg_out and not args.html_out and not args.png_out and not args.thumbnail_svg_out:
+        raise ValueError("visualize requires --svg-out, --html-out, --png-out, and/or --thumbnail-svg-out")
     workload = load_json(args.input)
     result = run_workload(workload)
     if args.svg_out:
@@ -2871,6 +2969,16 @@ def command_visualize(args: argparse.Namespace) -> int:
             render_visualization_html(args.title, result.table, result.history, source_label=str(args.input)) + "\n",
             encoding="utf-8",
         )
+    if args.png_out:
+        render_visualization_png(
+            args.html_out,
+            args.png_out,
+            step_count=len(result.history),
+            width=args.png_width,
+            height=args.png_height,
+            capture_ms=args.png_capture_ms,
+            chrome_binary=args.chrome_binary,
+        )
     if args.thumbnail_svg_out:
         args.thumbnail_svg_out.parent.mkdir(parents=True, exist_ok=True)
         args.thumbnail_svg_out.write_text(
@@ -2884,6 +2992,7 @@ def command_visualize(args: argparse.Namespace) -> int:
                 "steps": len(result.history),
                 "svg_out": str(args.svg_out) if args.svg_out else None,
                 "html_out": str(args.html_out) if args.html_out else None,
+                "png_out": str(args.png_out) if args.png_out else None,
                 "thumbnail_svg_out": str(args.thumbnail_svg_out) if args.thumbnail_svg_out else None,
             },
             indent=2,
@@ -2897,6 +3006,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "benchmark" and args.png_out is not None and args.html_out is None:
         parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML dashboard")
+    if args.command == "visualize" and args.png_out is not None and args.html_out is None:
+        parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML visualization")
     if args.command == "run":
         return command_run(args)
     if args.command == "inspect":

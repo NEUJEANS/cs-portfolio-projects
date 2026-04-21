@@ -15,6 +15,7 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 - JSON snapshot save/load support for resumable inspection workflows
 - workload runner that records per-step growth and can export a Markdown trace report
 - self-contained SVG/HTML visualization exports that show split sequences, directory aliasing, and bucket-local-depth changes per step while preserving full details through hover/tooltips
+- optional PNG capture for the workload visualization page so the same `visualize` run can emit recruiter-friendly screenshots without a manual browser round-trip
 - optional compact thumbnail-strip SVG export for the visualization workflow so README screenshots and slide snippets stay easy to embed
 - benchmark mode that compares extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across JSON suite scenarios with JSON/Markdown/HTML/PNG/CSV outputs
 - committed benchmark suite now includes a clustering-focused `primary-clustering-tombstone-pressure` preset that exaggerates linear-probing probe growth, tombstones, and cleanup rebuilds
@@ -78,16 +79,19 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py run \
   --report /tmp/extendible-delete-heavy.md
 ```
 
-Render a split/aliasing visualization for the sample workload, including a compact thumbnail strip:
+Render a split/aliasing visualization for the sample workload, including a screenshot-friendly PNG and a compact thumbnail strip:
 
 ```bash
 python3 projects/extendible-hashing-lab/extendible_hashing_lab.py visualize \
   --input projects/extendible-hashing-lab/sample_workload.json \
   --svg-out /tmp/extendible-trace.svg \
   --html-out /tmp/extendible-trace.html \
+  --png-out /tmp/extendible-trace.png \
   --thumbnail-svg-out /tmp/extendible-trace-thumbnail.svg \
   --title 'Extendible hashing split and aliasing trace'
 ```
+
+`--png-out` captures a Chrome/Chromium headless screenshot from the generated HTML visualization, so pair it with `--html-out` and optionally pass `--chrome-binary` when the browser is not already on `PATH`.
 
 Compare extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across the committed suite:
 
@@ -107,9 +111,11 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py benchmark \
 See the committed visualization + benchmark demo outputs without rerunning anything:
 - `docs/artifacts/extendible-hashing-lab/sample_workload_trace.svg`
 - `docs/artifacts/extendible-hashing-lab/sample_workload_trace.html`
+- `docs/artifacts/extendible-hashing-lab/sample_workload_trace.png`
 - `docs/artifacts/extendible-hashing-lab/sample_workload_trace_thumbnail_strip.svg`
 - `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.svg`
 - `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.html`
+- `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.png`
 - `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace_thumbnail_strip.svg`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_report.md`
@@ -124,5 +130,5 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 ```
 
 ## Future improvements
-- consider optional PNG capture for the workload visualization page so the split/merge story gets the same no-manual-screenshot path as the benchmark dashboard
 - consider a second ultra-wide thumbnail preset optimized for one-line hero banners in project index pages
+- consider a compact multi-workload landing page that places the sample, delete-heavy, PNG, and thumbnail artifacts on one recruiter-friendly overview page

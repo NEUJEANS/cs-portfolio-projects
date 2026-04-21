@@ -22,7 +22,9 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 BenchmarkError = MODULE.BenchmarkError
 build_benchmark_png_command = MODULE.build_benchmark_png_command
+build_visualization_png_command = MODULE.build_visualization_png_command
 default_benchmark_png_height = MODULE.default_benchmark_png_height
+default_visualization_png_height = MODULE.default_visualization_png_height
 ExtendibleHashTable = MODULE.ExtendibleHashTable
 LinearProbingHashTable = MODULE.LinearProbingHashTable
 SnapshotError = MODULE.SnapshotError
@@ -31,6 +33,7 @@ load_snapshot = MODULE.load_snapshot
 render_benchmark_dashboard_html = MODULE.render_benchmark_dashboard_html
 render_benchmark_png = MODULE.render_benchmark_png
 render_visualization_html = MODULE.render_visualization_html
+render_visualization_png = MODULE.render_visualization_png
 render_visualization_svg = MODULE.render_visualization_svg
 render_visualization_thumbnail_strip_svg = MODULE.render_visualization_thumbnail_strip_svg
 run_benchmark_suite = MODULE.run_benchmark_suite
@@ -898,6 +901,14 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertGreaterEqual(tall, 1800)
         self.assertGreater(narrow, tall)
 
+    def test_default_visualization_png_height_scales_with_steps(self) -> None:
+        tall = default_visualization_png_height(8, 1440)
+        narrow = default_visualization_png_height(8, 960)
+        denser = default_visualization_png_height(12, 1440)
+        self.assertGreaterEqual(tall, 1800)
+        self.assertGreater(narrow, tall)
+        self.assertGreater(denser, tall)
+
     def test_build_benchmark_png_command_uses_headless_chrome_and_file_uri(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -920,6 +931,28 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn(f'--screenshot={png_path.resolve()}', command)
             self.assertEqual(command[-1], html_path.resolve().as_uri())
 
+    def test_build_visualization_png_command_uses_headless_chrome_and_file_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            html_path = tmp_path / 'trace.html'
+            png_path = tmp_path / 'trace.png'
+            html_path.write_text('<!doctype html><title>x</title>', encoding='utf-8')
+            with mock.patch.object(MODULE, 'resolve_chrome_binary', return_value='/usr/bin/google-chrome'):
+                command = build_visualization_png_command(
+                    html_path,
+                    png_path,
+                    width=1440,
+                    height=4200,
+                    capture_ms=1200,
+                )
+            self.assertEqual(command[0], '/usr/bin/google-chrome')
+            self.assertIn('--headless', command)
+            self.assertIn('--hide-scrollbars', command)
+            self.assertIn('--window-size=1440,4200', command)
+            self.assertIn('--virtual-time-budget=1200', command)
+            self.assertIn(f'--screenshot={png_path.resolve()}', command)
+            self.assertEqual(command[-1], html_path.resolve().as_uri())
+
     def test_render_benchmark_png_raises_when_html_is_missing(self) -> None:
         summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -929,6 +962,16 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     tmp_path / 'missing.html',
                     tmp_path / 'out.png',
                     summary,
+                )
+
+    def test_render_visualization_png_raises_when_html_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            with self.assertRaisesRegex(RuntimeError, 'HTML visualization not found'):
+                render_visualization_png(
+                    tmp_path / 'missing.html',
+                    tmp_path / 'out.png',
+                    step_count=7,
                 )
 
     def test_benchmark_cli_rejects_png_without_html_output(self) -> None:
@@ -941,6 +984,26 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     'benchmark',
                     '--input',
                     str(BENCHMARK_SUITE),
+                    '--png-out',
+                    str(png_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(process.returncode, 0)
+            self.assertIn('--png-out requires --html-out', process.stderr)
+
+    def test_visualize_cli_rejects_png_without_html_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            png_path = Path(tmp_dir) / 'trace.png'
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    'visualize',
+                    '--input',
+                    str(SAMPLE_WORKLOAD),
                     '--png-out',
                     str(png_path),
                 ],
@@ -964,6 +1027,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             benchmark_png = tmp_path / "benchmark.png"
             visualize_svg = tmp_path / "trace.svg"
             visualize_html = tmp_path / "trace.html"
+            visualize_png = tmp_path / "trace.png"
             visualize_thumbnail = tmp_path / "trace-thumbnail.svg"
 
             run_process = subprocess.run(
@@ -1125,20 +1189,23 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn("btree_paged_file_bytes", benchmark_csv_text)
             self.assertNotIn("\r", benchmark_csv_text)
 
+            visualize_command = [
+                sys.executable,
+                str(SCRIPT),
+                "visualize",
+                "--input",
+                str(SAMPLE_WORKLOAD),
+                "--svg-out",
+                str(visualize_svg),
+                "--html-out",
+                str(visualize_html),
+                "--thumbnail-svg-out",
+                str(visualize_thumbnail),
+            ]
+            if chrome_available:
+                visualize_command.extend(["--png-out", str(visualize_png)])
             visualize_process = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "visualize",
-                    "--input",
-                    str(SAMPLE_WORKLOAD),
-                    "--svg-out",
-                    str(visualize_svg),
-                    "--html-out",
-                    str(visualize_html),
-                    "--thumbnail-svg-out",
-                    str(visualize_thumbnail),
-                ],
+                visualize_command,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -1146,6 +1213,9 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(visualize_svg.exists())
             self.assertTrue(visualize_html.exists())
             self.assertTrue(visualize_thumbnail.exists())
+            if chrome_available:
+                self.assertTrue(visualize_png.exists())
+                self.assertIn(str(visualize_png), visualize_process.stdout)
             self.assertIn('"steps": 7', visualize_process.stdout)
             self.assertIn(str(visualize_thumbnail), visualize_process.stdout)
             self.assertIn("Directory aliases", visualize_svg.read_text(encoding="utf-8"))

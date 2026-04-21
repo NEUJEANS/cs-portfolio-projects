@@ -19,3 +19,4 @@
 - [x] add percentile/phase-split probe summaries so successful vs unsuccessful linear-probing lookups are easier to compare in the dashboard
 - [x] add a compact theory note or expected-cost overlay so the dashboard can relate observed linear-probing hit/miss probes to classic load-factor intuition
 - [x] add compact PNG export or thumbnail-strip generation for the benchmark dashboard so README screenshots stay easy to embed
+- [x] add PNG capture for the workload visualization page so the split/merge story has the same no-manual-screenshot path as the benchmark dashboard
