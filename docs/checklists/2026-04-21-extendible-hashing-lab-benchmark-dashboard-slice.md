@@ -10,5 +10,5 @@
 - [x] run targeted tests and smoke checks
 - [x] complete at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and append the wrap-up
+- [x] commit, push, and append the wrap-up
 - [ ] next: add a linear-probing baseline so the benchmark suite covers a simpler open-addressing comparison alongside cuckoo hashing
