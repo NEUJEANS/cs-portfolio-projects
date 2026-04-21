@@ -51,6 +51,7 @@ class OperationResult:
 @dataclass(slots=True)
 class BenchmarkRow:
     key_profile: str
+    key_preset: str
     strategy: str
     workload: str
     trial: int
@@ -76,6 +77,7 @@ class BenchmarkRow:
         return {
             "capacity": capacity,
             "key_profile": self.key_profile,
+            "key_preset": self.key_preset,
             "strategy": self.strategy,
             "workload": self.workload,
             "trial": self.trial,
@@ -118,6 +120,11 @@ WORKLOAD_LABELS = {
 KEY_PROFILE_LABELS = {
     "string": "Random string IDs",
     "integer": "Sequential integer IDs",
+}
+
+KEY_PRESET_LABELS = {
+    "uniform": "Uniform spread",
+    "collision-focused": "Collision-focused hotspots",
 }
 
 
@@ -678,8 +685,119 @@ def key_profile_label(key_profile: str) -> str:
     return KEY_PROFILE_LABELS.get(key_profile, key_profile.replace("-", " ").title())
 
 
+def parse_key_presets(raw: str) -> list[str]:
+    aliases = {
+        "uniform": "uniform",
+        "default": "uniform",
+        "spread": "uniform",
+        "balanced": "uniform",
+        "collision": "collision-focused",
+        "collisions": "collision-focused",
+        "collision-focused": "collision-focused",
+        "collisionfocus": "collision-focused",
+        "clustered": "collision-focused",
+        "hotspot": "collision-focused",
+        "hotspots": "collision-focused",
+    }
+    key_presets: list[str] = []
+    seen: set[str] = set()
+    for chunk in raw.split(","):
+        key = chunk.strip().lower().replace("_", "-")
+        if not key:
+            continue
+        if key not in aliases:
+            raise InputDataError(f"unknown benchmark key preset: {chunk.strip() or key}")
+        normalized = aliases[key]
+        if normalized in seen:
+            continue
+        key_presets.append(normalized)
+        seen.add(normalized)
+    if not key_presets:
+        raise InputDataError("at least one benchmark key preset is required")
+    return key_presets
+
+
+def key_preset_label(key_preset: str) -> str:
+    return KEY_PRESET_LABELS.get(key_preset, key_preset.replace("-", " ").title())
+
+
+def select_collision_hotspots(
+    *,
+    capacity: int,
+    count: int,
+    trial: int,
+    load_factor: float,
+    seed: int,
+    key_profile: str,
+) -> list[int]:
+    hotspot_count = max(1, min(capacity - 1, math.ceil(count / 12)))
+    rng = random.Random(
+        f"robin-hood-benchmark-hotspots:{key_profile}:{capacity}:{count}:{load_factor}:{trial}:{seed}"
+    )
+    return sorted(rng.sample(range(capacity), hotspot_count))
+
+
+def _generate_collision_focused_keys(
+    key_profile: str,
+    *,
+    count: int,
+    trial: int,
+    capacity: int,
+    load_factor: float,
+    seed: int,
+    prefix: str,
+    existing_keys: set[str] | None = None,
+) -> list[str]:
+    target_slots = set(
+        select_collision_hotspots(
+            capacity=capacity,
+            count=count,
+            trial=trial,
+            load_factor=load_factor,
+            seed=seed,
+            key_profile=key_profile,
+        )
+    )
+    keys: list[str] = []
+    existing = existing_keys or set()
+    if key_profile == "string":
+        rng = random.Random(
+            f"robin-hood-benchmark-collision:string:{prefix}:{capacity}:{count}:{load_factor}:{trial}:{seed}"
+        )
+        attempts = 0
+        while len(keys) < count:
+            candidate = f"{prefix}:{trial}:{attempts}:{rng.randrange(10**12)}"
+            attempts += 1
+            if candidate in existing:
+                continue
+            if stable_hash(candidate) % capacity not in target_slots:
+                continue
+            keys.append(candidate)
+        return keys
+    if key_profile == "integer":
+        rng = random.Random(
+            f"robin-hood-benchmark-collision:integer:{prefix}:{capacity}:{count}:{load_factor}:{trial}:{seed}"
+        )
+        base = stable_hash(
+            f"robin-hood-benchmark-collision-base:{prefix}:{capacity}:{count}:{load_factor}:{trial}:{seed}"
+        ) % (10**12)
+        offset = 0
+        while len(keys) < count:
+            candidate = str(base + offset)
+            offset += 1
+            if candidate in existing:
+                continue
+            if stable_hash(candidate) % capacity not in target_slots:
+                continue
+            keys.append(candidate)
+        rng.shuffle(keys)
+        return keys
+    raise InputDataError(f"unsupported benchmark key profile: {key_profile}")
+
+
 def generate_benchmark_keys(
     key_profile: str,
+    key_preset: str,
     *,
     count: int,
     trial: int,
@@ -689,6 +807,18 @@ def generate_benchmark_keys(
 ) -> list[str]:
     if count < 1:
         raise InputDataError("benchmark key count must be positive")
+    if key_preset == "collision-focused":
+        return _generate_collision_focused_keys(
+            key_profile,
+            count=count,
+            trial=trial,
+            capacity=capacity,
+            load_factor=load_factor,
+            seed=seed,
+            prefix="collision",
+        )
+    if key_preset != "uniform":
+        raise InputDataError(f"unsupported benchmark key preset: {key_preset}")
     if key_profile == "string":
         rng = random.Random(f"robin-hood-benchmark-keys:string:{capacity}:{load_factor}:{trial}:{seed}")
         return [f"student:{trial}:{index}:{rng.randrange(10**12)}" for index in range(count)]
@@ -703,6 +833,7 @@ def generate_benchmark_keys(
 
 def generate_missing_benchmark_keys(
     key_profile: str,
+    key_preset: str,
     *,
     count: int,
     trial: int,
@@ -713,6 +844,19 @@ def generate_missing_benchmark_keys(
     workload: str,
     existing_keys: set[str],
 ) -> list[str]:
+    if key_preset == "collision-focused":
+        return _generate_collision_focused_keys(
+            key_profile,
+            count=count,
+            trial=trial,
+            capacity=capacity,
+            load_factor=load_factor,
+            seed=seed + stable_hash(f"{strategy}:{workload}") % 10_000,
+            prefix="collision-miss",
+            existing_keys=existing_keys,
+        )
+    if key_preset != "uniform":
+        raise InputDataError(f"unsupported benchmark key preset: {key_preset}")
     if key_profile == "string":
         miss_rng = random.Random(
             f"robin-hood-benchmark-miss:string:{capacity}:{load_factor}:{trial}:{seed}:{strategy}:{workload}"
@@ -768,6 +912,7 @@ def run_benchmark(
     trials: int,
     seed: int,
     key_profiles: Iterable[str],
+    key_presets: Iterable[str],
     strategies: Iterable[str],
     workloads: Iterable[str],
     delete_fraction: float,
@@ -782,6 +927,9 @@ def run_benchmark(
     key_profile_list = list(key_profiles)
     if not key_profile_list:
         raise InputDataError("at least one benchmark key profile is required")
+    key_preset_list = list(key_presets)
+    if not key_preset_list:
+        raise InputDataError("at least one benchmark key preset is required")
     strategy_list = list(strategies)
     if not strategy_list:
         raise InputDataError("at least one benchmark strategy is required")
@@ -796,88 +944,92 @@ def run_benchmark(
             raise InputDataError("benchmark target entry count must stay below capacity")
         for trial in range(1, trials + 1):
             for key_profile in key_profile_list:
-                order_rng = random.Random(
-                    f"robin-hood-benchmark-order:{key_profile}:{capacity}:{load_factor}:{trial}:{seed}"
-                )
-                keys = generate_benchmark_keys(
-                    key_profile,
-                    count=target_count,
-                    trial=trial,
-                    capacity=capacity,
-                    load_factor=load_factor,
-                    seed=seed,
-                )
-                values = [f"value-{order_rng.randrange(10**9)}" for _ in range(target_count)]
-                delete_order = list(keys)
-                order_rng.shuffle(delete_order)
-                for strategy in strategy_list:
-                    for workload in workload_list:
-                        table = create_benchmark_table(strategy, capacity)
-                        insert_probe_counts: list[int] = []
-                        swap_total = 0
-                        for key, value in zip(keys, values, strict=True):
-                            result = table.put(key, value)
-                            insert_probe_counts.append(result.probes)
-                            swap_total += result.swaps
+                for key_preset in key_preset_list:
+                    order_rng = random.Random(
+                        f"robin-hood-benchmark-order:{key_profile}:{key_preset}:{capacity}:{load_factor}:{trial}:{seed}"
+                    )
+                    keys = generate_benchmark_keys(
+                        key_profile,
+                        key_preset,
+                        count=target_count,
+                        trial=trial,
+                        capacity=capacity,
+                        load_factor=load_factor,
+                        seed=seed,
+                    )
+                    values = [f"value-{order_rng.randrange(10**9)}" for _ in range(target_count)]
+                    delete_order = list(keys)
+                    order_rng.shuffle(delete_order)
+                    for strategy in strategy_list:
+                        for workload in workload_list:
+                            table = create_benchmark_table(strategy, capacity)
+                            insert_probe_counts: list[int] = []
+                            swap_total = 0
+                            for key, value in zip(keys, values, strict=True):
+                                result = table.put(key, value)
+                                insert_probe_counts.append(result.probes)
+                                swap_total += result.swaps
 
-                        delete_probe_counts: list[int] = []
-                        surviving_keys = list(keys)
-                        if workload == "delete-heavy":
-                            delete_count = benchmark_delete_count(target_count, delete_fraction)
-                            deleted_keys = delete_order[:delete_count]
-                            deleted_lookup = set(deleted_keys)
-                            surviving_keys = [key for key in keys if key not in deleted_lookup]
-                            for key in deleted_keys:
-                                result = table.delete_with_metrics(key)
-                                if result.action != "deleted":
-                                    raise RuntimeError(f"failed to delete benchmark key: {key}")
-                                delete_probe_counts.append(result.probes)
-                        else:
-                            delete_count = 0
+                            delete_probe_counts: list[int] = []
+                            surviving_keys = list(keys)
+                            if workload == "delete-heavy":
+                                delete_count = benchmark_delete_count(target_count, delete_fraction)
+                                deleted_keys = delete_order[:delete_count]
+                                deleted_lookup = set(deleted_keys)
+                                surviving_keys = [key for key in keys if key not in deleted_lookup]
+                                for key in deleted_keys:
+                                    result = table.delete_with_metrics(key)
+                                    if result.action != "deleted":
+                                        raise RuntimeError(f"failed to delete benchmark key: {key}")
+                                    delete_probe_counts.append(result.probes)
+                            else:
+                                delete_count = 0
 
-                        if not surviving_keys:
-                            raise RuntimeError("benchmark workload must leave at least one surviving key")
+                            if not surviving_keys:
+                                raise RuntimeError("benchmark workload must leave at least one surviving key")
 
-                        lookup_probe_counts = [table.get_with_metrics(key)[1] for key in surviving_keys]
-                        surviving_key_set = set(surviving_keys)
-                        missing_lookup_keys = generate_missing_benchmark_keys(
-                            key_profile,
-                            count=len(surviving_keys),
-                            trial=trial,
-                            capacity=capacity,
-                            load_factor=load_factor,
-                            seed=seed,
-                            strategy=strategy,
-                            workload=workload,
-                            existing_keys=surviving_key_set,
-                        )
-                        unsuccessful_lookup_probe_counts = [table.get_with_metrics(key)[1] for key in missing_lookup_keys]
-                        stats = table.stats()
-                        rows.append(
-                            BenchmarkRow(
-                                key_profile=key_profile,
+                            lookup_probe_counts = [table.get_with_metrics(key)[1] for key in surviving_keys]
+                            surviving_key_set = set(surviving_keys)
+                            missing_lookup_keys = generate_missing_benchmark_keys(
+                                key_profile,
+                                key_preset,
+                                count=len(surviving_keys),
+                                trial=trial,
+                                capacity=capacity,
+                                load_factor=load_factor,
+                                seed=seed,
                                 strategy=strategy,
                                 workload=workload,
-                                trial=trial,
-                                load_factor=load_factor,
-                                effective_load_factor=round(len(surviving_keys) / capacity, 4),
-                                entry_count=target_count,
-                                remaining_entry_count=len(surviving_keys),
-                                deleted_entry_count=delete_count,
-                                average_insert_probes=statistics.fmean(insert_probe_counts),
-                                average_delete_probes=statistics.fmean(delete_probe_counts) if delete_probe_counts else 0.0,
-                                average_successful_lookup_probes=statistics.fmean(lookup_probe_counts),
-                                average_unsuccessful_lookup_probes=statistics.fmean(unsuccessful_lookup_probe_counts),
-                                average_probe_distance=stats["average_probe_distance"],
-                                probe_distance_stddev=stats["probe_distance_stddev"],
-                                max_probe_distance=stats["max_probe_distance"],
-                                max_cluster_length=max(stats["cluster_lengths"], default=0),
-                                swap_count=swap_total,
-                                probe_distance_histogram=stats["probe_distance_histogram"],
-                                successful_lookup_probe_histogram=_probe_count_histogram(lookup_probe_counts),
-                                unsuccessful_lookup_probe_histogram=_probe_count_histogram(unsuccessful_lookup_probe_counts),
+                                existing_keys=surviving_key_set,
                             )
-                        )
+                            unsuccessful_lookup_probe_counts = [table.get_with_metrics(key)[1] for key in missing_lookup_keys]
+                            stats = table.stats()
+                            rows.append(
+                                BenchmarkRow(
+                                    key_profile=key_profile,
+                                    key_preset=key_preset,
+                                    strategy=strategy,
+                                    workload=workload,
+                                    trial=trial,
+                                    load_factor=load_factor,
+                                    effective_load_factor=round(len(surviving_keys) / capacity, 4),
+                                    entry_count=target_count,
+                                    remaining_entry_count=len(surviving_keys),
+                                    deleted_entry_count=delete_count,
+                                    average_insert_probes=statistics.fmean(insert_probe_counts),
+                                    average_delete_probes=statistics.fmean(delete_probe_counts) if delete_probe_counts else 0.0,
+                                    average_successful_lookup_probes=statistics.fmean(lookup_probe_counts),
+                                    average_unsuccessful_lookup_probes=statistics.fmean(unsuccessful_lookup_probe_counts),
+                                    average_probe_distance=stats["average_probe_distance"],
+                                    probe_distance_stddev=stats["probe_distance_stddev"],
+                                    max_probe_distance=stats["max_probe_distance"],
+                                    max_cluster_length=max(stats["cluster_lengths"], default=0),
+                                    swap_count=swap_total,
+                                    probe_distance_histogram=stats["probe_distance_histogram"],
+                                    successful_lookup_probe_histogram=_probe_count_histogram(lookup_probe_counts),
+                                    unsuccessful_lookup_probe_histogram=_probe_count_histogram(unsuccessful_lookup_probe_counts),
+                                )
+                            )
     return rows
 
 
@@ -894,6 +1046,7 @@ def save_benchmark(rows: list[BenchmarkRow], output_path: Path, *, capacity: int
             fieldnames=[
                 "capacity",
                 "key_profile",
+                "key_preset",
                 "strategy",
                 "workload",
                 "trial",
@@ -994,188 +1147,198 @@ def summarize_benchmark(
     *,
     capacity: int,
     key_profiles: list[str],
+    key_presets: list[str],
     strategies: list[str],
     workloads: list[str],
     trials: int,
     title: str,
     delete_fraction: float,
 ) -> dict[str, Any]:
-    grouped: dict[tuple[str, str, float, str], list[BenchmarkRow]] = {}
+    grouped: dict[tuple[str, str, str, float, str], list[BenchmarkRow]] = {}
     for row in rows:
-        grouped.setdefault((row.key_profile, row.workload, row.load_factor, row.strategy), []).append(row)
+        grouped.setdefault((row.key_profile, row.key_preset, row.workload, row.load_factor, row.strategy), []).append(row)
 
     load_factors = sorted({row.load_factor for row in rows})
     results: list[dict[str, Any]] = []
     for key_profile in key_profiles:
-        for workload in workloads:
-            for load_factor in load_factors:
-                for strategy in strategies:
-                    bucket = grouped.get((key_profile, workload, load_factor, strategy), [])
-                    if not bucket:
-                        continue
-                    merged_histogram = _merge_histogram_counts(row.probe_distance_histogram for row in bucket)
-                    merged_successful_lookup_histogram = _merge_histogram_counts(
-                        row.successful_lookup_probe_histogram for row in bucket
-                    )
-                    merged_unsuccessful_lookup_histogram = _merge_histogram_counts(
-                        row.unsuccessful_lookup_probe_histogram for row in bucket
-                    )
-                    probe_distance_summary = _histogram_summary(merged_histogram)
-                    successful_lookup_summary = _histogram_summary(merged_successful_lookup_histogram)
-                    unsuccessful_lookup_summary = _histogram_summary(merged_unsuccessful_lookup_histogram)
-                    results.append(
-                        {
-                            "key_profile": key_profile,
-                            "key_profile_label": key_profile_label(key_profile),
-                            "workload": workload,
-                            "workload_label": workload_label(workload, delete_fraction=delete_fraction),
-                            "load_factor": load_factor,
-                            "strategy": strategy,
-                            "strategy_label": STRATEGY_LABELS[strategy],
-                            "trial_count": len(bucket),
-                            "entry_count": bucket[0].entry_count,
-                            "remaining_entry_count": bucket[0].remaining_entry_count,
-                            "deleted_entry_count": bucket[0].deleted_entry_count,
-                            "effective_load_factor": round(_mean([row.effective_load_factor for row in bucket]), 4),
-                            "average_insert_probes": round(_mean([row.average_insert_probes for row in bucket]), 4),
-                            "average_delete_probes": round(_mean([row.average_delete_probes for row in bucket]), 4),
-                            "average_successful_lookup_probes": successful_lookup_summary["average"],
-                            "successful_lookup_probe_stddev": successful_lookup_summary["stddev"],
-                            "successful_lookup_p50_probes": successful_lookup_summary["p50"],
-                            "successful_lookup_p95_probes": successful_lookup_summary["p95"],
-                            "max_successful_lookup_probes": successful_lookup_summary["max"],
-                            "average_unsuccessful_lookup_probes": unsuccessful_lookup_summary["average"],
-                            "unsuccessful_lookup_probe_stddev": unsuccessful_lookup_summary["stddev"],
-                            "unsuccessful_lookup_p50_probes": unsuccessful_lookup_summary["p50"],
-                            "unsuccessful_lookup_p95_probes": unsuccessful_lookup_summary["p95"],
-                            "max_unsuccessful_lookup_probes": unsuccessful_lookup_summary["max"],
-                            "average_probe_distance": probe_distance_summary["average"],
-                            "probe_distance_stddev": probe_distance_summary["stddev"],
-                            "max_probe_distance": probe_distance_summary["max"],
-                            "max_cluster_length": max(row.max_cluster_length for row in bucket),
-                            "average_swap_count": round(_mean([row.swap_count for row in bucket]), 4),
-                            "probe_distance_histogram": _distribution_rows(merged_histogram, key_name="distance"),
-                            "successful_lookup_probe_histogram": _distribution_rows(
-                                merged_successful_lookup_histogram, key_name="probes"
-                            ),
-                            "unsuccessful_lookup_probe_histogram": _distribution_rows(
-                                merged_unsuccessful_lookup_histogram, key_name="probes"
-                            ),
-                        }
-                    )
+        for key_preset in key_presets:
+            for workload in workloads:
+                for load_factor in load_factors:
+                    for strategy in strategies:
+                        bucket = grouped.get((key_profile, key_preset, workload, load_factor, strategy), [])
+                        if not bucket:
+                            continue
+                        merged_histogram = _merge_histogram_counts(row.probe_distance_histogram for row in bucket)
+                        merged_successful_lookup_histogram = _merge_histogram_counts(
+                            row.successful_lookup_probe_histogram for row in bucket
+                        )
+                        merged_unsuccessful_lookup_histogram = _merge_histogram_counts(
+                            row.unsuccessful_lookup_probe_histogram for row in bucket
+                        )
+                        probe_distance_summary = _histogram_summary(merged_histogram)
+                        successful_lookup_summary = _histogram_summary(merged_successful_lookup_histogram)
+                        unsuccessful_lookup_summary = _histogram_summary(merged_unsuccessful_lookup_histogram)
+                        results.append(
+                            {
+                                "key_profile": key_profile,
+                                "key_profile_label": key_profile_label(key_profile),
+                                "key_preset": key_preset,
+                                "key_preset_label": key_preset_label(key_preset),
+                                "workload": workload,
+                                "workload_label": workload_label(workload, delete_fraction=delete_fraction),
+                                "load_factor": load_factor,
+                                "strategy": strategy,
+                                "strategy_label": STRATEGY_LABELS[strategy],
+                                "trial_count": len(bucket),
+                                "entry_count": bucket[0].entry_count,
+                                "remaining_entry_count": bucket[0].remaining_entry_count,
+                                "deleted_entry_count": bucket[0].deleted_entry_count,
+                                "effective_load_factor": round(_mean([row.effective_load_factor for row in bucket]), 4),
+                                "average_insert_probes": round(_mean([row.average_insert_probes for row in bucket]), 4),
+                                "average_delete_probes": round(_mean([row.average_delete_probes for row in bucket]), 4),
+                                "average_successful_lookup_probes": successful_lookup_summary["average"],
+                                "successful_lookup_probe_stddev": successful_lookup_summary["stddev"],
+                                "successful_lookup_p50_probes": successful_lookup_summary["p50"],
+                                "successful_lookup_p95_probes": successful_lookup_summary["p95"],
+                                "max_successful_lookup_probes": successful_lookup_summary["max"],
+                                "average_unsuccessful_lookup_probes": unsuccessful_lookup_summary["average"],
+                                "unsuccessful_lookup_probe_stddev": unsuccessful_lookup_summary["stddev"],
+                                "unsuccessful_lookup_p50_probes": unsuccessful_lookup_summary["p50"],
+                                "unsuccessful_lookup_p95_probes": unsuccessful_lookup_summary["p95"],
+                                "max_unsuccessful_lookup_probes": unsuccessful_lookup_summary["max"],
+                                "average_probe_distance": probe_distance_summary["average"],
+                                "probe_distance_stddev": probe_distance_summary["stddev"],
+                                "max_probe_distance": probe_distance_summary["max"],
+                                "max_cluster_length": max(row.max_cluster_length for row in bucket),
+                                "average_swap_count": round(_mean([row.swap_count for row in bucket]), 4),
+                                "probe_distance_histogram": _distribution_rows(merged_histogram, key_name="distance"),
+                                "successful_lookup_probe_histogram": _distribution_rows(
+                                    merged_successful_lookup_histogram, key_name="probes"
+                                ),
+                                "unsuccessful_lookup_probe_histogram": _distribution_rows(
+                                    merged_unsuccessful_lookup_histogram, key_name="probes"
+                                ),
+                            }
+                        )
 
     comparisons: list[dict[str, Any]] = []
     for key_profile in key_profiles:
-        for workload in workloads:
-            for load_factor in load_factors:
-                robin = next(
-                    (
-                        row
-                        for row in results
-                        if row["key_profile"] == key_profile
-                        and row["workload"] == workload
-                        and row["load_factor"] == load_factor
-                        and row["strategy"] == "robin-hood"
-                    ),
-                    None,
-                )
-                linear = next(
-                    (
-                        row
-                        for row in results
-                        if row["key_profile"] == key_profile
-                        and row["workload"] == workload
-                        and row["load_factor"] == load_factor
-                        and row["strategy"] == "linear-probing"
-                    ),
-                    None,
-                )
-                if robin and linear:
-                    lookup_delta = round(
-                        linear["average_successful_lookup_probes"] - robin["average_successful_lookup_probes"], 4
+        for key_preset in key_presets:
+            for workload in workloads:
+                for load_factor in load_factors:
+                    robin = next(
+                        (
+                            row
+                            for row in results
+                            if row["key_profile"] == key_profile
+                            and row["key_preset"] == key_preset
+                            and row["workload"] == workload
+                            and row["load_factor"] == load_factor
+                            and row["strategy"] == "robin-hood"
+                        ),
+                        None,
                     )
-                    dispersion_delta = round(linear["probe_distance_stddev"] - robin["probe_distance_stddev"], 4)
-                    delete_delta = round(linear["average_delete_probes"] - robin["average_delete_probes"], 4)
-                    if abs(lookup_delta) < 1e-9:
-                        lookup_winner = "Tie"
-                    elif robin["average_successful_lookup_probes"] < linear["average_successful_lookup_probes"]:
-                        lookup_winner = robin["strategy_label"]
-                    else:
-                        lookup_winner = linear["strategy_label"]
-
-                    miss_delta = round(
-                        linear["average_unsuccessful_lookup_probes"] - robin["average_unsuccessful_lookup_probes"], 4
+                    linear = next(
+                        (
+                            row
+                            for row in results
+                            if row["key_profile"] == key_profile
+                            and row["key_preset"] == key_preset
+                            and row["workload"] == workload
+                            and row["load_factor"] == load_factor
+                            and row["strategy"] == "linear-probing"
+                        ),
+                        None,
                     )
-                    hit_p95_delta = linear["successful_lookup_p95_probes"] - robin["successful_lookup_p95_probes"]
-                    miss_p95_delta = linear["unsuccessful_lookup_p95_probes"] - robin["unsuccessful_lookup_p95_probes"]
-                    if abs(miss_delta) < 1e-9:
-                        miss_winner = "Tie"
-                    elif robin["average_unsuccessful_lookup_probes"] < linear["average_unsuccessful_lookup_probes"]:
-                        miss_winner = robin["strategy_label"]
-                    else:
-                        miss_winner = linear["strategy_label"]
+                    if robin and linear:
+                        lookup_delta = round(
+                            linear["average_successful_lookup_probes"] - robin["average_successful_lookup_probes"], 4
+                        )
+                        dispersion_delta = round(linear["probe_distance_stddev"] - robin["probe_distance_stddev"], 4)
+                        delete_delta = round(linear["average_delete_probes"] - robin["average_delete_probes"], 4)
+                        if abs(lookup_delta) < 1e-9:
+                            lookup_winner = "Tie"
+                        elif robin["average_successful_lookup_probes"] < linear["average_successful_lookup_probes"]:
+                            lookup_winner = robin["strategy_label"]
+                        else:
+                            lookup_winner = linear["strategy_label"]
 
-                    if abs(dispersion_delta) < 1e-9:
-                        dispersion_winner = "Tie"
-                    elif robin["probe_distance_stddev"] < linear["probe_distance_stddev"]:
-                        dispersion_winner = robin["strategy_label"]
-                    else:
-                        dispersion_winner = linear["strategy_label"]
+                        miss_delta = round(
+                            linear["average_unsuccessful_lookup_probes"] - robin["average_unsuccessful_lookup_probes"], 4
+                        )
+                        hit_p95_delta = linear["successful_lookup_p95_probes"] - robin["successful_lookup_p95_probes"]
+                        miss_p95_delta = linear["unsuccessful_lookup_p95_probes"] - robin["unsuccessful_lookup_p95_probes"]
+                        if abs(miss_delta) < 1e-9:
+                            miss_winner = "Tie"
+                        elif robin["average_unsuccessful_lookup_probes"] < linear["average_unsuccessful_lookup_probes"]:
+                            miss_winner = robin["strategy_label"]
+                        else:
+                            miss_winner = linear["strategy_label"]
 
-                    if robin["deleted_entry_count"] == 0:
-                        delete_winner = "—"
-                    elif abs(delete_delta) < 1e-9:
-                        delete_winner = "Tie"
-                    elif robin["average_delete_probes"] < linear["average_delete_probes"]:
-                        delete_winner = robin["strategy_label"]
-                    else:
-                        delete_winner = linear["strategy_label"]
+                        if abs(dispersion_delta) < 1e-9:
+                            dispersion_winner = "Tie"
+                        elif robin["probe_distance_stddev"] < linear["probe_distance_stddev"]:
+                            dispersion_winner = robin["strategy_label"]
+                        else:
+                            dispersion_winner = linear["strategy_label"]
 
-                    if hit_p95_delta == 0:
-                        hit_tail_winner = "Tie"
-                    elif robin["successful_lookup_p95_probes"] < linear["successful_lookup_p95_probes"]:
-                        hit_tail_winner = robin["strategy_label"]
-                    else:
-                        hit_tail_winner = linear["strategy_label"]
+                        if robin["deleted_entry_count"] == 0:
+                            delete_winner = "—"
+                        elif abs(delete_delta) < 1e-9:
+                            delete_winner = "Tie"
+                        elif robin["average_delete_probes"] < linear["average_delete_probes"]:
+                            delete_winner = robin["strategy_label"]
+                        else:
+                            delete_winner = linear["strategy_label"]
 
-                    if miss_p95_delta == 0:
-                        miss_tail_winner = "Tie"
-                    elif robin["unsuccessful_lookup_p95_probes"] < linear["unsuccessful_lookup_p95_probes"]:
-                        miss_tail_winner = robin["strategy_label"]
-                    else:
-                        miss_tail_winner = linear["strategy_label"]
+                        if hit_p95_delta == 0:
+                            hit_tail_winner = "Tie"
+                        elif robin["successful_lookup_p95_probes"] < linear["successful_lookup_p95_probes"]:
+                            hit_tail_winner = robin["strategy_label"]
+                        else:
+                            hit_tail_winner = linear["strategy_label"]
 
-                    comparisons.append(
-                        {
-                            "key_profile": key_profile,
-                            "key_profile_label": key_profile_label(key_profile),
-                            "workload": workload,
-                            "workload_label": workload_label(workload, delete_fraction=delete_fraction),
-                            "load_factor": load_factor,
-                            "effective_load_factor": robin["effective_load_factor"],
-                            "entry_count": robin["entry_count"],
-                            "remaining_entry_count": robin["remaining_entry_count"],
-                            "deleted_entry_count": robin["deleted_entry_count"],
-                            "lookup_delta_vs_linear": lookup_delta,
-                            "miss_delta_vs_linear": miss_delta,
-                            "hit_p95_delta_vs_linear": hit_p95_delta,
-                            "miss_p95_delta_vs_linear": miss_p95_delta,
-                            "probe_stddev_delta_vs_linear": dispersion_delta,
-                            "delete_delta_vs_linear": delete_delta if robin["deleted_entry_count"] else None,
-                            "lookup_winner": lookup_winner,
-                            "miss_winner": miss_winner,
-                            "hit_tail_winner": hit_tail_winner,
-                            "miss_tail_winner": miss_tail_winner,
-                            "dispersion_winner": dispersion_winner,
-                            "delete_winner": delete_winner,
-                        }
-                    )
+                        if miss_p95_delta == 0:
+                            miss_tail_winner = "Tie"
+                        elif robin["unsuccessful_lookup_p95_probes"] < linear["unsuccessful_lookup_p95_probes"]:
+                            miss_tail_winner = robin["strategy_label"]
+                        else:
+                            miss_tail_winner = linear["strategy_label"]
+
+                        comparisons.append(
+                            {
+                                "key_profile": key_profile,
+                                "key_profile_label": key_profile_label(key_profile),
+                                "key_preset": key_preset,
+                                "key_preset_label": key_preset_label(key_preset),
+                                "workload": workload,
+                                "workload_label": workload_label(workload, delete_fraction=delete_fraction),
+                                "load_factor": load_factor,
+                                "effective_load_factor": robin["effective_load_factor"],
+                                "entry_count": robin["entry_count"],
+                                "remaining_entry_count": robin["remaining_entry_count"],
+                                "deleted_entry_count": robin["deleted_entry_count"],
+                                "lookup_delta_vs_linear": lookup_delta,
+                                "miss_delta_vs_linear": miss_delta,
+                                "hit_p95_delta_vs_linear": hit_p95_delta,
+                                "miss_p95_delta_vs_linear": miss_p95_delta,
+                                "probe_stddev_delta_vs_linear": dispersion_delta,
+                                "delete_delta_vs_linear": delete_delta if robin["deleted_entry_count"] else None,
+                                "lookup_winner": lookup_winner,
+                                "miss_winner": miss_winner,
+                                "hit_tail_winner": hit_tail_winner,
+                                "miss_tail_winner": miss_tail_winner,
+                                "dispersion_winner": dispersion_winner,
+                                "delete_winner": delete_winner,
+                            }
+                        )
 
     return {
         "title": title,
         "capacity": capacity,
         "trials": trials,
         "key_profiles": key_profiles,
+        "key_presets": key_presets,
         "strategies": strategies,
         "workloads": workloads,
         "delete_fraction": delete_fraction,
@@ -1201,11 +1364,15 @@ def _markdown_histogram_bar(share: float, *, width: int = 12) -> str:
     return "█" * units
 
 
-def _result_lookup(summary: dict[str, Any]) -> dict[tuple[str, str, float, str], dict[str, Any]]:
+def _result_lookup(summary: dict[str, Any]) -> dict[tuple[str, str, str, float, str], dict[str, Any]]:
     return {
-        (row["key_profile"], row["workload"], row["load_factor"], row["strategy"]): row
+        (row["key_profile"], row["key_preset"], row["workload"], row["load_factor"], row["strategy"]): row
         for row in summary["results"]
     }
+
+
+def _profile_preset_label(key_profile_label_text: str, key_preset_label_text: str) -> str:
+    return f"{key_profile_label_text} · {key_preset_label_text}"
 
 
 def workload_label(workload: str, *, delete_fraction: float) -> str:
@@ -1225,6 +1392,19 @@ def _key_profile_note(key_profiles: list[str]) -> str:
         labels_text = ", ".join(labels[:-1]) + f", and {labels[-1]}"
     return (
         f" It also compares {labels_text}, so the same workloads can be narrated as longer text-like IDs versus compact numeric IDs while keeping the snapshot format string-only."
+    )
+
+
+def _key_preset_note(key_presets: list[str]) -> str:
+    if key_presets == ["uniform"]:
+        return ""
+    labels = [key_preset_label(preset) for preset in key_presets]
+    if len(labels) == 2:
+        labels_text = f"{labels[0]} and {labels[1]}"
+    else:
+        labels_text = ", ".join(labels[:-1]) + f", and {labels[-1]}"
+    return (
+        f" It also compares {labels_text}, so the same identifier shapes can be replayed under both naturally spread keys and intentionally clustered hotspot keys."
     )
 
 
@@ -1258,26 +1438,28 @@ def _benchmark_intro(summary: dict[str, Any]) -> str:
             "of keys before the final hit/miss lookup + histogram pass, so post-removal clustering is visible too."
         )
     key_profile_note = _key_profile_note(summary["key_profiles"])
+    key_preset_note = _key_preset_note(summary["key_presets"])
     if len(labels) == 1:
         return (
             f"Deterministic benchmark report for {labels[0]}, with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both spread and tail cost visible at a glance."
-            f"{delete_note}{key_profile_note}"
+            f"{delete_note}{key_profile_note}{key_preset_note}"
         )
     if summary["strategies"] == ["robin-hood", "linear-probing"]:
         return (
             "Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, "
             "with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both dispersion and tail cost visible at a glance."
-            f"{delete_note}{key_profile_note}"
+            f"{delete_note}{key_profile_note}{key_preset_note}"
         )
     return (
         f"Deterministic benchmark report comparing {' vs '.join(labels)}, with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both dispersion and tail cost visible at a glance."
-        f"{delete_note}{key_profile_note}"
+        f"{delete_note}{key_profile_note}{key_preset_note}"
     )
 
 
 def render_benchmark_markdown(summary: dict[str, Any]) -> str:
     lines = [f"# {summary['title']}", "", _benchmark_intro(summary), ""]
     key_profiles = ", ".join(key_profile_label(name) for name in summary["key_profiles"])
+    key_presets = ", ".join(key_preset_label(name) for name in summary["key_presets"])
     strategies = ", ".join(STRATEGY_LABELS[name] for name in summary["strategies"])
     workloads = ", ".join(workload_label(name, delete_fraction=summary["delete_fraction"]) for name in summary["workloads"])
     load_factors = ", ".join(_format_number(value) for value in summary["load_factors"])
@@ -1286,6 +1468,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             f"- Capacity: {summary['capacity']}",
             f"- Trials per workload/load factor: {summary['trials']}",
             f"- Key profiles: {key_profiles}",
+            f"- Key presets: {key_presets}",
             f"- Strategies: {strategies}",
             f"- Workloads: {workloads}",
             f"- Requested load factors: {load_factors}",
@@ -1299,7 +1482,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             [
                 "## Headline comparisons",
                 "",
-                "| Key profile | Workload | Requested load factor | Remaining load factor | Remaining entries | Successful lookup winner | Success delta vs linear | Unsuccessful lookup winner | Miss delta vs linear | Lower probe-distance stddev | Stddev delta vs linear | Lower delete probes | Delete delta vs linear |",
+                "| Key profile / preset | Workload | Requested load factor | Remaining load factor | Remaining entries | Successful lookup winner | Success delta vs linear | Unsuccessful lookup winner | Miss delta vs linear | Lower probe-distance stddev | Stddev delta vs linear | Lower delete probes | Delete delta vs linear |",
                 "| --- | --- | ---: | ---: | ---: | --- | ---: | --- | ---: | --- | ---: | --- | ---: |",
             ]
         )
@@ -1308,7 +1491,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
                 "| "
                 + " | ".join(
                     [
-                        row["key_profile_label"],
+                        _profile_preset_label(row["key_profile_label"], row["key_preset_label"]),
                         row["workload_label"],
                         _format_number(row["load_factor"]),
                         _format_number(row["effective_load_factor"]),
@@ -1333,7 +1516,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             "",
             "These side-by-side lookup summaries make hit and miss tails readable without scanning the full histograms.",
             "",
-            "| Key profile | Workload | Requested load factor | Remaining load factor | Strategy | Successful lookups avg / p50 / p95 / max | Unsuccessful lookups avg / p50 / p95 / max |",
+            "| Key profile / preset | Workload | Requested load factor | Remaining load factor | Strategy | Successful lookups avg / p50 / p95 / max | Unsuccessful lookups avg / p50 / p95 / max |",
             "| --- | --- | ---: | ---: | --- | --- | --- |",
         ]
     )
@@ -1342,7 +1525,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             "| "
             + " | ".join(
                 [
-                    row["key_profile_label"],
+                    _profile_preset_label(row["key_profile_label"], row["key_preset_label"]),
                     row["workload_label"],
                     _format_number(row["load_factor"]),
                     _format_number(row["effective_load_factor"]),
@@ -1374,7 +1557,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             [
                 "Positive p95 deltas mean Robin Hood hashing had the shorter lookup tail than linear probing for that slice.",
                 "",
-                "| Key profile | Workload | Requested load factor | Lower hit p95 | Hit p95 delta vs linear | Lower miss p95 | Miss p95 delta vs linear |",
+                "| Key profile / preset | Workload | Requested load factor | Lower hit p95 | Hit p95 delta vs linear | Lower miss p95 | Miss p95 delta vs linear |",
                 "| --- | --- | ---: | --- | ---: | --- | ---: |",
             ]
         )
@@ -1383,7 +1566,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
                 "| "
                 + " | ".join(
                     [
-                        row["key_profile_label"],
+                        _profile_preset_label(row["key_profile_label"], row["key_preset_label"]),
                         row["workload_label"],
                         _format_number(row["load_factor"]),
                         row["hit_tail_winner"],
@@ -1400,7 +1583,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
         [
             "## Aggregate metrics",
             "",
-            "| Key profile | Workload | Requested load factor | Remaining load factor | Strategy | Deleted entries | Avg insert probes | Avg delete probes | Avg successful lookup probes | Avg unsuccessful lookup probes | Avg probe distance | Probe-distance stddev | Max probe distance | Max cluster length | Avg swaps |",
+            "| Key profile / preset | Workload | Requested load factor | Remaining load factor | Strategy | Deleted entries | Avg insert probes | Avg delete probes | Avg successful lookup probes | Avg unsuccessful lookup probes | Avg probe distance | Probe-distance stddev | Max probe distance | Max cluster length | Avg swaps |",
             "| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
@@ -1409,7 +1592,7 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             "| "
             + " | ".join(
                 [
-                    row["key_profile_label"],
+                    _profile_preset_label(row["key_profile_label"], row["key_preset_label"]),
                     row["workload_label"],
                     _format_number(row["load_factor"]),
                     _format_number(row["effective_load_factor"]),
@@ -1442,51 +1625,54 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
     for key_profile in summary["key_profiles"]:
         lines.append(f"### {key_profile_label(key_profile)}")
         lines.append("")
-        for workload in summary["workloads"]:
-            lines.append(f"#### {workload_label(workload, delete_fraction=summary['delete_fraction'])}")
+        for key_preset in summary["key_presets"]:
+            lines.append(f"#### {key_preset_label(key_preset)}")
             lines.append("")
-            for load_factor in summary["load_factors"]:
-                present_rows = [
-                    results_by_key[(key_profile, workload, load_factor, strategy)]
-                    for strategy in summary["strategies"]
-                    if (key_profile, workload, load_factor, strategy) in results_by_key
-                ]
-                if not present_rows:
-                    continue
-                distances = sorted(
-                    {
-                        bucket["distance"]
-                        for row in present_rows
-                        for bucket in row["probe_distance_histogram"]
-                    }
-                )
-                lines.extend(
-                    [
-                        f"##### Requested load factor {_format_number(load_factor)} → remaining {_format_number(present_rows[0]['effective_load_factor'])}",
-                        "",
-                        (
-                            f"{present_rows[0]['entry_count']} starting entries per trial; "
-                            f"{present_rows[0]['remaining_entry_count']} remain after the workload across {present_rows[0]['trial_count']} deterministic trial(s)."
-                        ),
-                        "",
-                        "| Probe distance | " + " | ".join(row["strategy_label"] for row in present_rows) + " |",
-                        "| --- | " + " | ".join(["---"] * len(present_rows)) + " |",
-                    ]
-                )
-                for distance in distances:
-                    cells = []
-                    for row in present_rows:
-                        bucket = next(
-                            (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
-                            {"count": 0, "share": 0.0},
-                        )
-                        cell = f"{bucket['count']} ({_format_percentage(bucket['share'])})"
-                        bar = _markdown_histogram_bar(bucket["share"])
-                        if bar:
-                            cell = f"{cell} {bar}"
-                        cells.append(cell)
-                    lines.append("| " + " | ".join([str(distance), *cells]) + " |")
+            for workload in summary["workloads"]:
+                lines.append(f"##### {workload_label(workload, delete_fraction=summary['delete_fraction'])}")
                 lines.append("")
+                for load_factor in summary["load_factors"]:
+                    present_rows = [
+                        results_by_key[(key_profile, key_preset, workload, load_factor, strategy)]
+                        for strategy in summary["strategies"]
+                        if (key_profile, key_preset, workload, load_factor, strategy) in results_by_key
+                    ]
+                    if not present_rows:
+                        continue
+                    distances = sorted(
+                        {
+                            bucket["distance"]
+                            for row in present_rows
+                            for bucket in row["probe_distance_histogram"]
+                        }
+                    )
+                    lines.extend(
+                        [
+                            f"###### Requested load factor {_format_number(load_factor)} → remaining {_format_number(present_rows[0]['effective_load_factor'])}",
+                            "",
+                            (
+                                f"{present_rows[0]['entry_count']} starting entries per trial; "
+                                f"{present_rows[0]['remaining_entry_count']} remain after the workload across {present_rows[0]['trial_count']} deterministic trial(s)."
+                            ),
+                            "",
+                            "| Probe distance | " + " | ".join(row["strategy_label"] for row in present_rows) + " |",
+                            "| --- | " + " | ".join(["---"] * len(present_rows)) + " |",
+                        ]
+                    )
+                    for distance in distances:
+                        cells = []
+                        for row in present_rows:
+                            bucket = next(
+                                (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
+                                {"count": 0, "share": 0.0},
+                            )
+                            cell = f"{bucket['count']} ({_format_percentage(bucket['share'])})"
+                            bar = _markdown_histogram_bar(bucket["share"])
+                            if bar:
+                                cell = f"{cell} {bar}"
+                            cells.append(cell)
+                        lines.append("| " + " | ".join([str(distance), *cells]) + " |")
+                    lines.append("")
 
     lines.extend(
         [
@@ -1499,53 +1685,56 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
     for key_profile in summary["key_profiles"]:
         lines.append(f"### {key_profile_label(key_profile)}")
         lines.append("")
-        for workload in summary["workloads"]:
-            lines.append(f"#### {workload_label(workload, delete_fraction=summary['delete_fraction'])}")
+        for key_preset in summary["key_presets"]:
+            lines.append(f"#### {key_preset_label(key_preset)}")
             lines.append("")
-            for load_factor in summary["load_factors"]:
-                present_rows = [
-                    results_by_key[(key_profile, workload, load_factor, strategy)]
-                    for strategy in summary["strategies"]
-                    if (key_profile, workload, load_factor, strategy) in results_by_key
-                ]
-                if not present_rows:
-                    continue
-                probe_counts = sorted(
-                    {
-                        bucket["probes"]
-                        for row in present_rows
-                        for bucket in row["unsuccessful_lookup_probe_histogram"]
-                    }
-                )
-                total_samples = sum(bucket["count"] for bucket in present_rows[0]["unsuccessful_lookup_probe_histogram"])
-                samples_per_trial = total_samples // max(1, present_rows[0]["trial_count"])
-                lines.extend(
-                    [
-                        f"##### Requested load factor {_format_number(load_factor)} → remaining {_format_number(present_rows[0]['effective_load_factor'])}",
-                        "",
-                        (
-                            f"{samples_per_trial} deterministic missing-key lookup(s) per trial were issued after the workload; "
-                            f"the table ended with {present_rows[0]['remaining_entry_count']} resident entries across {present_rows[0]['trial_count']} deterministic trial(s)."
-                        ),
-                        "",
-                        "| Probes for a miss | " + " | ".join(row["strategy_label"] for row in present_rows) + " |",
-                        "| --- | " + " | ".join(["---"] * len(present_rows)) + " |",
-                    ]
-                )
-                for probes in probe_counts:
-                    cells = []
-                    for row in present_rows:
-                        bucket = next(
-                            (item for item in row["unsuccessful_lookup_probe_histogram"] if item["probes"] == probes),
-                            {"count": 0, "share": 0.0},
-                        )
-                        cell = f"{bucket['count']} ({_format_percentage(bucket['share'])})"
-                        bar = _markdown_histogram_bar(bucket["share"])
-                        if bar:
-                            cell = f"{cell} {bar}"
-                        cells.append(cell)
-                    lines.append("| " + " | ".join([str(probes), *cells]) + " |")
+            for workload in summary["workloads"]:
+                lines.append(f"##### {workload_label(workload, delete_fraction=summary['delete_fraction'])}")
                 lines.append("")
+                for load_factor in summary["load_factors"]:
+                    present_rows = [
+                        results_by_key[(key_profile, key_preset, workload, load_factor, strategy)]
+                        for strategy in summary["strategies"]
+                        if (key_profile, key_preset, workload, load_factor, strategy) in results_by_key
+                    ]
+                    if not present_rows:
+                        continue
+                    probe_counts = sorted(
+                        {
+                            bucket["probes"]
+                            for row in present_rows
+                            for bucket in row["unsuccessful_lookup_probe_histogram"]
+                        }
+                    )
+                    total_samples = sum(bucket["count"] for bucket in present_rows[0]["unsuccessful_lookup_probe_histogram"])
+                    samples_per_trial = total_samples // max(1, present_rows[0]["trial_count"])
+                    lines.extend(
+                        [
+                            f"###### Requested load factor {_format_number(load_factor)} → remaining {_format_number(present_rows[0]['effective_load_factor'])}",
+                            "",
+                            (
+                                f"{samples_per_trial} deterministic missing-key lookup(s) per trial were issued after the workload; "
+                                f"the table ended with {present_rows[0]['remaining_entry_count']} resident entries across {present_rows[0]['trial_count']} deterministic trial(s)."
+                            ),
+                            "",
+                            "| Probes for a miss | " + " | ".join(row["strategy_label"] for row in present_rows) + " |",
+                            "| --- | " + " | ".join(["---"] * len(present_rows)) + " |",
+                        ]
+                    )
+                    for probes in probe_counts:
+                        cells = []
+                        for row in present_rows:
+                            bucket = next(
+                                (item for item in row["unsuccessful_lookup_probe_histogram"] if item["probes"] == probes),
+                                {"count": 0, "share": 0.0},
+                            )
+                            cell = f"{bucket['count']} ({_format_percentage(bucket['share'])})"
+                            bar = _markdown_histogram_bar(bucket["share"])
+                            if bar:
+                                cell = f"{cell} {bar}"
+                            cells.append(cell)
+                        lines.append("| " + " | ".join([str(probes), *cells]) + " |")
+                    lines.append("")
     return "\n".join(lines)
 
 
@@ -1575,6 +1764,11 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
             ", ".join(key_profile_label(name) for name in summary["key_profiles"]),
         ),
         (
+            "Key presets",
+            str(len(summary["key_presets"])),
+            ", ".join(key_preset_label(name) for name in summary["key_presets"]),
+        ),
+        (
             "Workloads",
             str(len(summary["workloads"])),
             ", ".join(workload_label(name, delete_fraction=summary["delete_fraction"]) for name in summary["workloads"]),
@@ -1596,7 +1790,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     comparison_rows_html = "".join(
         f'''<tr>
-  <th scope="row">{escape(row['key_profile_label'])}</th>
+  <th scope="row">{escape(_profile_preset_label(row['key_profile_label'], row['key_preset_label']))}</th>
   <td>{escape(row['workload_label'])}</td>
   <td>{escape(_format_number(row['load_factor']))}</td>
   <td>{escape(_format_number(row['effective_load_factor']))}</td>
@@ -1615,7 +1809,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     aggregate_rows_html = "".join(
         f'''<tr>
-  <th scope="row">{escape(row['key_profile_label'])}</th>
+  <th scope="row">{escape(_profile_preset_label(row['key_profile_label'], row['key_preset_label']))}</th>
   <td>{escape(row['workload_label'])}</td>
   <td>{escape(_format_number(row['load_factor']))}</td>
   <td>{escape(_format_number(row['effective_load_factor']))}</td>
@@ -1647,7 +1841,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     detail_cards_html = "".join(
         f'''<article class="detail-card">
-  <h2>{escape(row['key_profile_label'])} · {escape(row['workload_label'])} · start {escape(_format_number(row['load_factor']))} · {escape(row['strategy_label'])}</h2>
+  <h2>{escape(_profile_preset_label(row['key_profile_label'], row['key_preset_label']))} · {escape(row['workload_label'])} · start {escape(_format_number(row['load_factor']))} · {escape(row['strategy_label'])}</h2>
   <p>{row['entry_count']} starting entries across {row['trial_count']} deterministic trial(s); {row['remaining_entry_count']} remain after the workload.</p>
   <ul>
     <li>Successful lookup avg / p50 / p95 / max: <strong>{escape(_format_number(row['average_successful_lookup_probes']))} / {row['successful_lookup_p50_probes']} / {row['successful_lookup_p95_probes']} / {row['max_successful_lookup_probes']}</strong></li>
@@ -1667,7 +1861,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     lookup_percentile_rows_html = "".join(
         f'''<tr>
-  <th scope="row">{escape(row['key_profile_label'])}</th>
+  <th scope="row">{escape(_profile_preset_label(row['key_profile_label'], row['key_preset_label']))}</th>
   <td>{escape(row['workload_label'])}</td>
   <td>{escape(_format_number(row['load_factor']))}</td>
   <td>{escape(_format_number(row['effective_load_factor']))}</td>
@@ -1680,7 +1874,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     lookup_tail_rows_html = "".join(
         f'''<tr>
-  <th scope="row">{escape(row['key_profile_label'])}</th>
+  <th scope="row">{escape(_profile_preset_label(row['key_profile_label'], row['key_preset_label']))}</th>
   <td>{escape(row['workload_label'])}</td>
   <td>{escape(_format_number(row['load_factor']))}</td>
   <td>{escape(row['hit_tail_winner'])}</td>
@@ -1699,7 +1893,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
         <caption>Lower p95 winners against the linear-probing baseline for both hit and miss lookups. Positive deltas mean linear probing had the longer p95 tail.</caption>
         <thead>
           <tr>
-            <th scope="col">Key profile</th>
+            <th scope="col">Key profile / preset</th>
             <th scope="col">Workload</th>
             <th scope="col">Requested load factor</th>
             <th scope="col">Lower hit p95</th>
@@ -1716,55 +1910,58 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     histogram_sections: list[str] = []
     for key_profile in summary["key_profiles"]:
-        for workload in summary["workloads"]:
-            for load_factor in summary["load_factors"]:
-                present_rows = [
-                    results_by_key[(key_profile, workload, load_factor, strategy)]
-                    for strategy in summary["strategies"]
-                    if (key_profile, workload, load_factor, strategy) in results_by_key
-                ]
-                if not present_rows:
-                    continue
-                distances = sorted(
-                    {
-                        bucket["distance"]
-                        for row in present_rows
-                        for bucket in row["probe_distance_histogram"]
-                    }
-                )
-                max_share = max(
-                    (
-                        bucket["share"]
-                        for row in present_rows
-                        for bucket in row["probe_distance_histogram"]
-                    ),
-                    default=1.0,
-                )
-                header_html = "".join(f"<th scope=\"col\">{escape(row['strategy_label'])}</th>" for row in present_rows)
-                body_rows: list[str] = []
-                for distance in distances:
-                    cells: list[str] = []
-                    for row in present_rows:
-                        bucket = next(
-                            (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
-                            {"count": 0, "share": 0.0},
-                        )
-                        cells.append(
-                            f'''<td>
+        for key_preset in summary["key_presets"]:
+            for workload in summary["workloads"]:
+                for load_factor in summary["load_factors"]:
+                    present_rows = [
+                        results_by_key[(key_profile, key_preset, workload, load_factor, strategy)]
+                        for strategy in summary["strategies"]
+                        if (key_profile, key_preset, workload, load_factor, strategy) in results_by_key
+                    ]
+                    if not present_rows:
+                        continue
+                    distances = sorted(
+                        {
+                            bucket["distance"]
+                            for row in present_rows
+                            for bucket in row["probe_distance_histogram"]
+                        }
+                    )
+                    max_share = max(
+                        (
+                            bucket["share"]
+                            for row in present_rows
+                            for bucket in row["probe_distance_histogram"]
+                        ),
+                        default=1.0,
+                    )
+                    header_html = "".join(
+                        f"<th scope=\"col\">{escape(row['strategy_label'])}</th>" for row in present_rows
+                    )
+                    body_rows: list[str] = []
+                    for distance in distances:
+                        cells: list[str] = []
+                        for row in present_rows:
+                            bucket = next(
+                                (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
+                                {"count": 0, "share": 0.0},
+                            )
+                            cells.append(
+                                f'''<td>
   <strong>{bucket['count']}</strong>
   <span class="histogram-meta">{escape(_format_percentage(bucket['share']))}</span>
   {metric_bar(bucket['share'], max_share, '#2563eb' if row['strategy'] == 'robin-hood' else '#d97706')}
 </td>'''
-                        )
-                    body_rows.append(
-                        f'''<tr>
+                            )
+                        body_rows.append(
+                            f'''<tr>
   <th scope="row">{distance}</th>
   {"".join(cells)}
 </tr>'''
-                    )
-                histogram_sections.append(
-                    f'''<section class="panel histogram-panel metric-probe-distance workload-{escape(workload)} key-profile-{escape(key_profile)} {'highlight-panel' if load_factor == max_requested_load_factor else 'secondary-panel'}">
-  <h2>Probe-distance histogram · {escape(key_profile_label(key_profile))} · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
+                        )
+                    histogram_sections.append(
+                        f'''<section class="panel histogram-panel metric-probe-distance workload-{escape(workload)} key-profile-{escape(key_profile)} key-preset-{escape(key_preset)} {'highlight-panel' if load_factor == max_requested_load_factor else 'secondary-panel'}">
+  <h2>Probe-distance histogram · {escape(key_profile_label(key_profile))} · {escape(key_preset_label(key_preset))} · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
   <p>{present_rows[0]['entry_count']} starting entries per trial; {present_rows[0]['remaining_entry_count']} remain after the workload across {present_rows[0]['trial_count']} deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
     <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
@@ -1784,57 +1981,60 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     unsuccessful_lookup_sections: list[str] = []
     for key_profile in summary["key_profiles"]:
-        for workload in summary["workloads"]:
-            for load_factor in summary["load_factors"]:
-                present_rows = [
-                    results_by_key[(key_profile, workload, load_factor, strategy)]
-                    for strategy in summary["strategies"]
-                    if (key_profile, workload, load_factor, strategy) in results_by_key
-                ]
-                if not present_rows:
-                    continue
-                probe_counts = sorted(
-                    {
-                        bucket["probes"]
-                        for row in present_rows
-                        for bucket in row["unsuccessful_lookup_probe_histogram"]
-                    }
-                )
-                max_share = max(
-                    (
-                        bucket["share"]
-                        for row in present_rows
-                        for bucket in row["unsuccessful_lookup_probe_histogram"]
-                    ),
-                    default=1.0,
-                )
-                total_samples = sum(bucket["count"] for bucket in present_rows[0]["unsuccessful_lookup_probe_histogram"])
-                samples_per_trial = total_samples // max(1, present_rows[0]["trial_count"])
-                header_html = "".join(f"<th scope=\"col\">{escape(row['strategy_label'])}</th>" for row in present_rows)
-                body_rows: list[str] = []
-                for probes in probe_counts:
-                    cells: list[str] = []
-                    for row in present_rows:
-                        bucket = next(
-                            (item for item in row["unsuccessful_lookup_probe_histogram"] if item["probes"] == probes),
-                            {"count": 0, "share": 0.0},
-                        )
-                        cells.append(
-                            f'''<td>
+        for key_preset in summary["key_presets"]:
+            for workload in summary["workloads"]:
+                for load_factor in summary["load_factors"]:
+                    present_rows = [
+                        results_by_key[(key_profile, key_preset, workload, load_factor, strategy)]
+                        for strategy in summary["strategies"]
+                        if (key_profile, key_preset, workload, load_factor, strategy) in results_by_key
+                    ]
+                    if not present_rows:
+                        continue
+                    probe_counts = sorted(
+                        {
+                            bucket["probes"]
+                            for row in present_rows
+                            for bucket in row["unsuccessful_lookup_probe_histogram"]
+                        }
+                    )
+                    max_share = max(
+                        (
+                            bucket["share"]
+                            for row in present_rows
+                            for bucket in row["unsuccessful_lookup_probe_histogram"]
+                        ),
+                        default=1.0,
+                    )
+                    total_samples = sum(bucket["count"] for bucket in present_rows[0]["unsuccessful_lookup_probe_histogram"])
+                    samples_per_trial = total_samples // max(1, present_rows[0]["trial_count"])
+                    header_html = "".join(
+                        f"<th scope=\"col\">{escape(row['strategy_label'])}</th>" for row in present_rows
+                    )
+                    body_rows: list[str] = []
+                    for probes in probe_counts:
+                        cells: list[str] = []
+                        for row in present_rows:
+                            bucket = next(
+                                (item for item in row["unsuccessful_lookup_probe_histogram"] if item["probes"] == probes),
+                                {"count": 0, "share": 0.0},
+                            )
+                            cells.append(
+                                f'''<td>
   <strong>{bucket['count']}</strong>
   <span class="histogram-meta">{escape(_format_percentage(bucket['share']))}</span>
   {metric_bar(bucket['share'], max_share, '#0f766e' if row['strategy'] == 'robin-hood' else '#b45309')}
 </td>'''
-                        )
-                    body_rows.append(
-                        f'''<tr>
+                            )
+                        body_rows.append(
+                            f'''<tr>
   <th scope="row">{probes}</th>
   {"".join(cells)}
 </tr>'''
-                    )
-                unsuccessful_lookup_sections.append(
-                    f'''<section class="panel histogram-panel metric-unsuccessful-lookup workload-{escape(workload)} key-profile-{escape(key_profile)} {'highlight-panel' if load_factor == max_requested_load_factor else 'secondary-panel'}">
-  <h2>Unsuccessful-lookup histogram · {escape(key_profile_label(key_profile))} · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
+                        )
+                    unsuccessful_lookup_sections.append(
+                        f'''<section class="panel histogram-panel metric-unsuccessful-lookup workload-{escape(workload)} key-profile-{escape(key_profile)} key-preset-{escape(key_preset)} {'highlight-panel' if load_factor == max_requested_load_factor else 'secondary-panel'}">
+  <h2>Unsuccessful-lookup histogram · {escape(key_profile_label(key_profile))} · {escape(key_preset_label(key_preset))} · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
   <p>{samples_per_trial} deterministic missing-key lookup(s) per trial were issued after the workload; {present_rows[0]['remaining_entry_count']} resident entries remained across {present_rows[0]['trial_count']} deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
   <table>
     <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
@@ -1860,21 +2060,21 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     <caption>Per-workload winners and deltas against the linear-probing baseline for both successful and unsuccessful lookups.</caption>
     <thead>
       <tr>
-        <th scope="col">Key profile</th>
-        <th scope="col">Workload</th>
-        <th scope="col">Requested load factor</th>
-        <th scope="col">Remaining load factor</th>
-        <th scope="col">Remaining entries</th>
-        <th scope="col">Successful lookup winner</th>
-        <th scope="col">Success delta vs linear</th>
-        <th scope="col">Unsuccessful lookup winner</th>
-        <th scope="col">Miss delta vs linear</th>
-        <th scope="col">Lower probe stddev</th>
-        <th scope="col">Stddev delta vs linear</th>
-        <th scope="col">Lower delete probes</th>
-        <th scope="col">Delete delta vs linear</th>
-      </tr>
-    </thead>
+            <th scope="col">Key profile / preset</th>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Remaining load factor</th>
+            <th scope="col">Remaining entries</th>
+            <th scope="col">Successful lookup winner</th>
+            <th scope="col">Success delta vs linear</th>
+            <th scope="col">Unsuccessful lookup winner</th>
+            <th scope="col">Miss delta vs linear</th>
+            <th scope="col">Lower probe stddev</th>
+            <th scope="col">Stddev delta vs linear</th>
+            <th scope="col">Lower delete probes</th>
+            <th scope="col">Delete delta vs linear</th>
+          </tr>
+        </thead>
     <tbody>
       {comparison_rows_html}
     </tbody>
@@ -1951,7 +2151,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
         <caption>Average / p50 / p95 / max lookup probes for successful and unsuccessful searches.</caption>
         <thead>
           <tr>
-            <th scope="col">Key profile</th>
+            <th scope="col">Key profile / preset</th>
             <th scope="col">Workload</th>
             <th scope="col">Requested load factor</th>
             <th scope="col">Remaining load factor</th>
@@ -1972,7 +2172,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
         <caption>Average metrics aggregated across deterministic trials for each workload, load factor, and strategy.</caption>
         <thead>
           <tr>
-            <th scope="col">Key profile</th>
+            <th scope="col">Key profile / preset</th>
             <th scope="col">Workload</th>
             <th scope="col">Requested load factor</th>
             <th scope="col">Remaining load factor</th>
@@ -2036,7 +2236,7 @@ def default_benchmark_png_height(summary: dict[str, Any], width: int) -> int:
     normalized_width = max(720, width)
     comparison_count = len(summary["comparisons"])
     result_count = len(summary["results"])
-    histogram_count = len(summary["key_profiles"]) * len(summary["workloads"]) * 2
+    histogram_count = len(summary["key_profiles"]) * len(summary["key_presets"]) * len(summary["workloads"]) * 2
     if normalized_width >= 1280:
         aggregate_row_height = 62
     elif normalized_width >= 900:
@@ -2179,6 +2379,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="string",
         help="comma-separated key profiles: string, integer",
     )
+    benchmark_parser.add_argument(
+        "--key-presets",
+        default="uniform",
+        help="comma-separated key presets: uniform, collision-focused",
+    )
     benchmark_parser.add_argument("--strategies", default="robin-hood,linear-probing")
     benchmark_parser.add_argument("--workloads", default="fill-only,delete-heavy")
     benchmark_parser.add_argument("--delete-fraction", type=float, default=0.3)
@@ -2242,6 +2447,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.png_out is not None and args.html_out is None:
                 parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML dashboard")
             key_profiles = parse_key_profiles(args.key_profiles)
+            key_presets = parse_key_presets(args.key_presets)
             strategies = parse_strategies(args.strategies)
             workloads = parse_workloads(args.workloads)
             rows = run_benchmark(
@@ -2250,6 +2456,7 @@ def main(argv: list[str] | None = None) -> int:
                 trials=args.trials,
                 seed=args.seed,
                 key_profiles=key_profiles,
+                key_presets=key_presets,
                 strategies=strategies,
                 workloads=workloads,
                 delete_fraction=args.delete_fraction,
@@ -2259,6 +2466,7 @@ def main(argv: list[str] | None = None) -> int:
                 rows,
                 capacity=args.capacity,
                 key_profiles=key_profiles,
+                key_presets=key_presets,
                 strategies=strategies,
                 workloads=workloads,
                 trials=args.trials,

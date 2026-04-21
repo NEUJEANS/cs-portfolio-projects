@@ -36,6 +36,7 @@ generate_benchmark_keys = MODULE.generate_benchmark_keys
 generate_missing_benchmark_keys = MODULE.generate_missing_benchmark_keys
 main = MODULE.main
 parse_load_factors = MODULE.parse_load_factors
+parse_key_presets = MODULE.parse_key_presets
 parse_key_profiles = MODULE.parse_key_profiles
 parse_pairs_input = MODULE.parse_pairs_input
 parse_strategies = MODULE.parse_strategies
@@ -190,27 +191,45 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         with self.assertRaises(InputDataError):
             parse_key_profiles("uuid")
 
+    def test_parse_key_presets_normalizes_aliases(self) -> None:
+        self.assertEqual(parse_key_presets("default, hotspot"), ["uniform", "collision-focused"])
+        with self.assertRaises(InputDataError):
+            parse_key_presets("zipf")
+
     def test_benchmark_key_generators_are_deterministic_and_disjoint(self) -> None:
-        string_keys = generate_benchmark_keys("string", count=5, trial=1, capacity=31, load_factor=0.5, seed=17)
+        string_keys = generate_benchmark_keys("string", "uniform", count=5, trial=1, capacity=31, load_factor=0.5, seed=17)
         self.assertEqual(
             string_keys,
-            generate_benchmark_keys("string", count=5, trial=1, capacity=31, load_factor=0.5, seed=17),
+            generate_benchmark_keys("string", "uniform", count=5, trial=1, capacity=31, load_factor=0.5, seed=17),
         )
         self.assertNotEqual(
             string_keys,
-            generate_benchmark_keys("string", count=5, trial=2, capacity=31, load_factor=0.5, seed=17),
+            generate_benchmark_keys("string", "uniform", count=5, trial=2, capacity=31, load_factor=0.5, seed=17),
         )
 
-        integer_keys = generate_benchmark_keys("integer", count=5, trial=1, capacity=31, load_factor=0.5, seed=17)
+        integer_keys = generate_benchmark_keys("integer", "uniform", count=5, trial=1, capacity=31, load_factor=0.5, seed=17)
         self.assertEqual(
             integer_keys,
-            generate_benchmark_keys("integer", count=5, trial=1, capacity=31, load_factor=0.5, seed=17),
+            generate_benchmark_keys("integer", "uniform", count=5, trial=1, capacity=31, load_factor=0.5, seed=17),
         )
         self.assertEqual(len(integer_keys), len(set(integer_keys)))
         self.assertTrue(all(key.isdigit() for key in integer_keys))
 
+        collision_keys = generate_benchmark_keys(
+            "string",
+            "collision-focused",
+            count=8,
+            trial=1,
+            capacity=31,
+            load_factor=0.5,
+            seed=17,
+        )
+        hotspot_slots = set(MODULE.select_collision_hotspots(capacity=31, count=8, trial=1, load_factor=0.5, seed=17, key_profile="string"))
+        self.assertTrue(all((stable_hash(key) % 31) in hotspot_slots for key in collision_keys))
+
         missing_keys = generate_missing_benchmark_keys(
             "integer",
+            "uniform",
             count=5,
             trial=1,
             capacity=31,
@@ -224,6 +243,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             missing_keys,
             generate_missing_benchmark_keys(
                 "integer",
+                "uniform",
                 count=5,
                 trial=1,
                 capacity=31,
@@ -248,6 +268,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             trials=2,
             seed=17,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only", "delete-heavy"],
             delete_fraction=0.3,
@@ -256,6 +277,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             rows,
             capacity=31,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only", "delete-heavy"],
             trials=2,
@@ -280,6 +302,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         rows = [
             BenchmarkRow(
                 key_profile="string",
+                key_preset="uniform",
                 strategy="robin-hood",
                 workload="fill-only",
                 trial=1,
@@ -303,6 +326,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             ),
             BenchmarkRow(
                 key_profile="string",
+                key_preset="uniform",
                 strategy="robin-hood",
                 workload="fill-only",
                 trial=2,
@@ -329,6 +353,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             rows,
             capacity=7,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood"],
             workloads=["fill-only"],
             trials=2,
@@ -352,6 +377,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
     def test_save_benchmark_csv_preserves_numeric_histogram_key_order(self) -> None:
         row = BenchmarkRow(
             key_profile="string",
+            key_preset="uniform",
             strategy="robin-hood",
             workload="fill-only",
             trial=1,
@@ -379,6 +405,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
         csv_row = next(csv.DictReader(text.splitlines()))
         self.assertEqual(csv_row["key_profile"], "string")
+        self.assertEqual(csv_row["key_preset"], "uniform")
         histogram_cell = csv_row["probe_distance_histogram"]
         self.assertEqual(histogram_cell, '{"0": 1, "2": 1, "10": 1}')
         self.assertNotEqual(histogram_cell, '{"0": 1, "10": 1, "2": 1}')
@@ -396,6 +423,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             trials=1,
             seed=17,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only"],
             delete_fraction=0.3,
@@ -406,6 +434,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             trials=2,
             seed=17,
             key_profiles=["string", "integer"],
+            key_presets=["uniform", "collision-focused"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only", "delete-heavy"],
             delete_fraction=0.3,
@@ -414,6 +443,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             compact_rows,
             capacity=31,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only"],
             trials=1,
@@ -424,6 +454,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             dense_rows,
             capacity=31,
             key_profiles=["string", "integer"],
+            key_presets=["uniform", "collision-focused"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only", "delete-heavy"],
             trials=2,
@@ -462,6 +493,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             trials=1,
             seed=17,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only", "delete-heavy"],
             delete_fraction=0.3,
@@ -470,6 +502,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             rows,
             capacity=31,
             key_profiles=["string"],
+            key_presets=["uniform"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only", "delete-heavy"],
             trials=1,
@@ -598,6 +631,8 @@ class RobinHoodHashingLabTests(unittest.TestCase):
                 "17",
                 "--key-profiles",
                 "string,integer",
+                "--key-presets",
+                "uniform,collision-focused",
                 "--strategies",
                 "robin-hood,linear",
                 "--markdown-out",
@@ -617,9 +652,10 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             )
             with benchmark_path.open("r", encoding="utf-8", newline="") as handle:
                 benchmark_rows = list(csv.DictReader(handle))
-            self.assertEqual(len(benchmark_rows), 32)
+            self.assertEqual(len(benchmark_rows), 64)
             self.assertEqual({row["load_factor"] for row in benchmark_rows}, {"0.25", "0.5"})
             self.assertEqual({row["key_profile"] for row in benchmark_rows}, {"string", "integer"})
+            self.assertEqual({row["key_preset"] for row in benchmark_rows}, {"uniform", "collision-focused"})
             self.assertEqual({row["strategy"] for row in benchmark_rows}, {"robin-hood", "linear-probing"})
             self.assertEqual({row["workload"] for row in benchmark_rows}, {"fill-only", "delete-heavy"})
             delete_heavy_rows = [row for row in benchmark_rows if row["workload"] == "delete-heavy"]
@@ -632,26 +668,29 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             markdown = benchmark_markdown_path.read_text(encoding="utf-8")
             self.assertIn("Headline comparisons", markdown)
             self.assertIn("Key profiles: Random string IDs, Sequential integer IDs", markdown)
+            self.assertIn("Key presets: Uniform spread, Collision-focused hotspots", markdown)
             self.assertIn("Delete-heavy (30.0% removals)", markdown)
             self.assertIn("Lookup percentile callouts", markdown)
             self.assertIn("Successful lookups avg / p50 / p95 / max", markdown)
             self.assertIn("Lower hit p95", markdown)
             self.assertIn("Probe-distance histograms", markdown)
+            self.assertIn("#### Collision-focused hotspots", markdown)
             self.assertIn("Unsuccessful-lookup histograms", markdown)
             self.assertTrue(benchmark_html_path.exists())
             html = benchmark_html_path.read_text(encoding="utf-8")
             self.assertIn("Robin Hood hashing benchmark comparison with delete-heavy workloads", html)
             self.assertIn("Random string IDs", html)
             self.assertIn("Sequential integer IDs", html)
+            self.assertIn("Collision-focused hotspots", html)
             self.assertIn("Lookup percentile callouts", html)
             self.assertIn("Successful lookup avg / p50 / p95 / max", html)
             self.assertIn("Lookup tail winners", html)
             self.assertIn(
-                "Probe-distance histogram · Random string IDs · Delete-heavy (30.0% removals) · requested load factor 0.25",
+                "Probe-distance histogram · Random string IDs · Collision-focused hotspots · Delete-heavy (30.0% removals) · requested load factor 0.25",
                 html,
             )
             self.assertIn(
-                "Unsuccessful-lookup histogram · Sequential integer IDs · Delete-heavy (30.0% removals) · requested load factor 0.25",
+                "Unsuccessful-lookup histogram · Sequential integer IDs · Uniform spread · Delete-heavy (30.0% removals) · requested load factor 0.25",
                 html,
             )
             if chrome_binary:
@@ -695,6 +734,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             trials=1,
             seed=17,
             key_profiles=["string", "integer"],
+            key_presets=["uniform", "collision-focused"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only"],
             delete_fraction=0.3,
@@ -703,6 +743,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             rows,
             capacity=31,
             key_profiles=["string", "integer"],
+            key_presets=["uniform", "collision-focused"],
             strategies=["robin-hood", "linear-probing"],
             workloads=["fill-only"],
             trials=1,
@@ -710,18 +751,20 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             delete_fraction=0.3,
         )
 
-        self.assertEqual(len(summary["comparisons"]), 2)
+        self.assertEqual(len(summary["comparisons"]), 4)
         self.assertEqual({row["key_profile"] for row in summary["results"]}, {"string", "integer"})
+        self.assertEqual({row["key_preset"] for row in summary["results"]}, {"uniform", "collision-focused"})
 
         markdown = render_benchmark_markdown(summary)
         self.assertIn("Key profiles: Random string IDs, Sequential integer IDs", markdown)
+        self.assertIn("Key presets: Uniform spread, Collision-focused hotspots", markdown)
         self.assertIn("### Random string IDs", markdown)
-        self.assertIn("### Sequential integer IDs", markdown)
+        self.assertIn("#### Collision-focused hotspots", markdown)
 
         html = render_benchmark_html(summary)
         self.assertIn("Key profile benchmark", html)
-        self.assertIn("Probe-distance histogram · Random string IDs · Fill-only · requested load factor 0.5", html)
-        self.assertIn("Probe-distance histogram · Sequential integer IDs · Fill-only · requested load factor 0.5", html)
+        self.assertIn("Probe-distance histogram · Random string IDs · Uniform spread · Fill-only · requested load factor 0.5", html)
+        self.assertIn("Probe-distance histogram · Sequential integer IDs · Collision-focused hotspots · Fill-only · requested load factor 0.5", html)
 
     def test_single_strategy_reports_use_single_strategy_default_title(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
