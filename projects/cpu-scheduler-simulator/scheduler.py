@@ -1,9 +1,11 @@
 import argparse
+import html
 import json
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from statistics import pstdev
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -32,8 +34,60 @@ class TimelineSlice:
 
 
 SUPPORTED_ALGORITHMS = {"fcfs", "priority", "sjf", "srtf", "rr"}
+ALGORITHM_ORDER = ["fcfs", "sjf", "srtf", "priority", "rr"]
+SUPPORTED_COMMANDS = SUPPORTED_ALGORITHMS | {"compare", "list-presets"}
 IDLE_PID = "IDLE"
 CONTEXT_SWITCH_PID = "CS"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PRESET_DIR = REPO_ROOT / "artifacts" / "cpu-scheduler-simulator" / "presets"
+WORKLOAD_PRESETS = {
+    "convoy-mix": {
+        "path": PRESET_DIR / "convoy-mix.json",
+        "description": "one long CPU-bound job arrives first, then several short interactive jobs queue behind it",
+    },
+    "interactive-bursts": {
+        "path": PRESET_DIR / "interactive-bursts.json",
+        "description": "staggered short requests compete with a background batch job, making response-time tradeoffs visible",
+    },
+    "aging-pressure": {
+        "path": PRESET_DIR / "aging-pressure.json",
+        "description": "high-priority arrivals keep showing up while a low-priority batch job waits, stressing priority aging",
+    },
+}
+
+
+def ordered_algorithms(algorithms: Iterable[str]) -> List[str]:
+    requested = {algorithm.lower() for algorithm in algorithms}
+    return [algorithm for algorithm in ALGORITHM_ORDER if algorithm in requested]
+
+
+def repo_relative(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def format_algorithm_label(algorithm: str, quantum: int = 2, aging_interval: int = 0) -> str:
+    label = algorithm.upper()
+    modifiers = []
+    if algorithm == "rr":
+        modifiers.append(f"q={quantum}")
+    if algorithm == "priority" and aging_interval > 0:
+        modifiers.append(f"aging={aging_interval}")
+    if modifiers:
+        label += f" ({', '.join(modifiers)})"
+    return label
+
+
+def format_preset_catalog() -> str:
+    lines = ["Available workload presets:"]
+    for preset_name in sorted(WORKLOAD_PRESETS):
+        preset = WORKLOAD_PRESETS[preset_name]
+        lines.append(
+            f"- {preset_name}: {preset['description']} ({repo_relative(preset['path'])})"
+        )
+    return "\n".join(lines)
 
 
 def load_processes(path: Path) -> List[Process]:
@@ -57,6 +111,26 @@ def load_processes(path: Path) -> List[Process]:
             )
         )
     return processes
+
+
+def resolve_workload_source(
+    workload: Optional[Path],
+    preset_name: Optional[str],
+) -> Tuple[List[Process], str, Optional[str], str]:
+    if preset_name and workload is not None:
+        raise ValueError("pass either a workload path or --preset, not both")
+    if preset_name:
+        preset = WORKLOAD_PRESETS[preset_name]
+        path = preset["path"]
+        return (
+            load_processes(path),
+            preset_name,
+            preset_name,
+            repo_relative(path),
+        )
+    if workload is None:
+        raise ValueError("provide a workload path or --preset")
+    return (load_processes(workload), workload.stem, None, repo_relative(workload.resolve()))
 
 
 def normalize_processes(processes: Iterable[Process]) -> List[Process]:
@@ -425,6 +499,93 @@ def simulate(
     )
 
 
+def summarize_result(result: Dict) -> Dict:
+    waiting_values = [row["waiting"] for row in result["processes"]]
+    response_values = [row["response"] for row in result["processes"]]
+    slowdown_values = [row["turnaround"] / row["burst"] for row in result["processes"]]
+    return {
+        "avg_turnaround": result["averages"]["turnaround"],
+        "avg_waiting": result["averages"]["waiting"],
+        "avg_response": result["averages"]["response"],
+        "max_waiting": max(waiting_values),
+        "waiting_spread": max(waiting_values) - min(waiting_values),
+        "response_spread": max(response_values) - min(response_values),
+        "waiting_stddev": round(pstdev(waiting_values), 2),
+        "avg_slowdown": round(sum(slowdown_values) / len(slowdown_values), 2),
+        "cpu_utilization": result["averages"]["cpu_utilization"],
+        "throughput": result["averages"]["throughput"],
+        "context_switches": result["averages"]["context_switches"],
+        "context_switch_overhead_time": result["averages"]["context_switch_overhead_time"],
+        "scheduler_overhead_pct": result["averages"]["scheduler_overhead_pct"],
+        "total_time": result["total_time"],
+        "timeline_slices": len(result["timeline"]),
+    }
+
+
+def metric_winners(entries: Sequence[Dict], key: str, higher_is_better: bool = False) -> List[str]:
+    values = [entry["summary"][key] for entry in entries]
+    target = max(values) if higher_is_better else min(values)
+    return [entry["algorithm"] for entry in entries if entry["summary"][key] == target]
+
+
+def compare_algorithms(
+    processes: Iterable[Process],
+    algorithms: Optional[Sequence[str]] = None,
+    quantum: int = 2,
+    aging_interval: int = 0,
+    context_switch_cost: int = 0,
+    workload_label: str = "workload",
+    workload_source: Optional[str] = None,
+    preset: Optional[str] = None,
+) -> Dict:
+    process_list = normalize_processes(processes)
+    selected_algorithms = ordered_algorithms(algorithms or ALGORITHM_ORDER)
+    if not selected_algorithms:
+        raise ValueError("at least one algorithm is required for compare mode")
+
+    comparison_entries = []
+    for algorithm in selected_algorithms:
+        result = simulate(
+            process_list,
+            algorithm,
+            quantum=quantum,
+            aging_interval=aging_interval,
+            context_switch_cost=context_switch_cost,
+        )
+        comparison_entries.append(
+            {
+                "algorithm": algorithm,
+                "label": format_algorithm_label(algorithm, quantum=quantum, aging_interval=aging_interval),
+                "summary": summarize_result(result),
+                "result": result,
+            }
+        )
+
+    winners = {
+        "avg_turnaround": metric_winners(comparison_entries, "avg_turnaround"),
+        "avg_waiting": metric_winners(comparison_entries, "avg_waiting"),
+        "avg_response": metric_winners(comparison_entries, "avg_response"),
+        "max_waiting": metric_winners(comparison_entries, "max_waiting"),
+        "cpu_utilization": metric_winners(comparison_entries, "cpu_utilization", higher_is_better=True),
+        "throughput": metric_winners(comparison_entries, "throughput", higher_is_better=True),
+        "scheduler_overhead_pct": metric_winners(comparison_entries, "scheduler_overhead_pct"),
+        "total_time": metric_winners(comparison_entries, "total_time"),
+    }
+
+    return {
+        "mode": "compare",
+        "workload_label": workload_label,
+        "workload_source": workload_source,
+        "preset": preset,
+        "process_count": len(process_list),
+        "algorithms": comparison_entries,
+        "quantum": quantum,
+        "aging_interval": aging_interval,
+        "context_switch_cost": context_switch_cost,
+        "winners": winners,
+    }
+
+
 def format_report(
     result: Dict,
     algorithm: str,
@@ -473,12 +634,212 @@ def format_report(
     )
 
 
+def format_compare_markdown(comparison: Dict) -> str:
+    lines = [f"# CPU Scheduler Comparison — {comparison['workload_label']}", ""]
+    if comparison.get("preset"):
+        lines.append(
+            f"- preset: `{comparison['preset']}` — {WORKLOAD_PRESETS[comparison['preset']]['description']}"
+        )
+    if comparison.get("workload_source"):
+        lines.append(f"- workload source: `{comparison['workload_source']}`")
+    lines.extend(
+        [
+            f"- processes: {comparison['process_count']}",
+            f"- algorithms: {', '.join(entry['label'] for entry in comparison['algorithms'])}",
+            f"- round-robin quantum: {comparison['quantum']}",
+            f"- priority aging interval: {comparison['aging_interval']}",
+            f"- context-switch cost: {comparison['context_switch_cost']}",
+            "",
+            "| Algorithm | Avg turnaround | Avg waiting | Avg response | Max wait | CPU util % | Throughput | Overhead % | Total time |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for entry in comparison["algorithms"]:
+        summary = entry["summary"]
+        lines.append(
+            f"| {entry['label']} | {summary['avg_turnaround']} | {summary['avg_waiting']} | {summary['avg_response']} | "
+            f"{summary['max_waiting']} | {summary['cpu_utilization']} | {summary['throughput']} | {summary['scheduler_overhead_pct']} | {summary['total_time']} |"
+        )
+
+    def describe(metric: str, label: str) -> str:
+        return f"- {label}: {', '.join(format_algorithm_label(name, comparison['quantum'], comparison['aging_interval']) for name in comparison['winners'][metric])}"
+
+    lines.extend(
+        [
+            "",
+            "## Takeaways",
+            describe("avg_turnaround", "lowest average turnaround"),
+            describe("avg_waiting", "lowest average waiting"),
+            describe("avg_response", "lowest average response"),
+            describe("max_waiting", "lowest worst-case waiting time"),
+            describe("cpu_utilization", "highest useful CPU utilization"),
+            describe("throughput", "highest throughput"),
+            describe("scheduler_overhead_pct", "lowest scheduler overhead"),
+            describe("total_time", "shortest total completion time"),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def format_compare_html(comparison: Dict) -> str:
+    rows = []
+    for entry in comparison["algorithms"]:
+        summary = entry["summary"]
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(entry['label'])}</td>"
+            f"<td>{summary['avg_turnaround']}</td>"
+            f"<td>{summary['avg_waiting']}</td>"
+            f"<td>{summary['avg_response']}</td>"
+            f"<td>{summary['max_waiting']}</td>"
+            f"<td>{summary['cpu_utilization']}</td>"
+            f"<td>{summary['throughput']}</td>"
+            f"<td>{summary['scheduler_overhead_pct']}</td>"
+            f"<td>{summary['total_time']}</td>"
+            "</tr>"
+        )
+
+    cards = []
+    labels = {
+        "avg_turnaround": "Lowest average turnaround",
+        "avg_waiting": "Lowest average waiting",
+        "avg_response": "Lowest average response",
+        "max_waiting": "Lowest worst-case waiting time",
+        "cpu_utilization": "Highest useful CPU utilization",
+        "throughput": "Highest throughput",
+        "scheduler_overhead_pct": "Lowest scheduler overhead",
+        "total_time": "Shortest total completion time",
+    }
+    for key, title in labels.items():
+        winners = ", ".join(
+            format_algorithm_label(name, comparison["quantum"], comparison["aging_interval"])
+            for name in comparison["winners"][key]
+        )
+        cards.append(
+            "<div class='card'>"
+            f"<h3>{html.escape(title)}</h3>"
+            f"<p>{html.escape(winners)}</p>"
+            "</div>"
+        )
+
+    metadata = []
+    if comparison.get("preset"):
+        metadata.append(
+            f"<li><strong>Preset:</strong> {html.escape(comparison['preset'])} — {html.escape(WORKLOAD_PRESETS[comparison['preset']]['description'])}</li>"
+        )
+    if comparison.get("workload_source"):
+        metadata.append(
+            f"<li><strong>Workload source:</strong> <code>{html.escape(comparison['workload_source'])}</code></li>"
+        )
+    metadata.extend(
+        [
+            f"<li><strong>Processes:</strong> {comparison['process_count']}</li>",
+            f"<li><strong>Algorithms:</strong> {html.escape(', '.join(entry['label'] for entry in comparison['algorithms']))}</li>",
+            f"<li><strong>Round-robin quantum:</strong> {comparison['quantum']}</li>",
+            f"<li><strong>Priority aging interval:</strong> {comparison['aging_interval']}</li>",
+            f"<li><strong>Context-switch cost:</strong> {comparison['context_switch_cost']}</li>",
+        ]
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>CPU Scheduler Comparison — {html.escape(comparison['workload_label'])}</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+    }}
+    body {{
+      margin: 2rem auto;
+      max-width: 1100px;
+      padding: 0 1.25rem 3rem;
+    }}
+    h1, h2, h3 {{ margin-bottom: 0.45rem; }}
+    ul {{ padding-left: 1.2rem; }}
+    .cards {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0 1.75rem;
+    }}
+    .card {{
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      border-radius: 14px;
+      padding: 1rem;
+      background: color-mix(in srgb, Canvas 92%, currentColor 3%);
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }}
+    th, td {{
+      border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      padding: 0.65rem 0.55rem;
+      text-align: right;
+    }}
+    th:first-child, td:first-child {{ text-align: left; }}
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+  </style>
+</head>
+<body>
+  <h1>CPU Scheduler Comparison — {html.escape(comparison['workload_label'])}</h1>
+  <ul>
+    {''.join(metadata)}
+  </ul>
+
+  <div class=\"cards\">
+    {''.join(cards)}
+  </div>
+
+  <h2>Side-by-side metrics</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Algorithm</th>
+        <th>Avg turnaround</th>
+        <th>Avg waiting</th>
+        <th>Avg response</th>
+        <th>Max wait</th>
+        <th>CPU util %</th>
+        <th>Throughput</th>
+        <th>Overhead %</th>
+        <th>Total time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {''.join(rows)}
+    </tbody>
+  </table>
+</body>
+</html>
+"""
+
+
+def write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Simulate classic CPU scheduling algorithms (priority mode treats lower numbers as higher priority)"
+        description="Simulate classic CPU scheduling algorithms, list preset workloads, or compare algorithm tradeoffs"
     )
-    parser.add_argument("algorithm", choices=sorted(SUPPORTED_ALGORITHMS))
-    parser.add_argument("workload", type=Path, help="JSON file with process definitions")
+    parser.add_argument("command", choices=sorted(SUPPORTED_COMMANDS))
+    parser.add_argument(
+        "workload",
+        nargs="?",
+        type=Path,
+        help="JSON file with process definitions (omit when using --preset or list-presets)",
+    )
+    parser.add_argument(
+        "--preset",
+        choices=sorted(WORKLOAD_PRESETS),
+        help="use a committed preset workload instead of passing a JSON file",
+    )
     parser.add_argument("--quantum", type=int, default=2, help="time quantum for round robin")
     parser.add_argument(
         "--aging-interval",
@@ -492,29 +853,90 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="fixed dispatch overhead charged between two different runnable processes",
     )
-    parser.add_argument("--json", action="store_true", help="print raw JSON result")
+    parser.add_argument(
+        "--algorithms",
+        nargs="+",
+        choices=ALGORITHM_ORDER,
+        default=ALGORITHM_ORDER,
+        help="subset of algorithms to include in compare mode",
+    )
+    parser.add_argument("--markdown-out", type=Path, help="write a Markdown report to this path")
+    parser.add_argument("--html-out", type=Path, help="write an HTML dashboard to this path")
+    parser.add_argument("--json-out", type=Path, help="write JSON output to this path")
+    parser.add_argument("--json", action="store_true", help="print raw JSON result to stdout")
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    processes = load_processes(args.workload)
+
+    if args.command == "list-presets":
+        print(format_preset_catalog())
+        return 0
+
+    try:
+        processes, workload_label, preset_name, workload_source = resolve_workload_source(
+            args.workload,
+            args.preset,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    if args.command == "compare":
+        comparison = compare_algorithms(
+            processes,
+            algorithms=args.algorithms,
+            quantum=args.quantum,
+            aging_interval=args.aging_interval,
+            context_switch_cost=args.context_switch_cost,
+            workload_label=workload_label,
+            workload_source=workload_source,
+            preset=preset_name,
+        )
+        if args.markdown_out:
+            write_text(args.markdown_out, format_compare_markdown(comparison))
+        if args.html_out:
+            write_text(args.html_out, format_compare_html(comparison))
+        if args.json_out:
+            write_text(args.json_out, json.dumps(comparison, indent=2))
+        if args.json:
+            print(json.dumps(comparison, indent=2))
+        elif not any([args.markdown_out, args.html_out, args.json_out]):
+            print(format_compare_markdown(comparison))
+        return 0
+
+    if args.html_out:
+        parser.error("--html-out is only supported with compare mode")
+
     result = simulate(
         processes,
-        args.algorithm,
+        args.command,
         quantum=args.quantum,
         aging_interval=args.aging_interval,
         context_switch_cost=args.context_switch_cost,
     )
+    if args.markdown_out:
+        write_text(
+            args.markdown_out,
+            format_report(
+                result,
+                args.command,
+                args.quantum if args.command == "rr" else None,
+                aging_interval=args.aging_interval,
+                context_switch_cost=args.context_switch_cost,
+            ),
+        )
+    if args.json_out:
+        write_text(args.json_out, json.dumps(result, indent=2))
     if args.json:
         print(json.dumps(result, indent=2))
-    else:
+    elif not any([args.markdown_out, args.json_out]):
         print(
             format_report(
                 result,
-                args.algorithm,
-                args.quantum if args.algorithm == "rr" else None,
+                args.command,
+                args.quantum if args.command == "rr" else None,
                 aging_interval=args.aging_interval,
                 context_switch_cost=args.context_switch_cost,
             )

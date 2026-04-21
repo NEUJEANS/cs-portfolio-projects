@@ -1,0 +1,8 @@
+[
+  {"pid": "P1", "arrival": 0, "burst": 6, "priority": 3},
+  {"pid": "P2", "arrival": 1, "burst": 1, "priority": 0},
+  {"pid": "P3", "arrival": 3, "burst": 2, "priority": 1},
+  {"pid": "P4", "arrival": 5, "burst": 1, "priority": 0},
+  {"pid": "P5", "arrival": 6, "burst": 4, "priority": 2},
+  {"pid": "P6", "arrival": 8, "burst": 1, "priority": 0}
+]

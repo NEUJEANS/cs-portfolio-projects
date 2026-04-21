@@ -7,9 +7,10 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - compares non-preemptive and preemptive strategies on the same workload
 - shows how priority aging can reduce starvation for long-waiting jobs
 - shows how context-switch overhead changes wall-clock metrics and scheduler efficiency
+- adds committed workload presets plus side-by-side comparison dashboards for fairness-vs-overhead tradeoffs
 - shows deterministic simulation design and metric calculation
 - includes tests and machine-readable JSON output for verification
-- leaves room for stronger follow-up features like workload presets and MLFQ comparisons
+- leaves room for stronger follow-up features like MLFQ comparisons and random workload generation
 
 ## Features
 - simulate **FCFS**, **SJF (non-preemptive)**, **SRTF (preemptive shortest-remaining-time-first)**, **non-preemptive Priority scheduling**, and **Round Robin**
@@ -18,6 +19,8 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - compute per-process completion, turnaround, waiting, and response times
 - report CPU utilization and throughput
 - optionally charge a fixed `--context-switch-cost` between different runnable processes and surface scheduler-overhead metrics
+- compare multiple algorithms on one workload or preset and export Markdown, HTML, and JSON dashboards
+- use committed workload presets for convoy-effect, interactive-burst, and aging-pressure demos
 - export results as JSON
 - track idle CPU time explicitly in the timeline
 - accept optional per-process priority values (lower number = higher priority)
@@ -45,15 +48,19 @@ python3 scheduler.py priority workload.json --aging-interval 3
 python3 scheduler.py rr workload.json --quantum 2
 python3 scheduler.py rr workload.json --quantum 2 --context-switch-cost 1
 python3 scheduler.py srtf workload.json --json
+python3 scheduler.py list-presets
+python3 scheduler.py compare --preset interactive-bursts --quantum 2 --aging-interval 2 --context-switch-cost 1
 ```
 
-A committed demo workload for the overhead slice lives at `artifacts/cpu-scheduler-simulator/context-switch-sample.json`.
+Committed demo workloads for the project live under `artifacts/cpu-scheduler-simulator/`, including `context-switch-sample.json`, `priority-aging-sample.json`, and the preset catalog in `artifacts/cpu-scheduler-simulator/presets/`.
 
 ```bash
 python3 scheduler.py rr ../../artifacts/cpu-scheduler-simulator/context-switch-sample.json --quantum 2 --context-switch-cost 1
 ```
 
 Priority workloads can include an optional `priority` field. Lower numbers win, and `--aging-interval N` boosts a waiting ready job by one priority level every `N` time units.
+
+`compare` mode runs a shared workload through multiple algorithms and highlights who wins on average turnaround, average waiting, response time, worst-case waiting, CPU utilization, throughput, scheduler overhead, and total completion time. It can print Markdown to stdout or write `--markdown-out`, `--html-out`, and `--json-out` artifacts for portfolio screenshots and repo docs.
 
 When `--context-switch-cost N` is set, the simulator inserts a `CS` slice between two different runnable processes. That cost counts against wall-clock time, lowers useful CPU utilization, and is reported separately as scheduler overhead. The current model deliberately skips idle-to-process dispatches so cross-algorithm churn is easy to compare.
 
@@ -76,6 +83,18 @@ Timeline:
   [6,7): P3
 ```
 
+## Comparison artifact example
+```bash
+python3 scheduler.py compare \
+  --preset interactive-bursts \
+  --quantum 2 \
+  --aging-interval 2 \
+  --context-switch-cost 1 \
+  --markdown-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.md \
+  --html-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.html \
+  --json-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.json
+```
+
 ## Test
 ```bash
 python3 -m unittest -v test_scheduler.py
@@ -83,6 +102,6 @@ python3 -m unittest -v test_scheduler.py
 
 ## Next extensions
 - random workload generation and chart export
-- workload presets for reproducible algorithm comparisons
 - preemptive multi-level feedback queue comparisons
-- side-by-side comparison dashboards for fairness vs overhead tradeoffs
+- richer fairness scoring or slowdown visualizations
+- arrival-pattern editors for custom preset authoring

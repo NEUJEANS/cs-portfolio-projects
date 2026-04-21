@@ -57,3 +57,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, workload presets and comparison dashboards
+- [x] identify the next weakest scheduler gap after context-switch modeling and choose preset-driven side-by-side comparisons
+- [x] do brief scheduler-comparison research and capture a short self-test note
+- [x] add a resumable slice checklist entry
+- [x] add committed workload presets that tell clear scheduler tradeoff stories
+- [x] implement compare-mode Markdown, HTML, and JSON artifact generation
+- [x] update the README and committed sample artifacts so the comparison flow is easy to demo
+- [x] add unit and CLI tests for preset loading, compare-mode summaries, and output writing
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

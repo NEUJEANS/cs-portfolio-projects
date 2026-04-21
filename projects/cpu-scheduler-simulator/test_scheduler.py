@@ -7,7 +7,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from scheduler import Process, format_report, load_processes, simulate
+from scheduler import (
+    Process,
+    compare_algorithms,
+    format_compare_markdown,
+    format_preset_catalog,
+    format_report,
+    load_processes,
+    resolve_workload_source,
+    simulate,
+)
 
 
 class SchedulerTests(unittest.TestCase):
@@ -218,6 +227,51 @@ class SchedulerTests(unittest.TestCase):
             [proc] = load_processes(path)
             self.assertEqual(proc.priority, 0)
 
+    def test_resolve_workload_source_uses_preset_catalog(self):
+        processes, label, preset_name, source = resolve_workload_source(None, "interactive-bursts")
+        self.assertEqual(label, "interactive-bursts")
+        self.assertEqual(preset_name, "interactive-bursts")
+        self.assertTrue(source.endswith("artifacts/cpu-scheduler-simulator/presets/interactive-bursts.json"))
+        self.assertGreaterEqual(len(processes), 3)
+
+    def test_compare_algorithms_collects_summary_and_winners(self):
+        comparison = compare_algorithms(
+            [
+                Process("P1", arrival=0, burst=7, priority=4),
+                Process("P2", arrival=1, burst=1, priority=0),
+                Process("P3", arrival=2, burst=2, priority=1),
+            ],
+            algorithms=["fcfs", "srtf", "rr"],
+            quantum=2,
+            context_switch_cost=1,
+            workload_label="demo",
+            workload_source="demo.json",
+        )
+        self.assertEqual(comparison["workload_label"], "demo")
+        self.assertEqual([entry["algorithm"] for entry in comparison["algorithms"]], ["fcfs", "srtf", "rr"])
+        fcfs = next(entry for entry in comparison["algorithms"] if entry["algorithm"] == "fcfs")
+        srtf = next(entry for entry in comparison["algorithms"] if entry["algorithm"] == "srtf")
+        self.assertGreater(fcfs["summary"]["avg_response"], srtf["summary"]["avg_response"])
+        self.assertIn("srtf", comparison["winners"]["avg_response"])
+
+    def test_format_compare_markdown_mentions_takeaways(self):
+        comparison = compare_algorithms(
+            [Process("P1", arrival=0, burst=4), Process("P2", arrival=1, burst=1)],
+            algorithms=["fcfs", "sjf"],
+            workload_label="tiny",
+            workload_source="tiny.json",
+        )
+        report = format_compare_markdown(comparison)
+        self.assertIn("# CPU Scheduler Comparison — tiny", report)
+        self.assertIn("## Takeaways", report)
+        self.assertIn("| Algorithm | Avg turnaround | Avg waiting | Avg response | Max wait | CPU util % | Throughput | Overhead % | Total time |", report)
+        self.assertIn("lowest average waiting", report)
+
+    def test_format_preset_catalog_lists_new_presets(self):
+        catalog = format_preset_catalog()
+        self.assertIn("interactive-bursts", catalog)
+        self.assertIn("aging-pressure", catalog)
+
     def test_cli_json_output_for_srtf(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workload.json"
@@ -282,6 +336,85 @@ class SchedulerTests(unittest.TestCase):
             self.assertEqual(payload["context_switch_cost"], 2)
             self.assertEqual(payload["timeline"][1]["pid"], "CS")
             self.assertEqual(payload["averages"]["context_switch_overhead_time"], 2)
+
+    def test_cli_compare_json_output_for_preset(self):
+        completed = subprocess.run(
+            [
+                "python3",
+                "scheduler.py",
+                "compare",
+                "--preset",
+                "interactive-bursts",
+                "--quantum",
+                "2",
+                "--aging-interval",
+                "2",
+                "--context-switch-cost",
+                "1",
+                "--json",
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "compare")
+        self.assertEqual(payload["preset"], "interactive-bursts")
+        self.assertEqual(len(payload["algorithms"]), 5)
+
+    def test_cli_run_supports_preset_workload(self):
+        completed = subprocess.run(
+            [
+                "python3",
+                "scheduler.py",
+                "rr",
+                "--preset",
+                "interactive-bursts",
+                "--quantum",
+                "2",
+                "--json",
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["processes"][0]["pid"], "P1")
+        self.assertGreater(len(payload["timeline"]), 1)
+
+    def test_cli_compare_writes_dashboard_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            markdown_out = base / "compare.md"
+            html_out = base / "compare.html"
+            json_out = base / "compare.json"
+            subprocess.run(
+                [
+                    "python3",
+                    "scheduler.py",
+                    "compare",
+                    "--preset",
+                    "convoy-mix",
+                    "--markdown-out",
+                    str(markdown_out),
+                    "--html-out",
+                    str(html_out),
+                    "--json-out",
+                    str(json_out),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertTrue(markdown_out.exists())
+            self.assertTrue(html_out.exists())
+            self.assertTrue(json_out.exists())
+            self.assertIn("CPU Scheduler Comparison", markdown_out.read_text())
+            self.assertIn("<table>", html_out.read_text())
+            self.assertEqual(json.loads(json_out.read_text())["mode"], "compare")
 
 
 if __name__ == "__main__":
