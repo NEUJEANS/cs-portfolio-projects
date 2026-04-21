@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import csv
 import hashlib
 import json
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, Sequence
 
 
@@ -251,6 +253,133 @@ def benchmark_virtual_nodes(
     return payload
 
 
+def _format_float(value: float) -> str:
+    return f"{value:.4f}".rstrip("0").rstrip(".")
+
+
+def benchmark_series_rows(payload: dict[str, object]) -> list[dict[str, object]]:
+    topology_change = payload.get("topology_change")
+    topology_action = ""
+    topology_node = ""
+    if isinstance(topology_change, dict):
+        topology_action = str(topology_change.get("action", ""))
+        topology_node = str(topology_change.get("node", ""))
+
+    rows: list[dict[str, object]] = []
+    for point in payload["series"]:
+        rows.append(
+            {
+                "node_count": payload["node_count"],
+                "key_count": payload["key_count"],
+                "replication_factor": payload["replication_factor"],
+                "virtual_nodes": point["virtual_nodes"],
+                "max_load": point["max_load"],
+                "min_load": point["min_load"],
+                "average_load": round(float(point["average_load"]), 4),
+                "imbalance_ratio": round(float(point["imbalance_ratio"]), 4),
+                "moved_keys": point.get("moved_keys", 0),
+                "movement_ratio": round(float(point.get("movement_ratio", 0.0)), 4),
+                "replica_placement_changes": point.get("replica_placement_changes", 0),
+                "best_imbalance_virtual_nodes": payload["best_imbalance_virtual_nodes"],
+                "best_imbalance_ratio": round(float(payload["best_imbalance_ratio"]), 4),
+                "topology_action": topology_action,
+                "topology_node": topology_node,
+            }
+        )
+    return rows
+
+
+def save_benchmark_series_csv(payload: dict[str, object], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = benchmark_series_rows(payload)
+    fieldnames = [
+        "node_count",
+        "key_count",
+        "replication_factor",
+        "virtual_nodes",
+        "max_load",
+        "min_load",
+        "average_load",
+        "imbalance_ratio",
+        "moved_keys",
+        "movement_ratio",
+        "replica_placement_changes",
+        "best_imbalance_virtual_nodes",
+        "best_imbalance_ratio",
+        "topology_action",
+        "topology_node",
+    ]
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def render_benchmark_series_markdown(payload: dict[str, object]) -> str:
+    topology_change = payload.get("topology_change")
+    topology_line = "- Topology change: none"
+    if isinstance(topology_change, dict):
+        topology_line = f"- Topology change: {topology_change['action']} `{topology_change['node']}`"
+
+    lines = [
+        "# Consistent Hashing Virtual-Node Benchmark Report",
+        "",
+        "Deterministic benchmark summary for the consistent-hashing lab. It turns the JSON benchmark series into a recruiter-friendly table so load-balance and remap tradeoffs are readable without extra scripting.",
+        "",
+        f"- Physical nodes: {payload['node_count']} ({', '.join(payload['nodes'])})",
+        f"- Keys: {payload['key_count']}",
+        f"- Replication factor: {payload['replication_factor']}",
+        topology_line,
+        f"- Best imbalance ratio: {_format_float(float(payload['best_imbalance_ratio']))} at `{payload['best_imbalance_virtual_nodes']}` virtual nodes per physical node",
+        "",
+        "## Benchmark series",
+        "",
+        "| Virtual nodes | Max load | Min load | Average load | Imbalance ratio | Moved keys | Movement ratio | Replica placement changes |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+
+    for point in payload["series"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(point["virtual_nodes"]),
+                    str(point["max_load"]),
+                    str(point["min_load"]),
+                    _format_float(float(point["average_load"])),
+                    _format_float(float(point["imbalance_ratio"])),
+                    str(point.get("moved_keys", 0)),
+                    _format_float(float(point.get("movement_ratio", 0.0))),
+                    str(point.get("replica_placement_changes", 0)),
+                ]
+            )
+            + " |"
+        )
+
+    best_virtual_nodes = payload["best_imbalance_virtual_nodes"]
+    best_point = next(point for point in payload["series"] if point["virtual_nodes"] == best_virtual_nodes)
+    lines.extend(
+        [
+            "",
+            "## Takeaways",
+            "",
+            f"- The most balanced tested ring used `{best_virtual_nodes}` virtual nodes per physical node, with an imbalance ratio of `{_format_float(float(best_point['imbalance_ratio']))}`.",
+            f"- At that setting, the load range was `{best_point['min_load']}` to `{best_point['max_load']}` around an average of `{_format_float(float(best_point['average_load']))}` keys per physical node.",
+        ]
+    )
+    if "movement_ratio" in best_point:
+        lines.append(
+            f"- Under the tested topology change, the best-balance configuration moved `{best_point.get('moved_keys', 0)}` keys, a movement ratio of `{_format_float(float(best_point.get('movement_ratio', 0.0)))}`, with `{best_point.get('replica_placement_changes', 0)}` replica-placement changes."
+        )
+    return "\n".join(lines) + "\n"
+
+
+def save_benchmark_series_markdown(payload: dict[str, object], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_benchmark_series_markdown(payload), encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Consistent hashing ring lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -287,6 +416,8 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--key-prefix", default="key")
     benchmark.add_argument("--virtual-node-counts", nargs="+", type=positive_int, required=True)
     benchmark.add_argument("--replication-factor", type=positive_int, default=1)
+    benchmark.add_argument("--csv-out")
+    benchmark.add_argument("--markdown-out")
     benchmark_change = benchmark.add_mutually_exclusive_group()
     benchmark_change.add_argument("--add-node")
     benchmark_change.add_argument("--remove-node")
@@ -326,6 +457,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             add=args.add_node,
             remove=args.remove_node,
         )
+        if args.csv_out:
+            csv_output_path = Path(args.csv_out)
+            save_benchmark_series_csv(payload, csv_output_path)
+            payload["csv_output"] = str(csv_output_path)
+        if args.markdown_out:
+            markdown_output_path = Path(args.markdown_out)
+            save_benchmark_series_markdown(payload, markdown_output_path)
+            payload["markdown_output"] = str(markdown_output_path)
 
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0

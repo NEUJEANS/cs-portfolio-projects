@@ -16,6 +16,7 @@ A distributed-systems portfolio project that simulates a consistent hashing ring
 - effective replication reporting when requested replicas exceed available nodes
 - node add/remove remap simulation with movement ratio and replica-placement change output
 - virtual-node benchmark mode that compares imbalance and optional remap behavior across multiple ring sizes
+- chart-ready CSV export and recruiter-friendly Markdown export for benchmark series
 
 ## Usage
 
@@ -88,11 +89,31 @@ python3 consistent_hashing.py benchmark \
   --add-node node-d
 ```
 
+Write the same benchmark series to chart-ready CSV and a portfolio-friendly Markdown report:
+
+```bash
+python3 consistent_hashing.py benchmark \
+  --nodes node-a node-b node-c \
+  --key-count 5000 \
+  --virtual-node-counts 1 8 32 128 \
+  --replication-factor 2 \
+  --add-node node-d \
+  --csv-out docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.csv \
+  --markdown-out docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.md
+```
+
 ## Notes
 - Replica selection always returns distinct physical nodes.
 - If `--replication-factor` is larger than the number of physical nodes, the report exposes the capped `effective_replication_factor`.
 - `benchmark` returns `best_imbalance_virtual_nodes` so the most balanced tested ring size is easy to spot in screenshots or follow-up exports.
 - `benchmark` accepts either `--add-node` or `--remove-node` when you want movement metrics, but not both in the same run.
+- `--csv-out` flattens the benchmark series into spreadsheet-friendly rows, including the tested topology change and the best imbalance point.
+- `--markdown-out` renders the same deterministic series as a concise benchmark report with a summary table and takeaways.
+
+## Sample committed artifacts
+- `docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.json`
+- `docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.csv`
+- `docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.md`
 
 ## Test
 
@@ -102,5 +123,4 @@ python3 -m unittest projects/consistent-hashing-lab/test_consistent_hashing.py
 
 ## Future improvements
 - render the ring visually for before/after topology screenshots
-- export benchmark series to CSV or Markdown for portfolio-ready charts
 - simulate rack/zone-aware replica placement constraints

@@ -1,0 +1,67 @@
+{
+  "best_imbalance_ratio": 1.032,
+  "best_imbalance_virtual_nodes": 128,
+  "csv_output": "docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.csv",
+  "key_count": 5000,
+  "key_prefix": "key",
+  "markdown_output": "docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.md",
+  "node_count": 3,
+  "nodes": [
+    "node-a",
+    "node-b",
+    "node-c"
+  ],
+  "replication_factor": 2,
+  "series": [
+    {
+      "average_load": 3333.3333333333335,
+      "imbalance_ratio": 1.4877,
+      "max_load": 4959,
+      "min_load": 1968,
+      "moved_keys": 2699,
+      "movement_ratio": 0.5398,
+      "replica_placement_changes": 5398,
+      "virtual_nodes": 1
+    },
+    {
+      "average_load": 3333.3333333333335,
+      "imbalance_ratio": 1.1736,
+      "max_load": 3912,
+      "min_load": 2765,
+      "moved_keys": 2548,
+      "movement_ratio": 0.5096,
+      "replica_placement_changes": 5096,
+      "virtual_nodes": 8
+    },
+    {
+      "average_load": 3333.3333333333335,
+      "imbalance_ratio": 1.0503,
+      "max_load": 3501,
+      "min_load": 3130,
+      "moved_keys": 2477,
+      "movement_ratio": 0.4954,
+      "replica_placement_changes": 4954,
+      "virtual_nodes": 32
+    },
+    {
+      "average_load": 3333.3333333333335,
+      "imbalance_ratio": 1.032,
+      "max_load": 3440,
+      "min_load": 3177,
+      "moved_keys": 2554,
+      "movement_ratio": 0.5108,
+      "replica_placement_changes": 5108,
+      "virtual_nodes": 128
+    }
+  ],
+  "topology_change": {
+    "action": "add",
+    "node": "node-d"
+  },
+  "virtual_node_counts": [
+    1,
+    8,
+    32,
+    128
+  ]
+}

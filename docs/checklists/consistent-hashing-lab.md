@@ -44,3 +44,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 benchmark export slice
+- [x] capture brief benchmark-export research note
+- [x] capture short benchmark-export refresh and self-test
+- [x] extend checklist and README scope for export support
+- [x] add benchmark-series CSV export for chart-ready analysis
+- [x] add benchmark-series Markdown export for portfolio-ready summaries
+- [x] save reproducible benchmark artifacts under `docs/artifacts/consistent-hashing-lab/`
+- [x] add unit tests for export helpers and CLI output paths
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

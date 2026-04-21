@@ -1,0 +1,5 @@
+node_count,key_count,replication_factor,virtual_nodes,max_load,min_load,average_load,imbalance_ratio,moved_keys,movement_ratio,replica_placement_changes,best_imbalance_virtual_nodes,best_imbalance_ratio,topology_action,topology_node
+3,5000,2,1,4959,1968,3333.3333,1.4877,2699,0.5398,5398,128,1.032,add,node-d
+3,5000,2,8,3912,2765,3333.3333,1.1736,2548,0.5096,5096,128,1.032,add,node-d
+3,5000,2,32,3501,3130,3333.3333,1.0503,2477,0.4954,4954,128,1.032,add,node-d
+3,5000,2,128,3440,3177,3333.3333,1.032,2554,0.5108,5108,128,1.032,add,node-d

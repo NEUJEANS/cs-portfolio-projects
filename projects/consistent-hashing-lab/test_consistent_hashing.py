@@ -1,13 +1,21 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-from consistent_hashing import ConsistentHashRing, benchmark_virtual_nodes, generate_keys, simulate_remap
+from consistent_hashing import (
+    ConsistentHashRing,
+    benchmark_series_rows,
+    benchmark_virtual_nodes,
+    generate_keys,
+    render_benchmark_series_markdown,
+    simulate_remap,
+)
 
 
 SCRIPT = PROJECT_DIR / "consistent_hashing.py"
@@ -96,6 +104,35 @@ class ConsistentHashRingTests(unittest.TestCase):
             self.assertGreater(point["replica_placement_changes"], 0)
             self.assertGreater(point["movement_ratio"], 0.0)
 
+    def test_benchmark_series_rows_flatten_topology_and_best_metrics(self):
+        payload = benchmark_virtual_nodes(
+            ["node-a", "node-b", "node-c"],
+            key_count=500,
+            virtual_node_counts=[8, 32],
+            add="node-d",
+        )
+        rows = benchmark_series_rows(payload)
+        self.assertEqual([row["virtual_nodes"] for row in rows], [8, 32])
+        self.assertTrue(all(row["topology_action"] == "add" for row in rows))
+        self.assertTrue(all(row["topology_node"] == "node-d" for row in rows))
+        self.assertTrue(all("best_imbalance_ratio" in row for row in rows))
+
+    def test_render_benchmark_series_markdown_highlights_best_point(self):
+        payload = benchmark_virtual_nodes(
+            ["node-a", "node-b", "node-c", "node-d"],
+            key_count=1200,
+            virtual_node_counts=[1, 16, 128],
+            add="node-e",
+            replication_factor=2,
+        )
+        markdown = render_benchmark_series_markdown(payload)
+        self.assertIn("# Consistent Hashing Virtual-Node Benchmark Report", markdown)
+        self.assertIn("## Benchmark series", markdown)
+        self.assertIn("| Virtual nodes | Max load | Min load | Average load |", markdown)
+        self.assertIn("Topology change: add `node-e`", markdown)
+        self.assertIn("## Takeaways", markdown)
+        self.assertIn(str(payload["best_imbalance_virtual_nodes"]), markdown)
+
     def test_benchmark_deduplicates_virtual_node_counts(self):
         payload = benchmark_virtual_nodes(
             ["node-a", "node-b", "node-c"],
@@ -168,6 +205,49 @@ class ConsistentHashRingTests(unittest.TestCase):
         self.assertEqual(payload["virtual_node_counts"], [1, 16, 128])
         self.assertEqual(payload["topology_change"], {"action": "add", "node": "node-d"})
         self.assertIn("movement_ratio", payload["series"][0])
+
+    def test_cli_benchmark_can_write_csv_and_markdown_exports(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            csv_path = tmp_path / "benchmark.csv"
+            markdown_path = tmp_path / "benchmark.md"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "benchmark",
+                    "--nodes",
+                    "node-a",
+                    "node-b",
+                    "node-c",
+                    "--key-count",
+                    "800",
+                    "--virtual-node-counts",
+                    "1",
+                    "8",
+                    "64",
+                    "--add-node",
+                    "node-d",
+                    "--csv-out",
+                    str(csv_path),
+                    "--markdown-out",
+                    str(markdown_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["csv_output"], str(csv_path))
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertTrue(csv_path.exists())
+            self.assertTrue(markdown_path.exists())
+            csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("virtual_nodes,max_load,min_load,average_load,imbalance_ratio", csv_text)
+            self.assertIn("topology_action,topology_node", csv_text)
+            markdown = markdown_path.read_text(encoding="utf-8")
+            self.assertIn("# Consistent Hashing Virtual-Node Benchmark Report", markdown)
+            self.assertIn("Topology change: add `node-d`", markdown)
 
     def test_cli_rejects_conflicting_benchmark_topology_changes(self):
         result = subprocess.run(
