@@ -12,4 +12,4 @@
 - [x] expose history and circulation analytics commands so the new audit trail is visible in CLI demos
 - [x] backfill still-active legacy checkouts into the normalized loan tables during migration
 - [x] add a small HTML and Markdown circulation dashboard export for recruiter-friendly portfolio screenshots
-- [ ] add chart-friendly trend exports (CSV or SVG) so the dashboard can evolve from a point-in-time snapshot into a small analytics pack
+- [x] add chart-friendly trend exports (CSV or SVG) so the dashboard can evolve from a point-in-time snapshot into a small analytics pack

@@ -10,9 +10,12 @@ from library_manager import (
     Library,
     LibraryError,
     build_dashboard_snapshot,
+    build_trend_snapshot,
     main,
     render_dashboard_html,
     render_dashboard_markdown,
+    render_trends_csv,
+    render_trends_svg,
 )
 
 
@@ -335,6 +338,98 @@ class LibraryTests(unittest.TestCase):
         history = lib.loan_history(status='all', reference_date=date(2026, 4, 25))
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['loan_status'], 'overdue')
+
+    def test_circulation_trends_capture_daily_metrics_and_respect_range(self):
+        lib, _ = self.make_library()
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 5))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+
+        snapshot = build_trend_snapshot(
+            lib,
+            start_date=date(2026, 4, 1),
+            end_date=date(2026, 4, 12),
+            title='Trend pack',
+            generated_at='2026-04-12T09:00:00Z',
+        )
+
+        self.assertEqual(snapshot['start_date'], '2026-04-01')
+        self.assertEqual(snapshot['end_date'], '2026-04-12')
+        self.assertEqual(snapshot['days'], 12)
+        self.assertEqual(snapshot['summary']['peak_active_loans'], 2)
+        self.assertEqual(snapshot['summary']['peak_overdue_loans'], 1)
+        self.assertEqual(snapshot['summary']['total_checkouts_started'], 2)
+        self.assertEqual(snapshot['summary']['total_returns_completed'], 1)
+
+        by_day = {row['date']: row for row in snapshot['points']}
+        self.assertEqual(by_day['2026-04-01']['active_loans'], 1)
+        self.assertEqual(by_day['2026-04-05']['checkouts_started'], 1)
+        self.assertEqual(by_day['2026-04-09']['overdue_loans'], 1)
+        self.assertEqual(by_day['2026-04-10']['returns_completed'], 1)
+        self.assertEqual(by_day['2026-04-10']['completed_loans'], 1)
+        self.assertEqual(by_day['2026-04-10']['late_returns'], 1)
+        self.assertEqual(by_day['2026-04-10']['active_loans'], 1)
+
+        csv_output = render_trends_csv(snapshot)
+        self.assertIn('date,active_loans,overdue_loans,completed_loans,late_returns,checkouts_started,returns_completed', csv_output)
+        self.assertIn('2026-04-10,1,0,1,1,0,1', csv_output)
+
+        svg_output = render_trends_svg(snapshot)
+        self.assertIn('Trend pack', svg_output)
+        self.assertIn('library-trends-title', svg_output)
+        self.assertIn('active-panel-title', svg_output)
+        self.assertIn('Range: 2026-04-01 to 2026-04-12', svg_output)
+
+    def test_cli_trends_writes_artifacts_and_supports_stdout_mode(self):
+        lib, db = self.make_library()
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 5))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        csv_path = Path(tmp.name) / 'artifacts' / 'trends.csv'
+        svg_path = Path(tmp.name) / 'artifacts' / 'trends.svg'
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(
+                [
+                    '--db',
+                    str(db),
+                    'trends',
+                    '--start-date',
+                    '2026-04-01',
+                    '--end-date',
+                    '2026-04-12',
+                    '--csv-out',
+                    str(csv_path),
+                    '--svg-out',
+                    str(svg_path),
+                    '--title',
+                    'CLI trends',
+                    '--generated-at',
+                    '2026-04-12T09:00:00Z',
+                ]
+            )
+        command_output = buffer.getvalue()
+        self.assertIn('trend artifacts written:', command_output)
+        self.assertTrue(csv_path.exists())
+        self.assertTrue(svg_path.exists())
+        self.assertIn('2026-04-10,1,0,1,1,0,1', csv_path.read_text())
+        self.assertIn('CLI trends', svg_path.read_text())
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'trends', '--start-date', '2026-04-01', '--end-date', '2026-04-03'])
+        stdout_trends = buffer.getvalue()
+        self.assertIn('date,active_loans,overdue_loans,completed_loans,late_returns,checkouts_started,returns_completed', stdout_trends)
+        self.assertIn('2026-04-01,1,0,0,0,1,0', stdout_trends)
 
     def test_cli_dashboard_writes_artifacts_and_supports_stdout_mode(self):
         lib, db = self.make_library()

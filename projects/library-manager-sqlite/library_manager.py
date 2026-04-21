@@ -530,6 +530,81 @@ class Library:
         with self._connect() as conn:
             return [dict(r) for r in conn.execute(sql, params)]
 
+    def circulation_trends(self, start_date=None, end_date=None):
+        today = date.today()
+        with self._connect() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    'SELECT checked_out_at, due_date, returned_at FROM loans ORDER BY checked_out_at, id'
+                )
+            ]
+
+        parsed_loans = []
+        min_checkout_day = None
+        max_activity_day = None
+        for row in rows:
+            checked_out_day = self._parse_iso_date(row['checked_out_at'])
+            due_day = self._parse_iso_date(row['due_date'])
+            returned_day = self._parse_iso_date(row['returned_at'])
+            if checked_out_day is None or due_day is None:
+                continue
+            parsed_loans.append(
+                {
+                    'checked_out_day': checked_out_day,
+                    'due_day': due_day,
+                    'returned_day': returned_day,
+                }
+            )
+            min_checkout_day = checked_out_day if min_checkout_day is None else min(min_checkout_day, checked_out_day)
+            activity_day = returned_day or checked_out_day
+            max_activity_day = activity_day if max_activity_day is None else max(max_activity_day, activity_day)
+
+        resolved_start = start_date or min_checkout_day or today
+        resolved_end = end_date or max(max_activity_day or resolved_start, today)
+        if resolved_end < resolved_start:
+            raise LibraryError('end date must be on or after start date')
+
+        points = []
+        current_day = resolved_start
+        while current_day <= resolved_end:
+            active_loans = 0
+            overdue_loans = 0
+            completed_loans = 0
+            late_returns = 0
+            checkouts_started = 0
+            returns_completed = 0
+
+            for loan in parsed_loans:
+                if loan['checked_out_day'] == current_day:
+                    checkouts_started += 1
+                if loan['returned_day'] == current_day:
+                    returns_completed += 1
+                if loan['checked_out_day'] <= current_day and (
+                    loan['returned_day'] is None or loan['returned_day'] > current_day
+                ):
+                    active_loans += 1
+                    if loan['due_day'] < current_day:
+                        overdue_loans += 1
+                if loan['returned_day'] is not None and loan['returned_day'] <= current_day:
+                    completed_loans += 1
+                    if loan['returned_day'] > loan['due_day']:
+                        late_returns += 1
+
+            points.append(
+                {
+                    'date': current_day.isoformat(),
+                    'active_loans': active_loans,
+                    'overdue_loans': overdue_loans,
+                    'completed_loans': completed_loans,
+                    'late_returns': late_returns,
+                    'checkouts_started': checkouts_started,
+                    'returns_completed': returns_completed,
+                }
+            )
+            current_day += timedelta(days=1)
+        return points
+
 
 
 def format_book(row):
@@ -1061,6 +1136,176 @@ def render_dashboard_html(snapshot):
 
 
 
+def build_trend_snapshot(
+    library,
+    start_date=None,
+    end_date=None,
+    title='Library circulation trends',
+    generated_at=None,
+):
+    points = library.circulation_trends(start_date=start_date, end_date=end_date)
+    return {
+        'title': title.strip() or 'Library circulation trends',
+        'generated_at': generated_at or _utc_timestamp_iso(),
+        'start_date': points[0]['date'],
+        'end_date': points[-1]['date'],
+        'days': len(points),
+        'points': points,
+        'summary': {
+            'peak_active_loans': max(point['active_loans'] for point in points),
+            'peak_overdue_loans': max(point['overdue_loans'] for point in points),
+            'total_checkouts_started': sum(point['checkouts_started'] for point in points),
+            'total_returns_completed': sum(point['returns_completed'] for point in points),
+        },
+    }
+
+
+def render_trends_csv(snapshot):
+    headers = [
+        'date',
+        'active_loans',
+        'overdue_loans',
+        'completed_loans',
+        'late_returns',
+        'checkouts_started',
+        'returns_completed',
+    ]
+    lines = [','.join(headers)]
+    for row in snapshot['points']:
+        lines.append(','.join(str(row[header]) for header in headers))
+    return '\n'.join(lines).rstrip()
+
+
+def _trend_x(index, count, left, width):
+    if count <= 1:
+        return left + width / 2
+    return left + (index * width / (count - 1))
+
+
+def _trend_y(value, max_value, top, height):
+    scale_max = max(max_value, 1)
+    return top + height - ((value / scale_max) * height)
+
+
+def _render_trend_panel(snapshot, metric_key, label, color, left, top, width, height, panel_id):
+    points = snapshot['points']
+    values = [point[metric_key] for point in points]
+    max_value = max(values) if values else 0
+    chart_left = left + 52
+    chart_top = top + 42
+    chart_width = width - 78
+    chart_height = height - 82
+    baseline_y = chart_top + chart_height
+    mid_value = max((max_value + 1) // 2, 1) if max_value else 0
+    y_ticks = [0]
+    if max_value > 1 and mid_value not in {0, max_value}:
+        y_ticks.append(mid_value)
+    if max_value not in {0, y_ticks[-1]}:
+        y_ticks.append(max_value)
+
+    polyline = ' '.join(
+        f'{_trend_x(index, len(points), chart_left, chart_width):.2f},{_trend_y(value, max_value, chart_top, chart_height):.2f}'
+        for index, value in enumerate(values)
+    )
+    circles = ''.join(
+        (
+            f'<circle cx="{_trend_x(index, len(points), chart_left, chart_width):.2f}" '
+            f'cy="{_trend_y(value, max_value, chart_top, chart_height):.2f}" r="3.5" fill="{color}">'
+            f'<title>{escape(label)} on {escape(points[index]["date"])}: {value}</title>'
+            '</circle>'
+        )
+        for index, value in enumerate(values)
+    )
+    grid_lines = ''.join(
+        (
+            f'<line x1="{chart_left:.2f}" y1="{_trend_y(tick, max_value, chart_top, chart_height):.2f}" '
+            f'x2="{chart_left + chart_width:.2f}" y2="{_trend_y(tick, max_value, chart_top, chart_height):.2f}" '
+            'stroke="#dbe4f0" stroke-width="1" />'
+            f'<text x="{left + 14:.2f}" y="{_trend_y(tick, max_value, chart_top, chart_height) + 4:.2f}" '
+            'font-size="12" fill="#64748b">'
+            f'{escape(str(tick))}'
+            '</text>'
+        )
+        for tick in y_ticks
+    )
+    first_date = points[0]['date']
+    mid_date = points[len(points) // 2]['date']
+    last_date = points[-1]['date']
+    axis_labels = ''.join(
+        (
+            f'<text x="{x:.2f}" y="{top + height - 16:.2f}" font-size="12" fill="#64748b" '
+            f'text-anchor="{anchor}">{escape(label_text)}</text>'
+        )
+        for x, label_text, anchor in [
+            (chart_left, first_date, 'start'),
+            (chart_left + chart_width / 2, mid_date, 'middle'),
+            (chart_left + chart_width, last_date, 'end'),
+        ]
+    )
+    latest_value = values[-1] if values else 0
+    title_id = f'{panel_id}-title'
+    desc_id = f'{panel_id}-desc'
+    return (
+        f'<g role="group" aria-labelledby="{title_id}" aria-describedby="{desc_id}">'
+        f'<title id="{title_id}">{escape(label)}</title>'
+        f'<desc id="{desc_id}">Daily {escape(label.lower())} from {escape(snapshot["start_date"])} '
+        f'to {escape(snapshot["end_date"])}. Peak value {max_value}, latest value {latest_value}.</desc>'
+        f'<rect x="{left:.2f}" y="{top:.2f}" width="{width:.2f}" height="{height:.2f}" '
+        'rx="22" fill="#ffffff" stroke="#d6deeb" />'
+        f'<text x="{left + 18:.2f}" y="{top + 28:.2f}" font-size="18" font-weight="700" fill="#0f172a">{escape(label)}</text>'
+        f'<text x="{left + width - 18:.2f}" y="{top + 28:.2f}" font-size="13" font-weight="600" fill="{color}" text-anchor="end">latest {latest_value}</text>'
+        f'{grid_lines}'
+        f'<line x1="{chart_left:.2f}" y1="{baseline_y:.2f}" x2="{chart_left + chart_width:.2f}" y2="{baseline_y:.2f}" stroke="#94a3b8" stroke-width="1.2" />'
+        f'<polyline fill="none" stroke="{color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="{polyline}" />'
+        f'{circles}'
+        f'{axis_labels}'
+        '</g>'
+    )
+
+
+def render_trends_svg(snapshot):
+    summary = snapshot['summary']
+    title_id = 'library-trends-title'
+    desc_id = 'library-trends-desc'
+    cards = [
+        ('Peak active loans', summary['peak_active_loans'], '#2563eb'),
+        ('Peak overdue loans', summary['peak_overdue_loans'], '#d97706'),
+        ('Total checkouts', summary['total_checkouts_started'], '#7c3aed'),
+        ('Total returns', summary['total_returns_completed'], '#059669'),
+    ]
+    card_markup = ''.join(
+        (
+            f'<g transform="translate({40 + index * 270}, 118)">'
+            '<rect width="240" height="88" rx="18" fill="#ffffff" stroke="#d6deeb" />'
+            f'<text x="18" y="32" font-size="13" fill="#64748b">{escape(label)}</text>'
+            f'<text x="18" y="67" font-size="30" font-weight="700" fill="{color}">{value}</text>'
+            '</g>'
+        )
+        for index, (label, value, color) in enumerate(cards)
+    )
+    panels = [
+        ('active_loans', 'Active loans', '#2563eb', 40, 240, 'active-panel'),
+        ('overdue_loans', 'Overdue loans', '#d97706', 600, 240, 'overdue-panel'),
+        ('checkouts_started', 'Checkouts started', '#7c3aed', 40, 500, 'checkouts-panel'),
+        ('returns_completed', 'Returns completed', '#059669', 600, 500, 'returns-panel'),
+    ]
+    panel_markup = ''.join(
+        _render_trend_panel(snapshot, metric_key, label, color, left, top, 520, 220, panel_id)
+        for metric_key, label, color, left, top, panel_id in panels
+    )
+    return f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1160\" height=\"760\" viewBox=\"0 0 1160 760\" role=\"img\" aria-labelledby=\"{title_id}\" aria-describedby=\"{desc_id}\">
+  <title id=\"{title_id}\">{escape(snapshot['title'])}</title>
+  <desc id=\"{desc_id}\">Small-multiple circulation trend charts covering {escape(snapshot['start_date'])} through {escape(snapshot['end_date'])}. The export includes active loans, overdue loans, daily checkouts, and daily returns.</desc>
+  <rect width=\"1160\" height=\"760\" fill=\"#f4f7fb\" />
+  <rect x=\"24\" y=\"24\" width=\"1112\" height=\"712\" rx=\"28\" fill=\"#eef4ff\" stroke=\"#d6deeb\" />
+  <text x=\"40\" y=\"70\" font-size=\"30\" font-weight=\"700\" fill=\"#0f172a\">{escape(snapshot['title'])}</text>
+  <text x=\"40\" y=\"98\" font-size=\"15\" fill=\"#475569\">Daily circulation analytics for a recruiter-friendly portfolio artifact, exported from the SQLite CLI without opening the database manually.</text>
+  <text x=\"40\" y=\"220\" font-size=\"14\" fill=\"#475569\">Range: {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])} • Days: {snapshot['days']} • Generated at: {escape(snapshot['generated_at'])}</text>
+  {card_markup}
+  {panel_markup}
+</svg>"""
+
+
 def parse_optional_date(value, label):
     if not value:
         return None
@@ -1119,6 +1364,14 @@ def main(argv=None):
     stats_parser.add_argument('--date', dest='reference_date')
     stats_parser.add_argument('--top', type=int, default=5)
 
+    trends_parser = sub.add_parser('trends', help='Export chart-friendly circulation trends')
+    trends_parser.add_argument('--start-date')
+    trends_parser.add_argument('--end-date')
+    trends_parser.add_argument('--csv-out', type=Path)
+    trends_parser.add_argument('--svg-out', type=Path)
+    trends_parser.add_argument('--title', default='Library circulation trends')
+    trends_parser.add_argument('--generated-at')
+
     dashboard_parser = sub.add_parser('dashboard', help='Export a recruiter-friendly circulation snapshot')
     dashboard_parser.add_argument('--date', dest='reference_date')
     dashboard_parser.add_argument('--top', type=int, default=5)
@@ -1172,6 +1425,29 @@ def main(argv=None):
             ref = parse_optional_date(args.reference_date, 'reference date')
             stats = library.circulation_stats(reference_date=ref, top_limit=args.top)
             print(format_stats(stats))
+        elif args.cmd == 'trends':
+            start_day = parse_optional_date(args.start_date, 'start date')
+            end_day = parse_optional_date(args.end_date, 'end date')
+            generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
+            snapshot = build_trend_snapshot(
+                library,
+                start_date=start_day,
+                end_date=end_day,
+                title=args.title,
+                generated_at=generated_at,
+            )
+            csv_output = render_trends_csv(snapshot)
+            written = []
+            if args.csv_out:
+                _write_text_output(args.csv_out, csv_output + '\n')
+                written.append(str(args.csv_out))
+            if args.svg_out:
+                _write_text_output(args.svg_out, render_trends_svg(snapshot) + '\n')
+                written.append(str(args.svg_out))
+            if written:
+                print('trend artifacts written: ' + ', '.join(written))
+            else:
+                print(csv_output)
         elif args.cmd == 'dashboard':
             ref = parse_optional_date(args.reference_date, 'reference date')
             generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
