@@ -11,6 +11,7 @@ from scheduler import (
     Process,
     compare_algorithms,
     format_compare_markdown,
+    format_compare_svg,
     format_preset_catalog,
     format_report,
     load_processes,
@@ -253,6 +254,10 @@ class SchedulerTests(unittest.TestCase):
         srtf = next(entry for entry in comparison["algorithms"] if entry["algorithm"] == "srtf")
         self.assertGreater(fcfs["summary"]["avg_response"], srtf["summary"]["avg_response"])
         self.assertIn("srtf", comparison["winners"]["avg_response"])
+        self.assertIn("experience", fcfs)
+        self.assertEqual(fcfs["experience"][0]["pid"], "P1")
+        self.assertIn("avg_slowdown", fcfs["summary"])
+        self.assertIn("slowdown_stddev", comparison["winners"])
 
     def test_format_compare_markdown_mentions_takeaways(self):
         comparison = compare_algorithms(
@@ -264,8 +269,27 @@ class SchedulerTests(unittest.TestCase):
         report = format_compare_markdown(comparison)
         self.assertIn("# CPU Scheduler Comparison — tiny", report)
         self.assertIn("## Takeaways", report)
+        self.assertIn("## Fairness and slowdown snapshot", report)
+        self.assertIn("## Per-process experience", report)
         self.assertIn("| Algorithm | Avg turnaround | Avg waiting | Avg response | Max wait | CPU util % | Throughput | Overhead % | Total time |", report)
+        self.assertIn("| Algorithm | Avg slowdown | Max slowdown | Slowdown spread | Slowdown stddev | Waiting stddev | Most delayed process |", report)
         self.assertIn("lowest average waiting", report)
+        self.assertIn("most even slowdown distribution", report)
+
+    def test_format_compare_svg_contains_dashboard_markup(self):
+        comparison = compare_algorithms(
+            [Process("P1", arrival=0, burst=5), Process("P2", arrival=1, burst=1)],
+            algorithms=["fcfs", "rr"],
+            workload_label="tiny",
+            workload_source="tiny.json",
+            quantum=2,
+        )
+        svg = format_compare_svg(comparison)
+        self.assertIn("<svg", svg)
+        self.assertIn("CPU Scheduler fairness dashboard", svg)
+        self.assertIn("Slowdown by process", svg)
+        self.assertIn("Waiting time by process", svg)
+        self.assertIn("P1", svg)
 
     def test_format_preset_catalog_lists_new_presets(self):
         catalog = format_preset_catalog()
@@ -389,6 +413,7 @@ class SchedulerTests(unittest.TestCase):
             base = Path(tmp)
             markdown_out = base / "compare.md"
             html_out = base / "compare.html"
+            svg_out = base / "compare.svg"
             json_out = base / "compare.json"
             subprocess.run(
                 [
@@ -401,6 +426,8 @@ class SchedulerTests(unittest.TestCase):
                     str(markdown_out),
                     "--html-out",
                     str(html_out),
+                    "--svg-out",
+                    str(svg_out),
                     "--json-out",
                     str(json_out),
                 ],
@@ -411,9 +438,11 @@ class SchedulerTests(unittest.TestCase):
             )
             self.assertTrue(markdown_out.exists())
             self.assertTrue(html_out.exists())
+            self.assertTrue(svg_out.exists())
             self.assertTrue(json_out.exists())
             self.assertIn("CPU Scheduler Comparison", markdown_out.read_text())
             self.assertIn("<table>", html_out.read_text())
+            self.assertIn("fairness dashboard", svg_out.read_text())
             self.assertEqual(json.loads(json_out.read_text())["mode"], "compare")
 
 

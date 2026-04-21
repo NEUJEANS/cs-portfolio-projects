@@ -80,6 +80,14 @@ def format_algorithm_label(algorithm: str, quantum: int = 2, aging_interval: int
     return label
 
 
+def format_metric_value(value: float) -> str:
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def format_preset_catalog() -> str:
     lines = ["Available workload presets:"]
     for preset_name in sorted(WORKLOAD_PRESETS):
@@ -512,6 +520,9 @@ def summarize_result(result: Dict) -> Dict:
         "response_spread": max(response_values) - min(response_values),
         "waiting_stddev": round(pstdev(waiting_values), 2),
         "avg_slowdown": round(sum(slowdown_values) / len(slowdown_values), 2),
+        "max_slowdown": round(max(slowdown_values), 2),
+        "slowdown_spread": round(max(slowdown_values) - min(slowdown_values), 2),
+        "slowdown_stddev": round(pstdev(slowdown_values), 2),
         "cpu_utilization": result["averages"]["cpu_utilization"],
         "throughput": result["averages"]["throughput"],
         "context_switches": result["averages"]["context_switches"],
@@ -520,6 +531,26 @@ def summarize_result(result: Dict) -> Dict:
         "total_time": result["total_time"],
         "timeline_slices": len(result["timeline"]),
     }
+
+
+def build_experience_rows(result: Dict) -> List[Dict]:
+    rows = []
+    for row in result["processes"]:
+        slowdown = round(row["turnaround"] / row["burst"], 2)
+        rows.append(
+            {
+                "pid": row["pid"],
+                "waiting": row["waiting"],
+                "response": row["response"],
+                "turnaround": row["turnaround"],
+                "slowdown": slowdown,
+            }
+        )
+    return rows
+
+
+def find_peak_experience(experience_rows: Sequence[Dict], metric: str) -> Dict:
+    return max(experience_rows, key=lambda row: (row[metric], row["pid"]))
 
 
 def metric_winners(entries: Sequence[Dict], key: str, higher_is_better: bool = False) -> List[str]:
@@ -557,6 +588,7 @@ def compare_algorithms(
                 "algorithm": algorithm,
                 "label": format_algorithm_label(algorithm, quantum=quantum, aging_interval=aging_interval),
                 "summary": summarize_result(result),
+                "experience": build_experience_rows(result),
                 "result": result,
             }
         )
@@ -566,6 +598,9 @@ def compare_algorithms(
         "avg_waiting": metric_winners(comparison_entries, "avg_waiting"),
         "avg_response": metric_winners(comparison_entries, "avg_response"),
         "max_waiting": metric_winners(comparison_entries, "max_waiting"),
+        "avg_slowdown": metric_winners(comparison_entries, "avg_slowdown"),
+        "max_slowdown": metric_winners(comparison_entries, "max_slowdown"),
+        "slowdown_stddev": metric_winners(comparison_entries, "slowdown_stddev"),
         "cpu_utilization": metric_winners(comparison_entries, "cpu_utilization", higher_is_better=True),
         "throughput": metric_winners(comparison_entries, "throughput", higher_is_better=True),
         "scheduler_overhead_pct": metric_winners(comparison_entries, "scheduler_overhead_pct"),
@@ -661,6 +696,36 @@ def format_compare_markdown(comparison: Dict) -> str:
             f"{summary['max_waiting']} | {summary['cpu_utilization']} | {summary['throughput']} | {summary['scheduler_overhead_pct']} | {summary['total_time']} |"
         )
 
+    lines.extend(
+        [
+            "",
+            "## Fairness and slowdown snapshot",
+            "| Algorithm | Avg slowdown | Max slowdown | Slowdown spread | Slowdown stddev | Waiting stddev | Most delayed process |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for entry in comparison["algorithms"]:
+        summary = entry["summary"]
+        tail = find_peak_experience(entry["experience"], "slowdown")
+        lines.append(
+            f"| {entry['label']} | {summary['avg_slowdown']} | {summary['max_slowdown']} | {summary['slowdown_spread']} | {summary['slowdown_stddev']} | "
+            f"{summary['waiting_stddev']} | {tail['pid']} slowdown={format_metric_value(tail['slowdown'])}, wait={tail['waiting']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Per-process experience",
+            "| Algorithm | PID | Waiting | Response | Turnaround | Slowdown |",
+            "| --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for entry in comparison["algorithms"]:
+        for row in entry["experience"]:
+            lines.append(
+                f"| {entry['label']} | {row['pid']} | {row['waiting']} | {row['response']} | {row['turnaround']} | {format_metric_value(row['slowdown'])} |"
+            )
+
     def describe(metric: str, label: str) -> str:
         return f"- {label}: {', '.join(format_algorithm_label(name, comparison['quantum'], comparison['aging_interval']) for name in comparison['winners'][metric])}"
 
@@ -672,6 +737,9 @@ def format_compare_markdown(comparison: Dict) -> str:
             describe("avg_waiting", "lowest average waiting"),
             describe("avg_response", "lowest average response"),
             describe("max_waiting", "lowest worst-case waiting time"),
+            describe("avg_slowdown", "lowest average slowdown"),
+            describe("max_slowdown", "lowest worst slowdown"),
+            describe("slowdown_stddev", "most even slowdown distribution"),
             describe("cpu_utilization", "highest useful CPU utilization"),
             describe("throughput", "highest throughput"),
             describe("scheduler_overhead_pct", "lowest scheduler overhead"),
@@ -699,12 +767,54 @@ def format_compare_html(comparison: Dict) -> str:
             "</tr>"
         )
 
+    fairness_rows = []
+    for entry in comparison["algorithms"]:
+        summary = entry["summary"]
+        tail = find_peak_experience(entry["experience"], "slowdown")
+        fairness_rows.append(
+            "<tr>"
+            f"<td>{html.escape(entry['label'])}</td>"
+            f"<td>{summary['avg_slowdown']}</td>"
+            f"<td>{summary['max_slowdown']}</td>"
+            f"<td>{summary['slowdown_spread']}</td>"
+            f"<td>{summary['slowdown_stddev']}</td>"
+            f"<td>{summary['waiting_stddev']}</td>"
+            f"<td><strong>{html.escape(tail['pid'])}</strong> slowdown={html.escape(format_metric_value(tail['slowdown']))}, wait={tail['waiting']}</td>"
+            "</tr>"
+        )
+
+    experience_cards = []
+    for entry in comparison["algorithms"]:
+        experience_rows = []
+        for row in entry["experience"]:
+            experience_rows.append(
+                "<tr>"
+                f"<td>{html.escape(row['pid'])}</td>"
+                f"<td>{row['waiting']}</td>"
+                f"<td>{row['response']}</td>"
+                f"<td>{row['turnaround']}</td>"
+                f"<td>{html.escape(format_metric_value(row['slowdown']))}</td>"
+                "</tr>"
+            )
+        experience_cards.append(
+            "<section class='card experience-card'>"
+            f"<h3>{html.escape(entry['label'])}</h3>"
+            "<table>"
+            "<thead><tr><th>PID</th><th>Waiting</th><th>Response</th><th>Turnaround</th><th>Slowdown</th></tr></thead>"
+            f"<tbody>{''.join(experience_rows)}</tbody>"
+            "</table>"
+            "</section>"
+        )
+
     cards = []
     labels = {
         "avg_turnaround": "Lowest average turnaround",
         "avg_waiting": "Lowest average waiting",
         "avg_response": "Lowest average response",
         "max_waiting": "Lowest worst-case waiting time",
+        "avg_slowdown": "Lowest average slowdown",
+        "max_slowdown": "Lowest worst slowdown",
+        "slowdown_stddev": "Most even slowdown distribution",
         "cpu_utilization": "Highest useful CPU utilization",
         "throughput": "Highest throughput",
         "scheduler_overhead_pct": "Lowest scheduler overhead",
@@ -771,6 +881,16 @@ def format_compare_html(comparison: Dict) -> str:
       padding: 1rem;
       background: color-mix(in srgb, Canvas 92%, currentColor 3%);
     }}
+    .experience-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }}
+    .experience-card table {{
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -814,8 +934,144 @@ def format_compare_html(comparison: Dict) -> str:
       {''.join(rows)}
     </tbody>
   </table>
+
+  <h2>Fairness and slowdown snapshot</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Algorithm</th>
+        <th>Avg slowdown</th>
+        <th>Max slowdown</th>
+        <th>Slowdown spread</th>
+        <th>Slowdown stddev</th>
+        <th>Waiting stddev</th>
+        <th>Most delayed process</th>
+      </tr>
+    </thead>
+    <tbody>
+      {''.join(fairness_rows)}
+    </tbody>
+  </table>
+
+  <h2>Per-process experience</h2>
+  <div class="experience-grid">
+    {''.join(experience_cards)}
+  </div>
 </body>
 </html>
+"""
+
+
+def format_compare_svg(comparison: Dict) -> str:
+    entries = comparison["algorithms"]
+    process_ids = sorted(
+        {row["pid"] for entry in entries for row in entry["experience"]}
+    )
+    palette = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#4f46e5", "#65a30d"]
+    color_by_pid = {pid: palette[index % len(palette)] for index, pid in enumerate(process_ids)}
+
+    bar_left = 260
+    bar_width = 760
+    bar_height = 16
+    row_gap = 10
+    group_gap = 22
+    chart_gap = 70
+    top_padding = 130
+    bottom_padding = 48
+
+    rows_per_group = len(process_ids)
+    group_height = rows_per_group * (bar_height + row_gap) - row_gap if rows_per_group else 0
+    chart_height = len(entries) * group_height + max(0, len(entries) - 1) * group_gap
+    total_height = top_padding + chart_height * 2 + chart_gap + bottom_padding
+    width = 1100
+
+    max_slowdown = max(
+        row["slowdown"] for entry in entries for row in entry["experience"]
+    ) if entries else 1
+    max_waiting = max(
+        row["waiting"] for entry in entries for row in entry["experience"]
+    ) if entries else 1
+    max_slowdown = max(max_slowdown, 1)
+    max_waiting = max(max_waiting, 1)
+
+    def tick_values(max_value: float) -> List[float]:
+        return [round((max_value * step) / 4, 2) for step in range(5)]
+
+    def build_chart(metric: str, title: str, max_value: float, top: int) -> str:
+        pieces = [
+            f"<text x='40' y='{top - 18}' font-size='24' font-weight='700'>{html.escape(title)}</text>",
+            f"<text x='40' y='{top + chart_height + 30}' font-size='14' fill='#475569'>Lower is better. Each bar is one process under one algorithm.</text>",
+        ]
+        for tick in tick_values(max_value):
+            x = bar_left + (tick / max_value) * bar_width if max_value else bar_left
+            pieces.append(
+                f"<line x1='{x:.2f}' y1='{top}' x2='{x:.2f}' y2='{top + chart_height}' stroke='#cbd5e1' stroke-dasharray='4 4' />"
+            )
+            pieces.append(
+                f"<text x='{x:.2f}' y='{top - 6}' text-anchor='middle' font-size='12' fill='#475569'>{html.escape(format_metric_value(tick))}</text>"
+            )
+
+        y = top
+        for entry in entries:
+            center_y = y + max(group_height / 2, bar_height / 2)
+            pieces.append(
+                f"<text x='40' y='{center_y:.2f}' font-size='15' font-weight='700'>{html.escape(entry['label'])}</text>"
+            )
+            ordered_rows = sorted(entry["experience"], key=lambda row: (-row[metric], row["pid"]))
+            for row_index, row in enumerate(ordered_rows):
+                row_y = y + row_index * (bar_height + row_gap)
+                bar_len = (row[metric] / max_value) * bar_width if max_value else 0
+                pieces.append(
+                    f"<text x='{bar_left - 12}' y='{row_y + 12}' text-anchor='end' font-size='12' fill='#334155'>{html.escape(row['pid'])}</text>"
+                )
+                pieces.append(
+                    f"<rect x='{bar_left}' y='{row_y}' width='{bar_width}' height='{bar_height}' rx='6' fill='#e2e8f0' />"
+                )
+                pieces.append(
+                    f"<rect x='{bar_left}' y='{row_y}' width='{bar_len:.2f}' height='{bar_height}' rx='6' fill='{color_by_pid[row['pid']]}' />"
+                )
+                pieces.append(
+                    f"<text x='{bar_left + min(bar_len + 8, bar_width - 6):.2f}' y='{row_y + 12}' font-size='12' fill='#0f172a'>{html.escape(format_metric_value(row[metric]))}</text>"
+                )
+            y += group_height + group_gap
+        return ''.join(pieces)
+
+    legend = []
+    legend_x = 40
+    legend_y = 68
+    for pid in process_ids:
+        if legend_x > width - 120:
+            legend_x = 40
+            legend_y += 24
+        legend.append(f"<rect x='{legend_x}' y='{legend_y}' width='14' height='14' rx='4' fill='{color_by_pid[pid]}' />")
+        legend.append(
+            f"<text x='{legend_x + 22}' y='{legend_y + 12}' font-size='13' fill='#0f172a'>{html.escape(pid)}</text>"
+        )
+        legend_x += 82
+
+    slowdown_chart = build_chart("slowdown", "Slowdown by process", max_slowdown, top_padding)
+    waiting_top = top_padding + chart_height + chart_gap
+    waiting_chart = build_chart("waiting", "Waiting time by process", max_waiting, waiting_top)
+
+    subtitle = [
+        f"workload={comparison['workload_label']}",
+        f"quantum={comparison['quantum']}",
+        f"aging={comparison['aging_interval']}",
+        f"context_switch_cost={comparison['context_switch_cost']}",
+    ]
+    if comparison.get("preset"):
+        subtitle.insert(1, f"preset={comparison['preset']}")
+
+    return f"""<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{total_height}' viewBox='0 0 {width} {total_height}' role='img' aria-labelledby='title desc'>
+  <title id='title'>CPU Scheduler fairness dashboard for {html.escape(comparison['workload_label'])}</title>
+  <desc id='desc'>Per-process slowdown and waiting-time bars comparing {html.escape(', '.join(entry['label'] for entry in entries))}.</desc>
+  <rect width='100%' height='100%' fill='#f8fafc' />
+  <text x='40' y='44' font-size='30' font-weight='700' fill='#0f172a'>CPU Scheduler fairness dashboard</text>
+  <text x='40' y='92' font-size='14' fill='#334155'>{html.escape(' · '.join(subtitle))}</text>
+  {''.join(legend)}
+  {slowdown_chart}
+  {waiting_chart}
+</svg>
 """
 
 
@@ -862,6 +1118,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--markdown-out", type=Path, help="write a Markdown report to this path")
     parser.add_argument("--html-out", type=Path, help="write an HTML dashboard to this path")
+    parser.add_argument("--svg-out", type=Path, help="write an SVG fairness dashboard to this path")
     parser.add_argument("--json-out", type=Path, help="write JSON output to this path")
     parser.add_argument("--json", action="store_true", help="print raw JSON result to stdout")
     return parser
@@ -898,16 +1155,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             write_text(args.markdown_out, format_compare_markdown(comparison))
         if args.html_out:
             write_text(args.html_out, format_compare_html(comparison))
+        if args.svg_out:
+            write_text(args.svg_out, format_compare_svg(comparison))
         if args.json_out:
             write_text(args.json_out, json.dumps(comparison, indent=2))
         if args.json:
             print(json.dumps(comparison, indent=2))
-        elif not any([args.markdown_out, args.html_out, args.json_out]):
+        elif not any([args.markdown_out, args.html_out, args.svg_out, args.json_out]):
             print(format_compare_markdown(comparison))
         return 0
 
-    if args.html_out:
-        parser.error("--html-out is only supported with compare mode")
+    if args.html_out or args.svg_out:
+        parser.error("--html-out and --svg-out are only supported with compare mode")
 
     result = simulate(
         processes,

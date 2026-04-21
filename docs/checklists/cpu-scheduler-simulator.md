@@ -73,3 +73,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, fairness and slowdown visualization dashboard
+- [x] identify the next weakest scheduler storytelling gap after comparison dashboards and choose fairness/slowdown distribution visuals
+- [x] do a brief scheduler-fairness refresh and capture a short self-test note
+- [x] add a resumable slice checklist entry
+- [x] extend compare-mode summaries with slowdown/fairness metrics and per-process experience data
+- [x] add an SVG fairness dashboard export and refresh the committed comparison artifact bundle
+- [x] update the README plus comparison docs so the new visualization path is easy to demo
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

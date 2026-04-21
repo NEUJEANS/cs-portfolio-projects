@@ -17,6 +17,9 @@
         "response_spread": 11,
         "waiting_stddev": 3.3,
         "avg_slowdown": 5.83,
+        "max_slowdown": 12.0,
+        "slowdown_spread": 11.0,
+        "slowdown_stddev": 3.62,
         "cpu_utilization": 75.0,
         "throughput": 0.3,
         "context_switches": 5,
@@ -25,6 +28,50 @@
         "total_time": 20,
         "timeline_slices": 11
       },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 6,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P2",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 7,
+          "slowdown": 7.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 8,
+          "slowdown": 4.0
+        },
+        {
+          "pid": "P4",
+          "waiting": 7,
+          "response": 7,
+          "turnaround": 8,
+          "slowdown": 8.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 8,
+          "response": 8,
+          "turnaround": 12,
+          "slowdown": 3.0
+        },
+        {
+          "pid": "P6",
+          "waiting": 11,
+          "response": 11,
+          "turnaround": 12,
+          "slowdown": 12.0
+        }
+      ],
       "result": {
         "processes": [
           {
@@ -177,6 +224,9 @@
         "response_spread": 10,
         "waiting_stddev": 3.64,
         "avg_slowdown": 4.42,
+        "max_slowdown": 7.0,
+        "slowdown_spread": 6.0,
+        "slowdown_stddev": 1.92,
         "cpu_utilization": 75.0,
         "throughput": 0.3,
         "context_switches": 5,
@@ -185,6 +235,50 @@
         "total_time": 20,
         "timeline_slices": 11
       },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 6,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P2",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 7,
+          "slowdown": 7.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 10,
+          "response": 10,
+          "turnaround": 12,
+          "slowdown": 6.0
+        },
+        {
+          "pid": "P4",
+          "waiting": 4,
+          "response": 4,
+          "turnaround": 5,
+          "slowdown": 5.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 10,
+          "response": 10,
+          "turnaround": 14,
+          "slowdown": 3.5
+        },
+        {
+          "pid": "P6",
+          "waiting": 3,
+          "response": 3,
+          "turnaround": 4,
+          "slowdown": 4.0
+        }
+      ],
       "result": {
         "processes": [
           {
@@ -337,6 +431,9 @@
         "response_spread": 13,
         "waiting_stddev": 4.5,
         "avg_slowdown": 3.96,
+        "max_slowdown": 7.0,
+        "slowdown_spread": 5.0,
+        "slowdown_stddev": 1.7,
         "cpu_utilization": 65.22,
         "throughput": 0.2609,
         "context_switches": 8,
@@ -345,6 +442,50 @@
         "total_time": 23,
         "timeline_slices": 17
       },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 12,
+          "response": 0,
+          "turnaround": 18,
+          "slowdown": 3.0
+        },
+        {
+          "pid": "P2",
+          "waiting": 1,
+          "response": 1,
+          "turnaround": 2,
+          "slowdown": 2.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 3,
+          "response": 3,
+          "turnaround": 5,
+          "slowdown": 2.5
+        },
+        {
+          "pid": "P4",
+          "waiting": 4,
+          "response": 4,
+          "turnaround": 5,
+          "slowdown": 5.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 13,
+          "response": 13,
+          "turnaround": 17,
+          "slowdown": 4.25
+        },
+        {
+          "pid": "P6",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 7,
+          "slowdown": 7.0
+        }
+      ],
       "result": {
         "processes": [
           {
@@ -527,6 +668,9 @@
         "response_spread": 10,
         "waiting_stddev": 2.97,
         "avg_slowdown": 5.08,
+        "max_slowdown": 8.0,
+        "slowdown_spread": 7.0,
+        "slowdown_stddev": 2.46,
         "cpu_utilization": 75.0,
         "throughput": 0.3,
         "context_switches": 5,
@@ -535,6 +679,50 @@
         "total_time": 20,
         "timeline_slices": 11
       },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 0,
+          "response": 0,
+          "turnaround": 6,
+          "slowdown": 1.0
+        },
+        {
+          "pid": "P2",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 7,
+          "slowdown": 7.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 8,
+          "slowdown": 4.0
+        },
+        {
+          "pid": "P4",
+          "waiting": 7,
+          "response": 7,
+          "turnaround": 8,
+          "slowdown": 8.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 10,
+          "response": 10,
+          "turnaround": 14,
+          "slowdown": 3.5
+        },
+        {
+          "pid": "P6",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 7,
+          "slowdown": 7.0
+        }
+      ],
       "result": {
         "processes": [
           {
@@ -687,6 +875,9 @@
         "response_spread": 11,
         "waiting_stddev": 3.73,
         "avg_slowdown": 5.38,
+        "max_slowdown": 12.0,
+        "slowdown_spread": 9.5,
+        "slowdown_stddev": 3.3,
         "cpu_utilization": 65.22,
         "throughput": 0.2609,
         "context_switches": 8,
@@ -695,6 +886,50 @@
         "total_time": 23,
         "timeline_slices": 17
       },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 9,
+          "response": 0,
+          "turnaround": 15,
+          "slowdown": 2.5
+        },
+        {
+          "pid": "P2",
+          "waiting": 2,
+          "response": 2,
+          "turnaround": 3,
+          "slowdown": 3.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 5,
+          "response": 5,
+          "turnaround": 7,
+          "slowdown": 3.5
+        },
+        {
+          "pid": "P4",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 7,
+          "slowdown": 7.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 13,
+          "response": 10,
+          "turnaround": 17,
+          "slowdown": 4.25
+        },
+        {
+          "pid": "P6",
+          "waiting": 11,
+          "response": 11,
+          "turnaround": 12,
+          "slowdown": 12.0
+        }
+      ],
       "result": {
         "processes": [
           {
@@ -882,6 +1117,16 @@
     "max_waiting": [
       "sjf",
       "priority"
+    ],
+    "avg_slowdown": [
+      "srtf"
+    ],
+    "max_slowdown": [
+      "sjf",
+      "srtf"
+    ],
+    "slowdown_stddev": [
+      "srtf"
     ],
     "cpu_utilization": [
       "fcfs",

@@ -8,6 +8,7 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - shows how priority aging can reduce starvation for long-waiting jobs
 - shows how context-switch overhead changes wall-clock metrics and scheduler efficiency
 - adds committed workload presets plus side-by-side comparison dashboards for fairness-vs-overhead tradeoffs
+- visualizes per-process waiting and slowdown spread so fairness tradeoffs are visible, not just aggregate winners
 - shows deterministic simulation design and metric calculation
 - includes tests and machine-readable JSON output for verification
 - leaves room for stronger follow-up features like MLFQ comparisons and random workload generation
@@ -20,6 +21,7 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - report CPU utilization and throughput
 - optionally charge a fixed `--context-switch-cost` between different runnable processes and surface scheduler-overhead metrics
 - compare multiple algorithms on one workload or preset and export Markdown, HTML, and JSON dashboards
+- export an SVG fairness dashboard that plots per-process slowdown and waiting-time spread for each algorithm
 - use committed workload presets for convoy-effect, interactive-burst, and aging-pressure demos
 - export results as JSON
 - track idle CPU time explicitly in the timeline
@@ -60,7 +62,9 @@ python3 scheduler.py rr ../../artifacts/cpu-scheduler-simulator/context-switch-s
 
 Priority workloads can include an optional `priority` field. Lower numbers win, and `--aging-interval N` boosts a waiting ready job by one priority level every `N` time units.
 
-`compare` mode runs a shared workload through multiple algorithms and highlights who wins on average turnaround, average waiting, response time, worst-case waiting, CPU utilization, throughput, scheduler overhead, and total completion time. It can print Markdown to stdout or write `--markdown-out`, `--html-out`, and `--json-out` artifacts for portfolio screenshots and repo docs.
+`compare` mode runs a shared workload through multiple algorithms and highlights who wins on average turnaround, average waiting, response time, worst-case waiting, CPU utilization, throughput, scheduler overhead, and total completion time. It can print Markdown to stdout or write `--markdown-out`, `--html-out`, `--svg-out`, and `--json-out` artifacts for portfolio screenshots and repo docs.
+
+The comparison flow now also surfaces fairness-specific views: a slowdown snapshot table, per-process experience breakdowns, and an optional SVG artifact that makes uneven waiting and slowdown tails easy to screenshot.
 
 When `--context-switch-cost N` is set, the simulator inserts a `CS` slice between two different runnable processes. That cost counts against wall-clock time, lowers useful CPU utilization, and is reported separately as scheduler overhead. The current model deliberately skips idle-to-process dispatches so cross-algorithm churn is easy to compare.
 
@@ -92,6 +96,7 @@ python3 scheduler.py compare \
   --context-switch-cost 1 \
   --markdown-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.md \
   --html-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.html \
+  --svg-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare-fairness.svg \
   --json-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.json
 ```
 
@@ -103,5 +108,5 @@ python3 -m unittest -v test_scheduler.py
 ## Next extensions
 - random workload generation and chart export
 - preemptive multi-level feedback queue comparisons
-- richer fairness scoring or slowdown visualizations
+- richer fairness scoring or slowdown visualizations for larger workload families
 - arrival-pattern editors for custom preset authoring
