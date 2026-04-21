@@ -1,4 +1,5 @@
 import argparse
+import re
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ class LibraryError(Exception):
 class Library:
     def __init__(self, db_path='library.db'):
         self.db_path = Path(db_path)
+        self.fts_enabled = False
         self._init_db()
 
     def _connect(self):
@@ -37,6 +39,35 @@ class Library:
             for column, statement in migrations.items():
                 if column not in columns:
                     conn.execute(statement)
+            self.fts_enabled = self._init_search_index(conn)
+
+    def _init_search_index(self, conn):
+        try:
+            conn.execute(
+                'CREATE VIRTUAL TABLE IF NOT EXISTS books_fts '
+                'USING fts5(title, author, book_id UNINDEXED)'
+            )
+        except sqlite3.OperationalError:
+            return False
+
+        book_count = conn.execute('SELECT COUNT(*) AS count FROM books').fetchone()['count']
+        indexed_count = conn.execute('SELECT COUNT(*) AS count FROM books_fts').fetchone()['count']
+        if indexed_count != book_count:
+            conn.execute('DELETE FROM books_fts')
+            conn.execute(
+                'INSERT INTO books_fts(rowid, title, author, book_id) '
+                'SELECT id, title, author, id FROM books ORDER BY id'
+            )
+        return True
+
+    def _normalize_fts_query(self, query):
+        query = query.strip()
+        if not query:
+            return ''
+        if re.search(r'[*():"]|\b(?:AND|OR|NOT|NEAR)\b', query):
+            return query
+        tokens = re.findall(r'[\w]+', query.lower(), flags=re.UNICODE)
+        return ' AND '.join(f'{token}*' for token in tokens)
 
     def add_book(self, title, author):
         title = title.strip()
@@ -44,11 +75,17 @@ class Library:
         if not title or not author:
             raise LibraryError('title and author are required')
         with self._connect() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 'INSERT INTO books(title, author, available, borrower, checked_out_at, due_date) '
                 'VALUES (?, ?, 1, NULL, NULL, NULL)',
                 (title, author),
             )
+            if self.fts_enabled:
+                book_id = cursor.lastrowid
+                conn.execute(
+                    'INSERT INTO books_fts(rowid, title, author, book_id) VALUES (?, ?, ?, ?)',
+                    (book_id, title, author, book_id),
+                )
 
     def checkout(self, book_id, borrower, loan_days=14, checkout_date=None):
         borrower = borrower.strip()
@@ -84,7 +121,7 @@ class Library:
                 (book_id,),
             )
 
-    def list_books(self, query=None):
+    def _list_books_keyword(self, query=None, limit=None):
         sql = 'SELECT * FROM books'
         params = []
         if query:
@@ -92,8 +129,73 @@ class Library:
             like = f'%{query.lower()}%'
             params.extend([like, like])
         sql += ' ORDER BY id'
+        if limit is not None:
+            sql += ' LIMIT ?'
+            params.append(limit)
         with self._connect() as conn:
-            return [dict(r) for r in conn.execute(sql, params)]
+            rows = [dict(r) for r in conn.execute(sql, params)]
+        if query:
+            for row in rows:
+                row['search_mode'] = 'keyword'
+        return rows
+
+    def _list_books_fts(self, query, limit=None):
+        if not self.fts_enabled:
+            raise LibraryError('full-text search is not available in this SQLite build')
+
+        normalized_query = self._normalize_fts_query(query)
+        if not normalized_query:
+            return []
+
+        sql = (
+            'SELECT b.*, '
+            'bm25(books_fts, 5.0, 3.0) AS score, '
+            "highlight(books_fts, 0, '[', ']') AS title_highlight, "
+            "highlight(books_fts, 1, '[', ']') AS author_highlight "
+            'FROM books_fts '
+            'JOIN books AS b ON b.id = books_fts.book_id '
+            'WHERE books_fts MATCH ? '
+            'ORDER BY score, b.id'
+        )
+        params = [normalized_query]
+        if limit is not None:
+            sql += ' LIMIT ?'
+            params.append(limit)
+
+        with self._connect() as conn:
+            rows = []
+            for result in conn.execute(sql, params):
+                row = dict(result)
+                row['search_mode'] = 'fts'
+                row['search_score'] = row.pop('score')
+                title_highlight = row.pop('title_highlight', None)
+                author_highlight = row.pop('author_highlight', None)
+                preview_parts = []
+                if title_highlight and title_highlight != row['title']:
+                    preview_parts.append(f'title={title_highlight}')
+                if author_highlight and author_highlight != row['author']:
+                    preview_parts.append(f'author={author_highlight}')
+                row['search_preview'] = '; '.join(preview_parts) or None
+                rows.append(row)
+            return rows
+
+    def list_books(self, query=None, search_mode='auto', limit=None):
+        if search_mode not in {'auto', 'keyword', 'fts'}:
+            raise LibraryError('search_mode must be one of auto, keyword, or fts')
+        if limit is not None and limit <= 0:
+            raise LibraryError('limit must be positive when provided')
+
+        query = query.strip() if query else None
+        if query and search_mode in {'auto', 'fts'}:
+            try:
+                return self._list_books_fts(query=query, limit=limit)
+            except LibraryError:
+                if search_mode == 'fts':
+                    raise
+            except sqlite3.OperationalError as exc:
+                if search_mode == 'fts':
+                    raise LibraryError(f'invalid full-text query: {query}') from exc
+        return self._list_books_keyword(query=query, limit=limit)
 
     def overdue_books(self, reference_date=None):
         ref = (reference_date or date.today()).isoformat()
@@ -107,7 +209,11 @@ class Library:
 
 def format_book(row):
     state = 'available' if row['available'] else f"checked out to {row['borrower']} (due {row['due_date']})"
-    return f"#{row['id']} {row['title']} - {row['author']} [{state}]"
+    rendered = f"#{row['id']} {row['title']} - {row['author']} [{state}]"
+    preview = row.get('search_preview')
+    if preview:
+        rendered += f"\n    match: {preview}"
+    return rendered
 
 
 def main(argv=None):
@@ -129,6 +235,8 @@ def main(argv=None):
 
     list_parser = sub.add_parser('list', help='List catalog books')
     list_parser.add_argument('--query')
+    list_parser.add_argument('--search-mode', choices=['auto', 'keyword', 'fts'], default='auto')
+    list_parser.add_argument('--limit', type=int)
 
     overdue_parser = sub.add_parser('overdue', help='List overdue books')
     overdue_parser.add_argument('--date', dest='reference_date')
@@ -147,7 +255,7 @@ def main(argv=None):
             library.return_book(args.book_id)
             print('book returned')
         elif args.cmd == 'list':
-            books = library.list_books(query=args.query)
+            books = library.list_books(query=args.query, search_mode=args.search_mode, limit=args.limit)
             if not books:
                 print('no books found')
             for row in books:

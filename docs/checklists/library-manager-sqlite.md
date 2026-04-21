@@ -1,18 +1,11 @@
-# Library Manager SQLite Checklist
+# library-manager-sqlite checklist
 
-Status: vertical slice 1 complete
-Last updated: 2026-04-14
-
-## Vertical slice 1
-- [x] identify library-manager-sqlite as the weakest unfinished/underpowered project
-- [x] write short research note
-- [x] write short Python/SQLite refresh note and self-check
-- [x] extend checklist and project docs
-- [x] implement circulation upgrade with borrower, due dates, return flow, search, and overdue listing
-- [x] add automated tests for state transitions and CLI behavior
-- [x] run tests locally
-- [x] perform review pass 1 and fix issues
-- [x] perform review pass 2 and fix issues
-- [x] perform review pass 3 and fix issues
-- [x] run secret scan before push
-- [x] commit, push, and add wrap-up
+- [x] define the project scope and interview story for a SQLite-backed library circulation CLI
+- [x] implement book creation, catalog listing, checkout, return, and overdue reporting flows
+- [x] cover core lifecycle behavior with automated tests
+- [x] refresh the project README with usage and future-improvement notes
+- [x] upgrade catalog search to ranked SQLite FTS5 search with safe fallback to substring matching
+- [x] support migration/backfill so older catalog databases gain the search index without manual rebuild steps
+- [x] add fresh research and self-test notes for the search upgrade
+- [x] log review passes and follow-up notes so the FTS slice is resumable later
+- [ ] add a borrower/loan-history table so circulation analytics are auditable instead of stored only on the current book row
