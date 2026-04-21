@@ -14,13 +14,15 @@
   .suite-source { color: #475569; margin-top: 10px; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 24px 0; }
-  .summary-card, .scoreboard, .scenario-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); }
+  .summary-card, .scoreboard, .scenario-card, .theory-panel { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); }
   .summary-card { padding: 18px 20px; }
   .summary-card h2 { margin: 0 0 8px; font-size: 0.95rem; color: #475569; }
   .summary-card strong { display: block; font-size: 1.9rem; color: #0f172a; }
   .summary-card p { margin: 8px 0 0; color: #475569; }
   .scoreboard { padding: 18px 20px; overflow-x: auto; }
-  .scoreboard table, .trial-table-wrap table { width: 100%; border-collapse: collapse; }
+  .theory-panel { padding: 18px 20px; margin-bottom: 18px; overflow-x: auto; }
+  .theory-panel p { color: #475569; max-width: 88ch; }
+  .scoreboard table, .trial-table-wrap table, .theory-panel table { width: 100%; border-collapse: collapse; }
   caption { text-align: left; font-weight: 700; padding-bottom: 12px; color: #0f172a; }
   thead th { background: #eff6ff; color: #1e3a8a; }
   th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
@@ -43,6 +45,7 @@
   .metric-bar span { display: block; height: 100%; border-radius: 999px; }
   .metric-detail { margin-top: 6px; color: #475569; font-size: 0.84rem; }
   .split-callout { margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: #eef2ff; color: #312e81; font-size: 0.9rem; line-height: 1.45; }
+  .theory-callout { margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: #f8fafc; border: 1px solid #dbe4f0; color: #334155; font-size: 0.9rem; line-height: 1.5; }
   .phase-table-wrap { margin-top: 14px; overflow-x: auto; }
   .phase-table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.88rem; background: #fff; border: 1px solid #dbe4f0; border-radius: 14px; overflow: hidden; }
   .phase-table-wrap caption { padding-bottom: 10px; }
@@ -76,6 +79,68 @@
   <strong>2081</strong>
   <p>max paged-file bytes across scenarios</p>
 </article></section>
+  <section class="theory-panel">
+    <h2>Linear probing theory overlay</h2>
+    <p><strong>Formula:</strong> <code>successful ≈ 0.5 * (1 + 1 / (1 - α)); unsuccessful ≈ 0.5 * (1 + 1 / (1 - α)^2)</code><br />
+    <strong>Reference basis:</strong> Use the average occupied load factor α across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.</p>
+    <table>
+      <caption>Observed hit/miss probe averages compared with classic load-factor expectations</caption>
+      <thead>
+        <tr>
+          <th scope="col">Scenario</th>
+          <th scope="col">Avg occupied α</th>
+          <th scope="col">Peak occupied α</th>
+          <th scope="col">Expected hit @ avg α</th>
+          <th scope="col">Observed hit</th>
+          <th scope="col">Δ hit</th>
+          <th scope="col">Expected miss @ avg α</th>
+          <th scope="col">Observed miss</th>
+          <th scope="col">Δ miss</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+  <th scope="row">directory-friendly-read-heavy</th>
+  <td>0.5481</td>
+  <td>0.75</td>
+  <td>1.606</td>
+  <td>1.333</td>
+  <td>-0.273</td>
+  <td>2.948</td>
+  <td>2.5</td>
+  <td>-0.448</td>
+</tr><tr>
+  <th scope="row">split-pressure-growth</th>
+  <td>0.5134</td>
+  <td>0.75</td>
+  <td>1.528</td>
+  <td>1</td>
+  <td>-0.528</td>
+  <td>2.612</td>
+  <td>2</td>
+  <td>-0.612</td>
+</tr><tr>
+  <th scope="row">delete-heavy-churn</th>
+  <td>0.5536</td>
+  <td>0.875</td>
+  <td>1.62</td>
+  <td>1</td>
+  <td>-0.62</td>
+  <td>3.009</td>
+  <td>4</td>
+  <td>0.991</td>
+</tr><tr>
+  <th scope="row">primary-clustering-tombstone-pressure</th>
+  <td>0.4779</td>
+  <td>0.625</td>
+  <td>1.458</td>
+  <td>3.333</td>
+  <td>1.875</td>
+  <td>2.334</td>
+  <td>5</td>
+  <td>2.666</td>
+</tr></tbody>
+    </table>
+  </section>
   <section class="scoreboard">
     <table>
       <caption>Scenario scoreboard with the headline metrics recruiters or reviewers usually compare first</caption>
@@ -236,6 +301,7 @@
   <div class="metric-detail">occupied load 0.75</div>
 </div>
       <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 1.333 / 2 / 2 · misses avg/p95/max 2.5 / 3 / 3</div>
+      <div class="theory-callout"><strong>Theory overlay:</strong> Average occupied α≈0.5481 predicts about 1.606 successful probes and 2.948 unsuccessful probes; observed hit/miss averages were 1.333 and 2.5. Peak occupied α≈0.75 gives miss-cost context for the clustering spikes.</div>
       <div class="phase-table-wrap"><table><caption>Linear phase split for directory-friendly-read-heavy</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
   <th scope="row">puts</th>
   <td>7</td>
@@ -477,6 +543,7 @@
   <div class="metric-detail">occupied load 0.625</div>
 </div>
       <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 1 / 1 / 1 · misses avg/p95/max 2 / 2 / 2</div>
+      <div class="theory-callout"><strong>Theory overlay:</strong> Average occupied α≈0.5134 predicts about 1.528 successful probes and 2.612 unsuccessful probes; observed hit/miss averages were 1 and 2. Peak occupied α≈0.75 gives miss-cost context for the clustering spikes.</div>
       <div class="phase-table-wrap"><table><caption>Linear phase split for split-pressure-growth</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
   <th scope="row">puts</th>
   <td>11</td>
@@ -718,6 +785,7 @@
   <div class="metric-detail">occupied load 0.625</div>
 </div>
       <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 1 / 1 / 1 · misses avg/p95/max 4 / 4 / 4</div>
+      <div class="theory-callout"><strong>Theory overlay:</strong> Average occupied α≈0.5536 predicts about 1.62 successful probes and 3.009 unsuccessful probes; observed hit/miss averages were 1 and 4. Peak occupied α≈0.875 gives miss-cost context for the clustering spikes.</div>
       <div class="phase-table-wrap"><table><caption>Linear phase split for delete-heavy-churn</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
   <th scope="row">puts</th>
   <td>8</td>
@@ -959,6 +1027,7 @@
   <div class="metric-detail">occupied load 0.375</div>
 </div>
       <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 3.333 / 5 / 5 · misses avg/p95/max 5 / 6 / 6</div>
+      <div class="theory-callout"><strong>Theory overlay:</strong> Average occupied α≈0.4779 predicts about 1.458 successful probes and 2.334 unsuccessful probes; observed hit/miss averages were 3.333 and 5. Peak occupied α≈0.625 gives miss-cost context for the clustering spikes.</div>
       <div class="phase-table-wrap"><table><caption>Linear phase split for primary-clustering-tombstone-pressure</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
   <th scope="row">puts</th>
   <td>7</td>

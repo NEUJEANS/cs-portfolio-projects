@@ -121,6 +121,11 @@ class _LinearTombstone:
 
 
 LINEAR_TOMBSTONE = _LinearTombstone()
+LINEAR_PROBING_THEORY_FORMULA = "successful ≈ 0.5 * (1 + 1 / (1 - α)); unsuccessful ≈ 0.5 * (1 + 1 / (1 - α)^2)"
+LINEAR_PROBING_THEORY_REFERENCE_BASIS = (
+    "Use the average occupied load factor α across benchmark steps as the compact baseline; "
+    "final and peak occupied load factors are included for context."
+)
 
 
 def _empty_probe_summary() -> dict[str, Any]:
@@ -1227,6 +1232,12 @@ def _run_benchmark_trial(
     peak_btree_height = btree_stats["height"]
     peak_btree_node_count = btree_stats["nodes"]
     btree_key_map = scenario["btree_key_map"]
+    initial_linear_stats = linear.stats()
+    average_linear_load_factor_total = 0.0
+    average_linear_occupied_load_factor_total = 0.0
+    linear_load_samples = 0
+    peak_linear_load_factor = initial_linear_stats["load_factor"]
+    peak_linear_occupied_load_factor = initial_linear_stats["occupied_load_factor"]
 
     for operation in scenario["operations"]:
         op = operation["op"]
@@ -1319,6 +1330,12 @@ def _run_benchmark_trial(
         btree_stats = btree.stats()
         peak_btree_height = max(peak_btree_height, btree_stats["height"])
         peak_btree_node_count = max(peak_btree_node_count, btree_stats["nodes"])
+        linear_stats = linear.stats()
+        average_linear_load_factor_total += linear_stats["load_factor"]
+        average_linear_occupied_load_factor_total += linear_stats["occupied_load_factor"]
+        linear_load_samples += 1
+        peak_linear_load_factor = max(peak_linear_load_factor, linear_stats["load_factor"])
+        peak_linear_occupied_load_factor = max(peak_linear_occupied_load_factor, linear_stats["occupied_load_factor"])
 
     expected_items = sorted(reference.items(), key=lambda item: item[0])
     extendible_items = extendible.items()
@@ -1344,6 +1361,27 @@ def _run_benchmark_trial(
 
     extendible_stats = extendible.stats()
     linear_stats = linear.stats()
+    linear_metrics = {
+        "initial_capacity": linear.initial_capacity,
+        "max_load_factor": linear.max_load_factor,
+        "max_tombstone_ratio": linear.max_tombstone_ratio,
+        "final_capacity": linear_stats["capacity"],
+        "final_load_factor": linear_stats["load_factor"],
+        "occupied_load_factor": linear_stats["occupied_load_factor"],
+        "average_load_factor": round(average_linear_load_factor_total / max(linear_load_samples, 1), 4),
+        "average_occupied_load_factor": round(average_linear_occupied_load_factor_total / max(linear_load_samples, 1), 4),
+        "peak_load_factor": round(peak_linear_load_factor, 4),
+        "peak_occupied_load_factor": round(peak_linear_occupied_load_factor, 4),
+        "tombstone_count": linear_stats["tombstones"],
+        "resize_count": linear_stats["resize_count"],
+        "average_probe_count": linear_stats["average_probe_count"],
+        "max_probe_count": linear_stats["max_probe_count"],
+        "rebuild_probe_count": linear_stats["rebuild_probe_count"],
+        "lookup_probe_breakdown": linear_stats["lookup_probe_breakdown"],
+        "phase_probe_breakdown": linear_stats["phase_probe_breakdown"],
+        "outcome_probe_breakdown": linear_stats["outcome_probe_breakdown"],
+    }
+    linear_metrics["theory_overlay"] = summarize_linear_theory_overlay(linear_metrics)
     cuckoo_stats = cuckoo.stats()
     btree_stats = btree.stats()
     btree_layout = btree.page_layout(page_size=btree_page_size, value_bytes=btree_value_bytes)
@@ -1363,22 +1401,7 @@ def _run_benchmark_trial(
             "directory_growth_count": extendible.directory_growth_count,
             "directory_shrink_count": extendible.directory_shrink_count,
         },
-        "linear": {
-            "initial_capacity": linear.initial_capacity,
-            "max_load_factor": linear.max_load_factor,
-            "max_tombstone_ratio": linear.max_tombstone_ratio,
-            "final_capacity": linear_stats["capacity"],
-            "final_load_factor": linear_stats["load_factor"],
-            "occupied_load_factor": linear_stats["occupied_load_factor"],
-            "tombstone_count": linear_stats["tombstones"],
-            "resize_count": linear_stats["resize_count"],
-            "average_probe_count": linear_stats["average_probe_count"],
-            "max_probe_count": linear_stats["max_probe_count"],
-            "rebuild_probe_count": linear_stats["rebuild_probe_count"],
-            "lookup_probe_breakdown": linear_stats["lookup_probe_breakdown"],
-            "phase_probe_breakdown": linear_stats["phase_probe_breakdown"],
-            "outcome_probe_breakdown": linear_stats["outcome_probe_breakdown"],
-        },
+        "linear": linear_metrics,
         "cuckoo": {
             "final_capacity": cuckoo_stats["capacity"],
             "load_factor": cuckoo_stats["load_factor"],
@@ -1403,6 +1426,60 @@ def _run_benchmark_trial(
 
 def _average(values: list[int | float], digits: int = 3) -> float:
     return round(sum(values) / len(values), digits)
+
+
+def _linear_probing_expected_probes(load_factor: int | float) -> dict[str, float]:
+    alpha = max(0.0, min(float(load_factor), 0.999))
+    remainder = max(1e-9, 1.0 - alpha)
+    return {
+        "load_factor": round(alpha, 4),
+        "successful_average_probe_count": round(0.5 * (1 + (1 / remainder)), 3),
+        "unsuccessful_average_probe_count": round(0.5 * (1 + (1 / (remainder * remainder))), 3),
+    }
+
+
+def summarize_linear_theory_overlay(linear: dict[str, Any]) -> dict[str, Any]:
+    average_reference = _linear_probing_expected_probes(linear["average_occupied_load_factor"])
+    final_reference = _linear_probing_expected_probes(linear["occupied_load_factor"])
+    peak_reference = _linear_probing_expected_probes(linear["peak_occupied_load_factor"])
+    observed_successful = linear["lookup_probe_breakdown"]["successful"]["average_probe_count"]
+    observed_unsuccessful = linear["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"]
+
+    def format_value(value: int | float, digits: int = 3) -> str:
+        rounded = round(float(value), digits)
+        if rounded.is_integer():
+            return str(int(rounded))
+        return f"{rounded:.{digits}f}".rstrip("0").rstrip(".")
+
+    return {
+        "formula": LINEAR_PROBING_THEORY_FORMULA,
+        "reference_basis": LINEAR_PROBING_THEORY_REFERENCE_BASIS,
+        "average_occupied_reference": average_reference,
+        "final_occupied_reference": final_reference,
+        "peak_occupied_reference": peak_reference,
+        "observed": {
+            "successful_average_probe_count": observed_successful,
+            "unsuccessful_average_probe_count": observed_unsuccessful,
+        },
+        "delta_vs_average_reference": {
+            "successful_average_probe_count": round(
+                observed_successful - average_reference["successful_average_probe_count"],
+                3,
+            ),
+            "unsuccessful_average_probe_count": round(
+                observed_unsuccessful - average_reference["unsuccessful_average_probe_count"],
+                3,
+            ),
+        },
+        "summary_note": (
+            f"Average occupied α≈{format_value(average_reference['load_factor'], digits=4)} predicts about "
+            f"{format_value(average_reference['successful_average_probe_count'])} successful probes and "
+            f"{format_value(average_reference['unsuccessful_average_probe_count'])} unsuccessful probes; "
+            f"observed hit/miss averages were {format_value(observed_successful)} and "
+            f"{format_value(observed_unsuccessful)}. Peak occupied α≈"
+            f"{format_value(peak_reference['load_factor'], digits=4)} gives miss-cost context for the clustering spikes."
+        ),
+    }
 
 
 def summarize_benchmark_trials(scenario: dict[str, Any], trial_rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1505,6 +1582,10 @@ def run_benchmark_suite(payload: dict[str, Any]) -> dict[str, Any]:
         results.append(summarize_benchmark_trials(scenario, trial_rows))
     return {
         "title": suite["title"],
+        "linear_theory_note": {
+            "formula": LINEAR_PROBING_THEORY_FORMULA,
+            "reference_basis": LINEAR_PROBING_THEORY_REFERENCE_BASIS,
+        },
         "bucket_capacity": suite["bucket_capacity"],
         "cuckoo_capacity": suite["cuckoo_capacity"],
         "max_displacements": suite["max_displacements"],
@@ -1537,6 +1618,34 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
             f"- B-tree minimum degree: `{summary['btree_minimum_degree']}`",
             f"- B-tree page size / value bytes: `{summary['btree_page_size']}` / `{summary['btree_value_bytes']}`",
             f"- Trials per scenario: `{summary['trials']}`",
+            "",
+            "## Linear probing theory overlay",
+            f"- Formula: `{summary['linear_theory_note']['formula']}`",
+            f"- Reference basis: {summary['linear_theory_note']['reference_basis']}",
+            "",
+            "| Scenario | Avg occupied α | Peak occupied α | Expected hit @ avg α | Observed hit | Δ | Expected miss @ avg α | Observed miss | Δ |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in summary["results"]:
+        overlay = row["linear"]["theory_overlay"]
+        average_reference = overlay["average_occupied_reference"]
+        peak_reference = overlay["peak_occupied_reference"]
+        lines.append(
+            "| {name} | {avg_alpha} | {peak_alpha} | {expected_hit} | {observed_hit} | {delta_hit} | {expected_miss} | {observed_miss} | {delta_miss} |".format(
+                name=row["name"],
+                avg_alpha=average_reference["load_factor"],
+                peak_alpha=peak_reference["load_factor"],
+                expected_hit=average_reference["successful_average_probe_count"],
+                observed_hit=overlay["observed"]["successful_average_probe_count"],
+                delta_hit=overlay["delta_vs_average_reference"]["successful_average_probe_count"],
+                expected_miss=average_reference["unsuccessful_average_probe_count"],
+                observed_miss=overlay["observed"]["unsuccessful_average_probe_count"],
+                delta_miss=overlay["delta_vs_average_reference"]["unsuccessful_average_probe_count"],
+            )
+        )
+    lines.extend(
+        [
             "",
             "## Scenario scoreboard",
             "| Scenario | Ops | Final entries | Ext splits | Ext merges | Peak depth | Linear avg probes | Linear get hit/miss avg | Linear max probe | Cuckoo avg rehashes | Cuckoo avg displacements | B-tree height | B-tree nodes | B-tree paged bytes |",
@@ -1577,6 +1686,7 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
                 f"- Extendible hashing finished at global depth `{row['extendible']['final_global_depth']}` with `{row['extendible']['final_bucket_count']}` buckets and load factor `{row['extendible']['load_factor']}` after `{row['extendible']['split_count']}` splits / `{row['extendible']['merge_count']}` merges and `{row['extendible']['directory_growth_count']}` directory growth(s) / `{row['extendible']['directory_shrink_count']}` directory shrink(s).",
                 f"- Linear probing baseline finished at capacity `{row['linear']['final_capacity']}` with load factor `{row['linear']['final_load_factor']}`, tombstones `{row['linear']['tombstone_count']}`, average probe count `{row['linear']['average_probe_count']}`, max probe `{row['linear']['max_probe_count']}`, and `{row['linear']['resize_count']}` rebuild(s).",
                 f"- Linear lookup probe split: successful gets avg/p50/p95/max = `{_format_probe_summary(row['linear']['lookup_probe_breakdown']['successful'])}`; unsuccessful gets avg/p50/p95/max = `{_format_probe_summary(row['linear']['lookup_probe_breakdown']['unsuccessful'])}`.",
+                f"- Linear theory overlay: {row['linear']['theory_overlay']['summary_note']}",
                 f"- Linear phase probe split: puts avg/p50/p95/max = `{_format_probe_summary(row['linear']['phase_probe_breakdown']['puts'])}`; gets avg/p50/p95/max = `{_format_probe_summary(row['linear']['phase_probe_breakdown']['gets'])}`; deletes avg/p50/p95/max = `{_format_probe_summary(row['linear']['phase_probe_breakdown']['deletes'])}`.",
                 f"- Cuckoo hashing averaged `{row['cuckoo']['average_rehash_count']}` rehashes and `{row['cuckoo']['average_displacement_count']}` displacements, finishing between capacities `{row['cuckoo']['final_capacity_range'][0]}` and `{row['cuckoo']['final_capacity_range'][1]}`.",
                 f"- B-tree page baseline finished at height `{row['btree']['final_height']}` across `{row['btree']['final_node_count']}` node(s); at `page_size={row['btree']['page_size']}` and `value_bytes={row['btree']['value_bytes']}` the paged snapshot would occupy `{row['btree']['paged_file_bytes']}` bytes with `{row['btree']['page_padding_bytes']}` bytes of fixed slack per page.",
@@ -1723,6 +1833,10 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
             f'<div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max '
             f'{escape(_format_dashboard_number(successful_lookup["average_probe_count"]))} / {successful_lookup["p95_probe_count"]} / {successful_lookup["max_probe_count"]}'
             f' · misses avg/p95/max {escape(_format_dashboard_number(unsuccessful_lookup["average_probe_count"]))} / {unsuccessful_lookup["p95_probe_count"]} / {unsuccessful_lookup["max_probe_count"]}</div>'
+        )
+        theory_overlay = row["linear"]["theory_overlay"]
+        linear_theory_callout_html = (
+            f'<div class="theory-callout"><strong>Theory overlay:</strong> {escape(theory_overlay["summary_note"])}</div>'
         )
         phase_rows = []
         for label, key in (("puts", "puts"), ("gets", "gets"), ("deletes", "deletes")):
@@ -1922,6 +2036,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
       <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
       {linear_metrics}
       {linear_lookup_split_html}
+      {linear_theory_callout_html}
       {linear_phase_table_html}
     </article>
     <article class="metric-panel">
@@ -1962,6 +2077,42 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
 </section>'''
         )
 
+    theory_rows = "".join(
+        f'''<tr>
+  <th scope="row">{escape(row["name"])}</th>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["average_occupied_reference"]["load_factor"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["peak_occupied_reference"]["load_factor"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["average_occupied_reference"]["successful_average_probe_count"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["observed"]["successful_average_probe_count"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["delta_vs_average_reference"]["successful_average_probe_count"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["average_occupied_reference"]["unsuccessful_average_probe_count"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["observed"]["unsuccessful_average_probe_count"]))}</td>
+  <td>{escape(_format_dashboard_number(row["linear"]["theory_overlay"]["delta_vs_average_reference"]["unsuccessful_average_probe_count"]))}</td>
+</tr>'''
+        for row in results
+    )
+    theory_panel_html = f'''<section class="theory-panel">
+    <h2>Linear probing theory overlay</h2>
+    <p><strong>Formula:</strong> <code>{escape(summary['linear_theory_note']['formula'])}</code><br />
+    <strong>Reference basis:</strong> {escape(summary['linear_theory_note']['reference_basis'])}</p>
+    <table>
+      <caption>Observed hit/miss probe averages compared with classic load-factor expectations</caption>
+      <thead>
+        <tr>
+          <th scope="col">Scenario</th>
+          <th scope="col">Avg occupied α</th>
+          <th scope="col">Peak occupied α</th>
+          <th scope="col">Expected hit @ avg α</th>
+          <th scope="col">Observed hit</th>
+          <th scope="col">Δ hit</th>
+          <th scope="col">Expected miss @ avg α</th>
+          <th scope="col">Observed miss</th>
+          <th scope="col">Δ miss</th>
+        </tr>
+      </thead>
+      <tbody>{theory_rows}</tbody>
+    </table>
+  </section>'''
     suite_source_html = (
         f'<p class="suite-source"><strong>Suite source:</strong> <code>{escape(suite_source)}</code></p>'
         if suite_source
@@ -1983,13 +2134,15 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   .suite-source {{ color: #475569; margin-top: 10px; }}
   code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
   .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 24px 0; }}
-  .summary-card, .scoreboard, .scenario-card {{ background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); }}
+  .summary-card, .scoreboard, .scenario-card, .theory-panel {{ background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); }}
   .summary-card {{ padding: 18px 20px; }}
   .summary-card h2 {{ margin: 0 0 8px; font-size: 0.95rem; color: #475569; }}
   .summary-card strong {{ display: block; font-size: 1.9rem; color: #0f172a; }}
   .summary-card p {{ margin: 8px 0 0; color: #475569; }}
   .scoreboard {{ padding: 18px 20px; overflow-x: auto; }}
-  .scoreboard table, .trial-table-wrap table {{ width: 100%; border-collapse: collapse; }}
+  .theory-panel {{ padding: 18px 20px; margin-bottom: 18px; overflow-x: auto; }}
+  .theory-panel p {{ color: #475569; max-width: 88ch; }}
+  .scoreboard table, .trial-table-wrap table, .theory-panel table {{ width: 100%; border-collapse: collapse; }}
   caption {{ text-align: left; font-weight: 700; padding-bottom: 12px; color: #0f172a; }}
   thead th {{ background: #eff6ff; color: #1e3a8a; }}
   th, td {{ padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }}
@@ -2012,6 +2165,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   .metric-bar span {{ display: block; height: 100%; border-radius: 999px; }}
   .metric-detail {{ margin-top: 6px; color: #475569; font-size: 0.84rem; }}
   .split-callout {{ margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: #eef2ff; color: #312e81; font-size: 0.9rem; line-height: 1.45; }}
+  .theory-callout {{ margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: #f8fafc; border: 1px solid #dbe4f0; color: #334155; font-size: 0.9rem; line-height: 1.5; }}
   .phase-table-wrap {{ margin-top: 14px; overflow-x: auto; }}
   .phase-table-wrap table {{ width: 100%; border-collapse: collapse; font-size: 0.88rem; background: #fff; border: 1px solid #dbe4f0; border-radius: 14px; overflow: hidden; }}
   .phase-table-wrap caption {{ padding-bottom: 10px; }}
@@ -2029,6 +2183,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, a simple linear-probing baseline, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
   {suite_source_html}
   <section class="summary-grid">{summary_cards_html}</section>
+  {theory_panel_html}
   <section class="scoreboard">
     <table>
       <caption>Scenario scoreboard with the headline metrics recruiters or reviewers usually compare first</caption>
@@ -2091,6 +2246,14 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                 "linear_final_capacity",
                 "linear_final_load_factor",
                 "linear_occupied_load_factor",
+                "linear_average_occupied_load_factor",
+                "linear_peak_occupied_load_factor",
+                "linear_theory_expected_hit_probe_count",
+                "linear_theory_observed_hit_probe_count",
+                "linear_theory_hit_delta",
+                "linear_theory_expected_miss_probe_count",
+                "linear_theory_observed_miss_probe_count",
+                "linear_theory_miss_delta",
                 "linear_tombstone_count",
                 "linear_resize_count",
                 "linear_average_probe_count",
@@ -2172,6 +2335,14 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "linear_final_capacity": row["linear"]["final_capacity"],
                     "linear_final_load_factor": row["linear"]["final_load_factor"],
                     "linear_occupied_load_factor": row["linear"]["occupied_load_factor"],
+                    "linear_average_occupied_load_factor": row["linear"]["average_occupied_load_factor"],
+                    "linear_peak_occupied_load_factor": row["linear"]["peak_occupied_load_factor"],
+                    "linear_theory_expected_hit_probe_count": row["linear"]["theory_overlay"]["average_occupied_reference"]["successful_average_probe_count"],
+                    "linear_theory_observed_hit_probe_count": row["linear"]["theory_overlay"]["observed"]["successful_average_probe_count"],
+                    "linear_theory_hit_delta": row["linear"]["theory_overlay"]["delta_vs_average_reference"]["successful_average_probe_count"],
+                    "linear_theory_expected_miss_probe_count": row["linear"]["theory_overlay"]["average_occupied_reference"]["unsuccessful_average_probe_count"],
+                    "linear_theory_observed_miss_probe_count": row["linear"]["theory_overlay"]["observed"]["unsuccessful_average_probe_count"],
+                    "linear_theory_miss_delta": row["linear"]["theory_overlay"]["delta_vs_average_reference"]["unsuccessful_average_probe_count"],
                     "linear_tombstone_count": row["linear"]["tombstone_count"],
                     "linear_resize_count": row["linear"]["resize_count"],
                     "linear_average_probe_count": row["linear"]["average_probe_count"],

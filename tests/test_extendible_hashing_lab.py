@@ -423,12 +423,16 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertEqual(summary["linear_capacity"], 8)
         self.assertAlmostEqual(summary["linear_max_load_factor"], 0.75)
         self.assertAlmostEqual(summary["linear_max_tombstone_ratio"], 0.25)
+        self.assertIn("linear_theory_note", summary)
+        self.assertIn("successful ≈ 0.5", summary["linear_theory_note"]["formula"])
         self.assertTrue(all(row["extendible"]["split_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["extendible"]["directory_growth_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["linear"]["average_probe_count"] >= 1 for row in summary["results"]))
         self.assertTrue(all(row["linear"]["final_capacity"] >= summary["linear_capacity"] for row in summary["results"]))
         self.assertTrue(all("lookup_probe_breakdown" in row["linear"] for row in summary["results"]))
         self.assertTrue(all("phase_probe_breakdown" in row["linear"] for row in summary["results"]))
+        self.assertTrue(all("theory_overlay" in row["linear"] for row in summary["results"]))
+        self.assertTrue(all("average_occupied_load_factor" in row["linear"] for row in summary["results"]))
         self.assertTrue(all(row["linear"]["lookup_probe_breakdown"]["successful"]["count"] == row["operation_mix"]["get_hits"] for row in summary["results"]))
         self.assertTrue(all(row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["count"] == row["operation_mix"]["get_misses"] for row in summary["results"]))
         self.assertTrue(all(row["linear"]["phase_probe_breakdown"]["puts"]["count"] == row["operation_mix"]["puts"] for row in summary["results"]))
@@ -449,6 +453,16 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertGreaterEqual(
             clustering_row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["p95_probe_count"],
             clustering_row["linear"]["lookup_probe_breakdown"]["successful"]["p95_probe_count"],
+        )
+        theory_overlay = clustering_row["linear"]["theory_overlay"]
+        self.assertIn("Average occupied α≈", theory_overlay["summary_note"])
+        self.assertGreaterEqual(
+            theory_overlay["peak_occupied_reference"]["load_factor"],
+            theory_overlay["average_occupied_reference"]["load_factor"],
+        )
+        self.assertGreater(
+            theory_overlay["observed"]["unsuccessful_average_probe_count"],
+            theory_overlay["average_occupied_reference"]["unsuccessful_average_probe_count"],
         )
         other_linear_averages = [
             row["linear"]["average_probe_count"]
@@ -838,6 +852,9 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertIn('benchmark_suite.json?x=&lt;unsafe&gt;', html)
         self.assertNotIn('benchmark_suite.json?x=<unsafe>', html)
         self.assertIn('metric-bar', html)
+        self.assertIn('Linear probing theory overlay', html)
+        self.assertIn('Expected hit @ avg α', html)
+        self.assertIn('Theory overlay:', html)
         self.assertIn('Lookup split:', html)
         self.assertIn('Linear get hit / miss avg', html)
         self.assertIn('Linear phase split for', html)
@@ -961,14 +978,18 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn("directory-friendly-read-heavy", benchmark_md_text)
             self.assertIn("primary-clustering-tombstone-pressure", benchmark_md_text)
             self.assertIn("Linear probing baseline", benchmark_md_text)
+            self.assertIn("Linear probing theory overlay", benchmark_md_text)
+            self.assertIn("Expected hit @ avg α", benchmark_md_text)
             self.assertIn("Linear lookup probe split", benchmark_md_text)
             self.assertIn("Linear phase probe split", benchmark_md_text)
             self.assertIn("| Linear phase | Count | Avg probes | P50 | P95 | Max |", benchmark_md_text)
             self.assertIn("B-tree page baseline", benchmark_md_text)
             benchmark_json_payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
             self.assertEqual(benchmark_json_payload["title"], benchmark_title)
+            self.assertIn("linear_theory_note", benchmark_json_payload)
             clustering_row = next(row for row in benchmark_json_payload["results"] if row["name"] == "primary-clustering-tombstone-pressure")
             self.assertIn("lookup_probe_breakdown", clustering_row["linear"])
+            self.assertIn("theory_overlay", clustering_row["linear"])
             self.assertGreater(
                 clustering_row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"],
                 clustering_row["linear"]["lookup_probe_breakdown"]["successful"]["average_probe_count"],
@@ -976,14 +997,21 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             benchmark_html_text = benchmark_html.read_text(encoding="utf-8")
             self.assertIn(benchmark_title, benchmark_html_text)
             self.assertIn("Scenario scoreboard", benchmark_html_text)
+            self.assertIn("Linear probing theory overlay", benchmark_html_text)
+            self.assertIn("Expected hit @ avg α", benchmark_html_text)
             self.assertIn("directory-friendly-read-heavy", benchmark_html_text)
             self.assertIn("primary-clustering-tombstone-pressure", benchmark_html_text)
             self.assertIn("Linear probing baseline", benchmark_html_text)
+            self.assertIn("Theory overlay:", benchmark_html_text)
             self.assertIn("Lookup split:", benchmark_html_text)
             self.assertIn("Linear get hit / miss avg", benchmark_html_text)
             self.assertIn("Linear phase split for", benchmark_html_text)
             benchmark_csv_text = benchmark_csv.read_text(encoding="utf-8")
             self.assertIn("linear_average_probe_count", benchmark_csv_text)
+            self.assertIn("linear_average_occupied_load_factor", benchmark_csv_text)
+            self.assertIn("linear_peak_occupied_load_factor", benchmark_csv_text)
+            self.assertIn("linear_theory_expected_hit_probe_count", benchmark_csv_text)
+            self.assertIn("linear_theory_observed_miss_probe_count", benchmark_csv_text)
             self.assertIn("linear_put_phase_average_probe_count", benchmark_csv_text)
             self.assertIn("linear_get_phase_p95_probe_count", benchmark_csv_text)
             self.assertIn("linear_delete_phase_max_probe_count", benchmark_csv_text)

@@ -1,5 +1,9 @@
 {
   "title": "Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison",
+  "linear_theory_note": {
+    "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+    "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context."
+  },
   "bucket_capacity": 2,
   "cuckoo_capacity": 7,
   "max_displacements": 8,
@@ -51,6 +55,10 @@
         "final_capacity": 8,
         "final_load_factor": 0.625,
         "occupied_load_factor": 0.75,
+        "average_load_factor": 0.5096,
+        "average_occupied_load_factor": 0.5481,
+        "peak_load_factor": 0.625,
+        "peak_occupied_load_factor": 0.75,
         "tombstone_count": 1,
         "resize_count": 0,
         "average_probe_count": 1.462,
@@ -138,6 +146,34 @@
             "p50_probe_count": 0,
             "p95_probe_count": 0
           }
+        },
+        "theory_overlay": {
+          "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+          "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+          "average_occupied_reference": {
+            "load_factor": 0.5481,
+            "successful_average_probe_count": 1.606,
+            "unsuccessful_average_probe_count": 2.948
+          },
+          "final_occupied_reference": {
+            "load_factor": 0.75,
+            "successful_average_probe_count": 2.5,
+            "unsuccessful_average_probe_count": 8.5
+          },
+          "peak_occupied_reference": {
+            "load_factor": 0.75,
+            "successful_average_probe_count": 2.5,
+            "unsuccessful_average_probe_count": 8.5
+          },
+          "observed": {
+            "successful_average_probe_count": 1.333,
+            "unsuccessful_average_probe_count": 2.5
+          },
+          "delta_vs_average_reference": {
+            "successful_average_probe_count": -0.273,
+            "unsuccessful_average_probe_count": -0.448
+          },
+          "summary_note": "Average occupied \u03b1\u22480.5481 predicts about 1.606 successful probes and 2.948 unsuccessful probes; observed hit/miss averages were 1.333 and 2.5. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
         }
       },
       "cuckoo": {
@@ -199,6 +235,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.75,
+            "average_load_factor": 0.5096,
+            "average_occupied_load_factor": 0.5481,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.75,
             "tombstone_count": 1,
             "resize_count": 0,
             "average_probe_count": 1.462,
@@ -286,6 +326,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5481,
+                "successful_average_probe_count": 1.606,
+                "unsuccessful_average_probe_count": 2.948
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.333,
+                "unsuccessful_average_probe_count": 2.5
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.273,
+                "unsuccessful_average_probe_count": -0.448
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5481 predicts about 1.606 successful probes and 2.948 unsuccessful probes; observed hit/miss averages were 1.333 and 2.5. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -341,6 +409,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.75,
+            "average_load_factor": 0.5096,
+            "average_occupied_load_factor": 0.5481,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.75,
             "tombstone_count": 1,
             "resize_count": 0,
             "average_probe_count": 1.462,
@@ -428,6 +500,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5481,
+                "successful_average_probe_count": 1.606,
+                "unsuccessful_average_probe_count": 2.948
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.333,
+                "unsuccessful_average_probe_count": 2.5
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.273,
+                "unsuccessful_average_probe_count": -0.448
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5481 predicts about 1.606 successful probes and 2.948 unsuccessful probes; observed hit/miss averages were 1.333 and 2.5. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -483,6 +583,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.75,
+            "average_load_factor": 0.5096,
+            "average_occupied_load_factor": 0.5481,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.75,
             "tombstone_count": 1,
             "resize_count": 0,
             "average_probe_count": 1.462,
@@ -570,6 +674,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5481,
+                "successful_average_probe_count": 1.606,
+                "unsuccessful_average_probe_count": 2.948
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.333,
+                "unsuccessful_average_probe_count": 2.5
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.273,
+                "unsuccessful_average_probe_count": -0.448
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5481 predicts about 1.606 successful probes and 2.948 unsuccessful probes; observed hit/miss averages were 1.333 and 2.5. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -633,6 +765,10 @@
         "final_capacity": 16,
         "final_load_factor": 0.625,
         "occupied_load_factor": 0.625,
+        "average_load_factor": 0.5134,
+        "average_occupied_load_factor": 0.5134,
+        "peak_load_factor": 0.75,
+        "peak_occupied_load_factor": 0.75,
         "tombstone_count": 0,
         "resize_count": 1,
         "average_probe_count": 1.357,
@@ -720,6 +856,34 @@
             "p50_probe_count": 0,
             "p95_probe_count": 0
           }
+        },
+        "theory_overlay": {
+          "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+          "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+          "average_occupied_reference": {
+            "load_factor": 0.5134,
+            "successful_average_probe_count": 1.528,
+            "unsuccessful_average_probe_count": 2.612
+          },
+          "final_occupied_reference": {
+            "load_factor": 0.625,
+            "successful_average_probe_count": 1.833,
+            "unsuccessful_average_probe_count": 4.056
+          },
+          "peak_occupied_reference": {
+            "load_factor": 0.75,
+            "successful_average_probe_count": 2.5,
+            "unsuccessful_average_probe_count": 8.5
+          },
+          "observed": {
+            "successful_average_probe_count": 1.0,
+            "unsuccessful_average_probe_count": 2.0
+          },
+          "delta_vs_average_reference": {
+            "successful_average_probe_count": -0.528,
+            "unsuccessful_average_probe_count": -0.612
+          },
+          "summary_note": "Average occupied \u03b1\u22480.5134 predicts about 1.528 successful probes and 2.612 unsuccessful probes; observed hit/miss averages were 1 and 2. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
         }
       },
       "cuckoo": {
@@ -781,6 +945,10 @@
             "final_capacity": 16,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.625,
+            "average_load_factor": 0.5134,
+            "average_occupied_load_factor": 0.5134,
+            "peak_load_factor": 0.75,
+            "peak_occupied_load_factor": 0.75,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 1.357,
@@ -868,6 +1036,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5134,
+                "successful_average_probe_count": 1.528,
+                "unsuccessful_average_probe_count": 2.612
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.0,
+                "unsuccessful_average_probe_count": 2.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.528,
+                "unsuccessful_average_probe_count": -0.612
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5134 predicts about 1.528 successful probes and 2.612 unsuccessful probes; observed hit/miss averages were 1 and 2. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -923,6 +1119,10 @@
             "final_capacity": 16,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.625,
+            "average_load_factor": 0.5134,
+            "average_occupied_load_factor": 0.5134,
+            "peak_load_factor": 0.75,
+            "peak_occupied_load_factor": 0.75,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 1.357,
@@ -1010,6 +1210,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5134,
+                "successful_average_probe_count": 1.528,
+                "unsuccessful_average_probe_count": 2.612
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.0,
+                "unsuccessful_average_probe_count": 2.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.528,
+                "unsuccessful_average_probe_count": -0.612
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5134 predicts about 1.528 successful probes and 2.612 unsuccessful probes; observed hit/miss averages were 1 and 2. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -1065,6 +1293,10 @@
             "final_capacity": 16,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.625,
+            "average_load_factor": 0.5134,
+            "average_occupied_load_factor": 0.5134,
+            "peak_load_factor": 0.75,
+            "peak_occupied_load_factor": 0.75,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 1.357,
@@ -1152,6 +1384,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5134,
+                "successful_average_probe_count": 1.528,
+                "unsuccessful_average_probe_count": 2.612
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.75,
+                "successful_average_probe_count": 2.5,
+                "unsuccessful_average_probe_count": 8.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.0,
+                "unsuccessful_average_probe_count": 2.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.528,
+                "unsuccessful_average_probe_count": -0.612
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5134 predicts about 1.528 successful probes and 2.612 unsuccessful probes; observed hit/miss averages were 1 and 2. Peak occupied \u03b1\u22480.75 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -1215,6 +1475,10 @@
         "final_capacity": 8,
         "final_load_factor": 0.625,
         "occupied_load_factor": 0.625,
+        "average_load_factor": 0.4732,
+        "average_occupied_load_factor": 0.5536,
+        "peak_load_factor": 0.625,
+        "peak_occupied_load_factor": 0.875,
         "tombstone_count": 0,
         "resize_count": 1,
         "average_probe_count": 1.357,
@@ -1302,6 +1566,34 @@
             "p50_probe_count": 1,
             "p95_probe_count": 1
           }
+        },
+        "theory_overlay": {
+          "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+          "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+          "average_occupied_reference": {
+            "load_factor": 0.5536,
+            "successful_average_probe_count": 1.62,
+            "unsuccessful_average_probe_count": 3.009
+          },
+          "final_occupied_reference": {
+            "load_factor": 0.625,
+            "successful_average_probe_count": 1.833,
+            "unsuccessful_average_probe_count": 4.056
+          },
+          "peak_occupied_reference": {
+            "load_factor": 0.875,
+            "successful_average_probe_count": 4.5,
+            "unsuccessful_average_probe_count": 32.5
+          },
+          "observed": {
+            "successful_average_probe_count": 1.0,
+            "unsuccessful_average_probe_count": 4.0
+          },
+          "delta_vs_average_reference": {
+            "successful_average_probe_count": -0.62,
+            "unsuccessful_average_probe_count": 0.991
+          },
+          "summary_note": "Average occupied \u03b1\u22480.5536 predicts about 1.62 successful probes and 3.009 unsuccessful probes; observed hit/miss averages were 1 and 4. Peak occupied \u03b1\u22480.875 gives miss-cost context for the clustering spikes."
         }
       },
       "cuckoo": {
@@ -1363,6 +1655,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.625,
+            "average_load_factor": 0.4732,
+            "average_occupied_load_factor": 0.5536,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.875,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 1.357,
@@ -1450,6 +1746,34 @@
                 "p50_probe_count": 1,
                 "p95_probe_count": 1
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5536,
+                "successful_average_probe_count": 1.62,
+                "unsuccessful_average_probe_count": 3.009
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.875,
+                "successful_average_probe_count": 4.5,
+                "unsuccessful_average_probe_count": 32.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.0,
+                "unsuccessful_average_probe_count": 4.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.62,
+                "unsuccessful_average_probe_count": 0.991
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5536 predicts about 1.62 successful probes and 3.009 unsuccessful probes; observed hit/miss averages were 1 and 4. Peak occupied \u03b1\u22480.875 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -1505,6 +1829,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.625,
+            "average_load_factor": 0.4732,
+            "average_occupied_load_factor": 0.5536,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.875,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 1.357,
@@ -1592,6 +1920,34 @@
                 "p50_probe_count": 1,
                 "p95_probe_count": 1
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5536,
+                "successful_average_probe_count": 1.62,
+                "unsuccessful_average_probe_count": 3.009
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.875,
+                "successful_average_probe_count": 4.5,
+                "unsuccessful_average_probe_count": 32.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.0,
+                "unsuccessful_average_probe_count": 4.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.62,
+                "unsuccessful_average_probe_count": 0.991
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5536 predicts about 1.62 successful probes and 3.009 unsuccessful probes; observed hit/miss averages were 1 and 4. Peak occupied \u03b1\u22480.875 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -1647,6 +2003,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.625,
             "occupied_load_factor": 0.625,
+            "average_load_factor": 0.4732,
+            "average_occupied_load_factor": 0.5536,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.875,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 1.357,
@@ -1734,6 +2094,34 @@
                 "p50_probe_count": 1,
                 "p95_probe_count": 1
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.5536,
+                "successful_average_probe_count": 1.62,
+                "unsuccessful_average_probe_count": 3.009
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.875,
+                "successful_average_probe_count": 4.5,
+                "unsuccessful_average_probe_count": 32.5
+              },
+              "observed": {
+                "successful_average_probe_count": 1.0,
+                "unsuccessful_average_probe_count": 4.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": -0.62,
+                "unsuccessful_average_probe_count": 0.991
+              },
+              "summary_note": "Average occupied \u03b1\u22480.5536 predicts about 1.62 successful probes and 3.009 unsuccessful probes; observed hit/miss averages were 1 and 4. Peak occupied \u03b1\u22480.875 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -1797,6 +2185,10 @@
         "final_capacity": 8,
         "final_load_factor": 0.375,
         "occupied_load_factor": 0.375,
+        "average_load_factor": 0.4118,
+        "average_occupied_load_factor": 0.4779,
+        "peak_load_factor": 0.625,
+        "peak_occupied_load_factor": 0.625,
         "tombstone_count": 0,
         "resize_count": 1,
         "average_probe_count": 3.471,
@@ -1884,6 +2276,34 @@
             "p50_probe_count": 0,
             "p95_probe_count": 0
           }
+        },
+        "theory_overlay": {
+          "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+          "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+          "average_occupied_reference": {
+            "load_factor": 0.4779,
+            "successful_average_probe_count": 1.458,
+            "unsuccessful_average_probe_count": 2.334
+          },
+          "final_occupied_reference": {
+            "load_factor": 0.375,
+            "successful_average_probe_count": 1.3,
+            "unsuccessful_average_probe_count": 1.78
+          },
+          "peak_occupied_reference": {
+            "load_factor": 0.625,
+            "successful_average_probe_count": 1.833,
+            "unsuccessful_average_probe_count": 4.056
+          },
+          "observed": {
+            "successful_average_probe_count": 3.333,
+            "unsuccessful_average_probe_count": 5.0
+          },
+          "delta_vs_average_reference": {
+            "successful_average_probe_count": 1.875,
+            "unsuccessful_average_probe_count": 2.666
+          },
+          "summary_note": "Average occupied \u03b1\u22480.4779 predicts about 1.458 successful probes and 2.334 unsuccessful probes; observed hit/miss averages were 3.333 and 5. Peak occupied \u03b1\u22480.625 gives miss-cost context for the clustering spikes."
         }
       },
       "cuckoo": {
@@ -1945,6 +2365,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.375,
             "occupied_load_factor": 0.375,
+            "average_load_factor": 0.4118,
+            "average_occupied_load_factor": 0.4779,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.625,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 3.471,
@@ -2032,6 +2456,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.4779,
+                "successful_average_probe_count": 1.458,
+                "unsuccessful_average_probe_count": 2.334
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.375,
+                "successful_average_probe_count": 1.3,
+                "unsuccessful_average_probe_count": 1.78
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "observed": {
+                "successful_average_probe_count": 3.333,
+                "unsuccessful_average_probe_count": 5.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": 1.875,
+                "unsuccessful_average_probe_count": 2.666
+              },
+              "summary_note": "Average occupied \u03b1\u22480.4779 predicts about 1.458 successful probes and 2.334 unsuccessful probes; observed hit/miss averages were 3.333 and 5. Peak occupied \u03b1\u22480.625 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -2087,6 +2539,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.375,
             "occupied_load_factor": 0.375,
+            "average_load_factor": 0.4118,
+            "average_occupied_load_factor": 0.4779,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.625,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 3.471,
@@ -2174,6 +2630,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.4779,
+                "successful_average_probe_count": 1.458,
+                "unsuccessful_average_probe_count": 2.334
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.375,
+                "successful_average_probe_count": 1.3,
+                "unsuccessful_average_probe_count": 1.78
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "observed": {
+                "successful_average_probe_count": 3.333,
+                "unsuccessful_average_probe_count": 5.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": 1.875,
+                "unsuccessful_average_probe_count": 2.666
+              },
+              "summary_note": "Average occupied \u03b1\u22480.4779 predicts about 1.458 successful probes and 2.334 unsuccessful probes; observed hit/miss averages were 3.333 and 5. Peak occupied \u03b1\u22480.625 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
@@ -2229,6 +2713,10 @@
             "final_capacity": 8,
             "final_load_factor": 0.375,
             "occupied_load_factor": 0.375,
+            "average_load_factor": 0.4118,
+            "average_occupied_load_factor": 0.4779,
+            "peak_load_factor": 0.625,
+            "peak_occupied_load_factor": 0.625,
             "tombstone_count": 0,
             "resize_count": 1,
             "average_probe_count": 3.471,
@@ -2316,6 +2804,34 @@
                 "p50_probe_count": 0,
                 "p95_probe_count": 0
               }
+            },
+            "theory_overlay": {
+              "formula": "successful \u2248 0.5 * (1 + 1 / (1 - \u03b1)); unsuccessful \u2248 0.5 * (1 + 1 / (1 - \u03b1)^2)",
+              "reference_basis": "Use the average occupied load factor \u03b1 across benchmark steps as the compact baseline; final and peak occupied load factors are included for context.",
+              "average_occupied_reference": {
+                "load_factor": 0.4779,
+                "successful_average_probe_count": 1.458,
+                "unsuccessful_average_probe_count": 2.334
+              },
+              "final_occupied_reference": {
+                "load_factor": 0.375,
+                "successful_average_probe_count": 1.3,
+                "unsuccessful_average_probe_count": 1.78
+              },
+              "peak_occupied_reference": {
+                "load_factor": 0.625,
+                "successful_average_probe_count": 1.833,
+                "unsuccessful_average_probe_count": 4.056
+              },
+              "observed": {
+                "successful_average_probe_count": 3.333,
+                "unsuccessful_average_probe_count": 5.0
+              },
+              "delta_vs_average_reference": {
+                "successful_average_probe_count": 1.875,
+                "unsuccessful_average_probe_count": 2.666
+              },
+              "summary_note": "Average occupied \u03b1\u22480.4779 predicts about 1.458 successful probes and 2.334 unsuccessful probes; observed hit/miss averages were 3.333 and 5. Peak occupied \u03b1\u22480.625 gives miss-cost context for the clustering spikes."
             }
           },
           "cuckoo": {
