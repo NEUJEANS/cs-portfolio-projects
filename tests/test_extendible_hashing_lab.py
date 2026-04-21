@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,12 +21,15 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 BenchmarkError = MODULE.BenchmarkError
+build_benchmark_png_command = MODULE.build_benchmark_png_command
+default_benchmark_png_height = MODULE.default_benchmark_png_height
 ExtendibleHashTable = MODULE.ExtendibleHashTable
 LinearProbingHashTable = MODULE.LinearProbingHashTable
 SnapshotError = MODULE.SnapshotError
 WorkloadError = MODULE.WorkloadError
 load_snapshot = MODULE.load_snapshot
 render_benchmark_dashboard_html = MODULE.render_benchmark_dashboard_html
+render_benchmark_png = MODULE.render_benchmark_png
 render_visualization_html = MODULE.render_visualization_html
 render_visualization_svg = MODULE.render_visualization_svg
 run_benchmark_suite = MODULE.run_benchmark_suite
@@ -860,6 +864,66 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertIn('Linear phase split for', html)
         self.assertIn('Avg probes', html)
 
+    def test_default_benchmark_png_height_scales_with_scenarios(self) -> None:
+        summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
+        tall = default_benchmark_png_height(summary, 1440)
+        narrow = default_benchmark_png_height(summary, 960)
+        self.assertGreaterEqual(tall, 1800)
+        self.assertGreater(narrow, tall)
+
+    def test_build_benchmark_png_command_uses_headless_chrome_and_file_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            html_path = tmp_path / 'dashboard.html'
+            png_path = tmp_path / 'dashboard.png'
+            html_path.write_text('<!doctype html><title>x</title>', encoding='utf-8')
+            with mock.patch.object(MODULE, 'resolve_chrome_binary', return_value='/usr/bin/google-chrome'):
+                command = build_benchmark_png_command(
+                    html_path,
+                    png_path,
+                    width=1440,
+                    height=4800,
+                    capture_ms=1500,
+                )
+            self.assertEqual(command[0], '/usr/bin/google-chrome')
+            self.assertIn('--headless', command)
+            self.assertIn('--hide-scrollbars', command)
+            self.assertIn('--window-size=1440,4800', command)
+            self.assertIn('--virtual-time-budget=1500', command)
+            self.assertIn(f'--screenshot={png_path.resolve()}', command)
+            self.assertEqual(command[-1], html_path.resolve().as_uri())
+
+    def test_render_benchmark_png_raises_when_html_is_missing(self) -> None:
+        summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            with self.assertRaisesRegex(RuntimeError, 'HTML dashboard not found'):
+                render_benchmark_png(
+                    tmp_path / 'missing.html',
+                    tmp_path / 'out.png',
+                    summary,
+                )
+
+    def test_benchmark_cli_rejects_png_without_html_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            png_path = Path(tmp_dir) / 'dashboard.png'
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    'benchmark',
+                    '--input',
+                    str(BENCHMARK_SUITE),
+                    '--png-out',
+                    str(png_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(process.returncode, 0)
+            self.assertIn('--png-out requires --html-out', process.stderr)
+
     def test_cli_run_inspect_lookup_delete_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -870,6 +934,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             benchmark_md = tmp_path / "benchmark.md"
             benchmark_html = tmp_path / "benchmark.html"
             benchmark_csv = tmp_path / "benchmark.csv"
+            benchmark_png = tmp_path / "benchmark.png"
             visualize_svg = tmp_path / "trace.svg"
             visualize_html = tmp_path / "trace.html"
 
@@ -944,24 +1009,33 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIsNotNone(load_snapshot(updated_snapshot_path))
 
             benchmark_title = "Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison"
+            benchmark_command = [
+                sys.executable,
+                str(SCRIPT),
+                "benchmark",
+                "--input",
+                str(BENCHMARK_SUITE),
+                "--json-out",
+                str(benchmark_json),
+                "--markdown-out",
+                str(benchmark_md),
+                "--html-out",
+                str(benchmark_html),
+                "--csv-out",
+                str(benchmark_csv),
+                "--title",
+                benchmark_title,
+            ]
+            chrome_available = bool(
+                shutil.which('google-chrome')
+                or shutil.which('google-chrome-stable')
+                or shutil.which('chromium')
+                or shutil.which('chromium-browser')
+            )
+            if chrome_available:
+                benchmark_command.extend(["--png-out", str(benchmark_png)])
             benchmark_process = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "benchmark",
-                    "--input",
-                    str(BENCHMARK_SUITE),
-                    "--json-out",
-                    str(benchmark_json),
-                    "--markdown-out",
-                    str(benchmark_md),
-                    "--html-out",
-                    str(benchmark_html),
-                    "--csv-out",
-                    str(benchmark_csv),
-                    "--title",
-                    benchmark_title,
-                ],
+                benchmark_command,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -970,6 +1044,9 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(benchmark_md.exists())
             self.assertTrue(benchmark_html.exists())
             self.assertTrue(benchmark_csv.exists())
+            if chrome_available:
+                self.assertTrue(benchmark_png.exists())
+                self.assertIn(str(benchmark_png), benchmark_process.stdout)
             self.assertIn('"scenario_count": 4', benchmark_process.stdout)
             self.assertIn('"btree_page_size": 512', benchmark_process.stdout)
             self.assertIn(benchmark_title, benchmark_process.stdout)

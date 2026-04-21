@@ -5,7 +5,11 @@ import csv
 import importlib.util
 import json
 import math
+import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from html import escape
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -2211,6 +2215,155 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
 '''
 
 
+
+def resolve_chrome_binary(preferred: str | Path | None = None) -> str:
+    candidates: list[str] = []
+    if preferred is not None:
+        candidates.append(str(preferred))
+    candidates.extend(["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"])
+    for candidate in candidates:
+        candidate_path = Path(candidate).expanduser()
+        if candidate_path.is_absolute() and candidate_path.exists():
+            return str(candidate_path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError(
+        "Could not find a Chrome/Chromium binary for PNG capture. Pass --chrome-binary or install google-chrome/chromium."
+    )
+
+
+def default_benchmark_png_height(summary: dict[str, Any], width: int) -> int:
+    normalized_width = max(960, width)
+    scenario_count = max(1, int(summary["scenario_count"]))
+    if normalized_width >= 1320:
+        per_scenario_height = 980
+    elif normalized_width >= 1080:
+        per_scenario_height = 1180
+    else:
+        per_scenario_height = 1620
+    estimated_height = 1500 + (scenario_count * per_scenario_height)
+    return max(1800, min(estimated_height, 7200))
+
+
+def measure_html_document_height(
+    html_output_path: str | Path,
+    *,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> int | None:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        return None
+    html_text = html_path.read_text(encoding="utf-8")
+    marker_id = "benchmark-png-scroll-height"
+    marker_script = (
+        "<script>\n"
+        'window.addEventListener("load", () => {\n'
+        '  const marker = document.createElement("pre");\n'
+        f'  marker.id = "{marker_id}";\n'
+        '  marker.textContent = JSON.stringify({\n'
+        '    bodyScrollHeight: document.body.scrollHeight,\n'
+        '    docScrollHeight: document.documentElement.scrollHeight,\n'
+        '    bodyClientHeight: document.body.clientHeight,\n'
+        '    docClientHeight: document.documentElement.clientHeight,\n'
+        '  });\n'
+        '  document.body.appendChild(marker);\n'
+        '});\n'
+        "</script>\n"
+    )
+    instrumented_html = html_text.replace("</body>", marker_script + "</body>") if "</body>" in html_text else html_text + marker_script
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        instrumented_path = Path(tmp_dir) / "benchmark-dashboard-height-probe.html"
+        instrumented_path.write_text(instrumented_html, encoding="utf-8")
+        command = [
+            resolve_chrome_binary(chrome_binary),
+            "--headless",
+            "--disable-gpu",
+            f"--virtual-time-budget={max(0, capture_ms)}",
+            "--dump-dom",
+            instrumented_path.resolve().as_uri(),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    match = re.search(rf'<pre id="{marker_id}">([^<]+)</pre>', result.stdout)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+    height_candidates = [payload.get("docScrollHeight"), payload.get("bodyScrollHeight"), payload.get("bodyClientHeight")]
+    numeric_heights = [int(value) for value in height_candidates if isinstance(value, (int, float))]
+    return max(numeric_heights) if numeric_heights else None
+
+
+def build_benchmark_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    resolved_html = Path(html_output_path).resolve()
+    resolved_png = Path(png_output_path).resolve()
+    return [
+        resolve_chrome_binary(chrome_binary),
+        "--headless",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        f"--window-size={width},{height}",
+        f"--virtual-time-budget={capture_ms}",
+        f"--screenshot={resolved_png}",
+        resolved_html.as_uri(),
+    ]
+
+
+def render_benchmark_png(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    summary: dict[str, Any],
+    *,
+    width: int = 1440,
+    height: int | None = None,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        raise RuntimeError(f"HTML dashboard not found for PNG capture: {html_path}")
+    png_path = Path(png_output_path)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    effective_width = max(960, width)
+    measured_height = None
+    if height is None:
+        measured_height = measure_html_document_height(
+            html_path,
+            capture_ms=max(0, capture_ms),
+            chrome_binary=chrome_binary,
+        )
+    heuristic_height = default_benchmark_png_height(summary, effective_width)
+    effective_height = height if height is not None else max(heuristic_height, (measured_height or 0) + 120)
+    command = build_benchmark_png_command(
+        html_path,
+        png_path,
+        width=effective_width,
+        height=max(1200, effective_height),
+        capture_ms=max(0, capture_ms),
+        chrome_binary=chrome_binary,
+    )
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown Chrome headless error"
+        raise RuntimeError(f"PNG capture failed: {detail}")
+    if not png_path.exists():
+        raise RuntimeError(f"PNG capture did not create the expected output file: {png_path}")
+    return png_path
+
+
 def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -2434,6 +2587,11 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--json-out", type=Path, help="optional JSON summary output")
     benchmark_parser.add_argument("--markdown-out", type=Path, help="optional Markdown report output")
     benchmark_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML dashboard output")
+    benchmark_parser.add_argument("--png-out", type=Path, help="optional PNG screenshot captured from the HTML dashboard")
+    benchmark_parser.add_argument("--png-width", type=int, default=1440, help="viewport width in pixels for PNG capture (default: 1440)")
+    benchmark_parser.add_argument("--png-height", type=int, help="optional viewport height override for PNG capture; defaults to an auto-sized dashboard height")
+    benchmark_parser.add_argument("--png-capture-ms", type=int, default=1500, help="virtual time budget in milliseconds before capturing the PNG screenshot")
+    benchmark_parser.add_argument("--chrome-binary", type=Path, help="optional Chrome/Chromium binary for PNG capture")
     benchmark_parser.add_argument("--csv-out", type=Path, help="optional CSV summary output")
     benchmark_parser.add_argument(
         "--title",
@@ -2516,9 +2674,19 @@ def command_benchmark(args: argparse.Namespace) -> int:
             render_benchmark_dashboard_html(summary["title"], summary, suite_source=str(args.input)) + "\n",
             encoding="utf-8",
         )
+    if args.png_out:
+        render_benchmark_png(
+            args.html_out,
+            args.png_out,
+            summary,
+            width=args.png_width,
+            height=args.png_height,
+            capture_ms=args.png_capture_ms,
+            chrome_binary=args.chrome_binary,
+        )
     if args.csv_out:
         save_benchmark_csv(args.csv_out, summary["results"])
-    print(json.dumps({"input": str(args.input), **summary}, indent=2))
+    print(json.dumps({"input": str(args.input), "png_out": str(args.png_out) if args.png_out else None, **summary}, indent=2))
     return 0
 
 
@@ -2556,6 +2724,8 @@ def command_visualize(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "benchmark" and args.png_out is not None and args.html_out is None:
+        parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML dashboard")
     if args.command == "run":
         return command_run(args)
     if args.command == "inspect":

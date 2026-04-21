@@ -15,11 +15,12 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 - JSON snapshot save/load support for resumable inspection workflows
 - workload runner that records per-step growth and can export a Markdown trace report
 - self-contained SVG/HTML visualization exports that show split sequences, directory aliasing, and bucket-local-depth changes per step while preserving full details through hover/tooltips
-- benchmark mode that compares extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across JSON suite scenarios with JSON/Markdown/CSV outputs
+- benchmark mode that compares extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across JSON suite scenarios with JSON/Markdown/HTML/PNG/CSV outputs
 - committed benchmark suite now includes a clustering-focused `primary-clustering-tombstone-pressure` preset that exaggerates linear-probing probe growth, tombstones, and cleanup rebuilds
 - compact self-contained HTML benchmark dashboard export for recruiter-friendly browsing of the same deterministic benchmark suite
+- optional PNG benchmark dashboard capture so the same benchmark run can emit a README- and slide-friendly screenshot without a manual browser round-trip
 - phase-split linear-probing probe summaries (including hit/miss avg + percentile stats) so successful vs unsuccessful lookups are easy to compare in the exported dashboard and reports
-- theory-overlay summaries that compare observed linear-probing hit/miss probe costs against classic load-factor expectations across the JSON, Markdown, HTML, and CSV benchmark exports
+- theory-overlay summaries that compare observed linear-probing hit/miss probe costs against classic load-factor expectations across the JSON, Markdown, HTML, CSV, and PNG-linked benchmark exports
 - CLI commands for workload execution, snapshot inspection, lookups, deletions, visualization exports, and benchmark exports
 - unit tests that cover bucket splits, merges, directory shrinking, visualization rendering, benchmark validation, and CLI flows
 
@@ -94,9 +95,12 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py benchmark \
   --json-out /tmp/extendible-benchmark.json \
   --markdown-out /tmp/extendible-benchmark.md \
   --html-out /tmp/extendible-benchmark.html \
+  --png-out /tmp/extendible-benchmark.png \
   --csv-out /tmp/extendible-benchmark.csv \
   --title 'Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison'
 ```
+
+`--png-out` captures a Chrome/Chromium headless screenshot from the generated HTML dashboard, so pair it with `--html-out` and optionally pass `--chrome-binary` when the browser is not already on `PATH`.
 
 See the committed visualization + benchmark demo outputs without rerunning anything:
 - `docs/artifacts/extendible-hashing-lab/sample_workload_trace.svg`
@@ -106,6 +110,7 @@ See the committed visualization + benchmark demo outputs without rerunning anyth
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_report.md`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.html`
+- `docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.png`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.csv`
 
 ## Test
@@ -115,5 +120,5 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 ```
 
 ## Future improvements
-- add compact PNG export or thumbnail-strip generation for the visualization and benchmark dashboards so README screenshots stay easy to embed
 - add a small thumbnail-strip export for the split/merge visualization artifacts so the README can show the lifecycle story without relying on large HTML screenshots
+- consider optional PNG capture for the workload visualization page so the split/merge story gets the same no-manual-screenshot path as the benchmark dashboard
