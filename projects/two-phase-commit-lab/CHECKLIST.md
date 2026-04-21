@@ -17,6 +17,7 @@
 - [x] Add saved named bundle presets on top of the tag-filtered catalog flow so common walkthrough bundles are one flag away
 - [x] Extend protocol comparison artifacts from 2PC-vs-saga to 2PC-vs-3PC-vs-saga so the lab explains why timeout-assisted atomic commit is still mostly a teaching protocol
 - [x] Add PNG/social-preview export for peer-termination timeline artifacts so blocked-case visuals are easy to reuse in README hero images or slide decks
+- [x] Add a compact cross-scenario gallery page that shows the blocked timeline PNG covers beside links to the full SVG/HTML walkthroughs
 
 ## Next candidate slices
-- [ ] add a compact cross-scenario gallery page that shows the blocked timeline PNG covers beside links to the full SVG/HTML walkthroughs
+- [ ] add compact protocol-outcome chips on the gallery cards so 2PC blocking vs 3PC timeout-assisted abort vs saga compensation is visible without opening the compare page

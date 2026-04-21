@@ -18,6 +18,7 @@ A recruiter-friendly landing page for the committed 2PC scenarios, showing how t
 - scenarios with protocol-comparison dashboards: `0`
 - scenarios with peer-termination walkthroughs: `0`
 - scenarios with peer-termination timeline visuals: `0`
+- scenarios with blocked timeline PNG covers: `0`
 
 ## Theme groups
 Browse the bundle by scenario theme when you want only blocking incidents, recovery drills, or participant-side reconnect stories.

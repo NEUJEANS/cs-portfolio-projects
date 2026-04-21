@@ -20,6 +20,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - standalone SVG and HTML timeline exports for peer-termination walkthroughs, so blocked incidents have a visual sequence artifact as well as Markdown
 - compact PNG social-preview exports for peer-termination walkthroughs, making the timeline story easy to reuse in README hero images, GitHub social previews, or slide decks
 - a compact incident-response HTML dashboard that groups blocked scenarios by recovery-required cases, peer-visible `COMMIT` evidence, and safe-`ABORT` evidence
+- a blocked-case timeline gallery page that lines up the committed PNG covers beside direct links to the full HTML/SVG/Markdown walkthrough artifacts
 - multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, termination hints, thematic tags, and any committed comparison/termination companion artifacts in one place
 - optional tag-filtered catalog generation for smaller recruiter-friendly subsets such as peer-assisted incidents or recovery-only bundles, without hand-curating file lists
 - saved named bundle presets such as `incident-review`, `peer-assisted`, `recovery-story`, and `baseline-flows` so common walkthrough bundles can reuse the catalog filter flow with a single preset flag
@@ -35,8 +36,8 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - `coordinator_recovery_commit.json` - the coordinator logs COMMIT, crashes, then replays the decision during recovery
 - `participant_reconnect_commit.json` - a prepared participant misses the first `COMMIT`, reconnects, and resolves the durable outcome safely
 - `CHECKLIST.md` - resumable slice history plus next ideas
-- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, termination timeline exports, HTML/Markdown CLI output, the incident-response dashboard, and catalog generation
-- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution Markdown/timeline artifacts (SVG/HTML/PNG), the scenario catalog landing page, the blocked-case incident-response dashboard, and protocol-comparison Markdown/JSON/HTML artifacts with cross-links between them when the companion files exist
+- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, termination timeline exports, HTML/Markdown CLI output, the incident-response dashboard and gallery, and catalog generation
+- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution Markdown/timeline artifacts (SVG/HTML/PNG), the scenario catalog landing page, the blocked-case incident-response dashboard and gallery, and protocol-comparison Markdown/JSON/HTML artifacts with cross-links between them when the companion files exist
 
 ## Scenario format
 ```json
@@ -156,7 +157,7 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   --report-dir docs/artifacts/two-phase-commit-lab
 ```
 
-That bundle command also refreshes `incident_response_dashboard.html`, the peer-termination timeline HTML/SVG artifacts for blocked scenarios, and the scenario catalog links and theme groups that point to those visual companions.
+That bundle command also refreshes `incident_response_dashboard.html`, `blocked_timeline_gallery.html`, the peer-termination timeline HTML/SVG/PNG artifacts for blocked scenarios, and the scenario catalog links and theme groups that point to those visual companions.
 
 ### Generate a smaller tag-filtered subset catalog
 ```bash
@@ -168,7 +169,7 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   --report-dir docs/artifacts/two-phase-commit-lab
 ```
 
-By default, repeated `--include-tag` flags keep scenarios matching **any** of the supplied tags. Add `--require-all-tags` when you want an intersection instead. Filtered catalogs write a stem-specific incident dashboard (for example `peer_assisted_scenarios_catalog_incident_response_dashboard.html`) so the main bundle is not overwritten.
+By default, repeated `--include-tag` flags keep scenarios matching **any** of the supplied tags. Add `--require-all-tags` when you want an intersection instead. Filtered catalogs write stem-specific incident dashboards and blocked-gallery pages (for example `peer_assisted_scenarios_catalog_incident_response_dashboard.html` and `peer_assisted_scenarios_catalog_blocked_timeline_gallery.html`) so the main bundle is not overwritten.
 
 ### Generate a saved named bundle preset
 ```bash
@@ -197,7 +198,7 @@ Available presets currently include `incident-review`, `peer-assisted`, `recover
 - `participant_reconnect_commit.json`
   - a prepared participant can still end up temporarily in doubt after missing the first second-phase message, then safely finish by reconnecting to learn the durable decision
 - `scenario_catalog.md`
-  - one landing page compares all committed scenarios, groups them by reusable tags like `blocking` or `participant-reconnect`, and deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, timeline visuals, and the blocked-case incident dashboard
+  - one landing page compares all committed scenarios, groups them by reusable tags like `blocking` or `participant-reconnect`, and deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, timeline visuals, the blocked-case incident dashboard, and the screenshot-first blocked gallery
 - `peer_assisted_scenarios_catalog.md`
   - a tag-filtered subset bundle for only the peer-assisted incidents, useful when you want a shorter recruiter walk-through focused on evidence-backed blocked-case recovery stories
 - `incident_review_scenarios_catalog.md`
@@ -206,6 +207,8 @@ Available presets currently include `incident-review`, `peer-assisted`, `recover
   - a saved preset bundle that focuses on coordinator replay plus participant reconnect recovery, useful when you want the shortest "how doubt clears safely" story
 - `incident_response_dashboard.html`
   - a compact on-call style triage view for only the blocked scenarios, grouped into recovery-required, peer-visible `COMMIT`, and safe-`ABORT` evidence buckets
+- `blocked_timeline_gallery.html`
+  - a screenshot-first gallery page that places the three blocked timeline PNG covers beside direct links to the full HTML/SVG/Markdown walkthrough artifacts
 - `coordinator_crash_before_decision_protocol_compare.md` / `.html`
   - a side-by-side 2PC vs 3PC vs saga artifact for the classic blocking crash, useful when interviewers ask why microservices often avoid plain 2PC and why 3PC mostly stays a textbook protocol
 - `coordinator_crash_partial_commit_delivery_protocol_compare.md` / `.html`
@@ -229,4 +232,4 @@ python3 -m unittest tests.test_two_phase_commit_lab -v
 ```
 
 ## Future ideas
-- add a small cross-scenario gallery page that shows the three blocked timeline PNG covers together beside the full artifact links
+- add compact protocol-outcome chips on the gallery cards so 2PC blocking vs 3PC timeout-assisted abort vs saga compensation is visible without opening the compare page

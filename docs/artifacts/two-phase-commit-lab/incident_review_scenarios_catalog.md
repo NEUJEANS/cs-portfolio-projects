@@ -2,7 +2,7 @@
 
 A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, recovery, and peer-assisted incident-response cases.
 
-Need the blocked-case triage view first? Open the [incident-response dashboard](incident_review_scenarios_catalog_incident_response_dashboard.html).
+Need the blocked-case fast path first? Open the [incident-response dashboard](incident_review_scenarios_catalog_incident_response_dashboard.html) and the [blocked timeline gallery](incident_review_scenarios_catalog_blocked_timeline_gallery.html).
 
 ## Active filters
 - bundle preset: `incident-review` (blocking, coordinator-recovery, and reconnect-heavy incidents for an on-call style walkthrough.)
@@ -20,6 +20,7 @@ Need the blocked-case triage view first? Open the [incident-response dashboard](
 - scenarios with protocol-comparison dashboards: `2`
 - scenarios with peer-termination walkthroughs: `3`
 - scenarios with peer-termination timeline visuals: `3`
+- scenarios with blocked timeline PNG covers: `3`
 
 ## Theme groups
 Browse the bundle by scenario theme when you want only blocking incidents, recovery drills, or participant-side reconnect stories.

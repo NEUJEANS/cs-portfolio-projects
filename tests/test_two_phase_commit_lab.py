@@ -38,6 +38,7 @@ render_catalog_markdown = MODULE.render_catalog_markdown
 render_comparison_html = MODULE.render_comparison_html
 render_comparison_markdown = MODULE.render_comparison_markdown
 render_incident_response_html = MODULE.render_incident_response_html
+render_blocked_timeline_gallery_html = MODULE.render_blocked_timeline_gallery_html
 render_markdown_report = MODULE.render_markdown_report
 render_termination_resolution_markdown = MODULE.render_termination_resolution_markdown
 render_termination_resolution_timeline_social_preview_html = MODULE.render_termination_resolution_timeline_social_preview_html
@@ -417,6 +418,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("- scenarios with protocol-comparison dashboards: `2`", catalog)
             self.assertIn("- scenarios with peer-termination walkthroughs: `3`", catalog)
             self.assertIn("- scenarios with peer-termination timeline visuals: `3`", catalog)
+            self.assertIn("- scenarios with blocked timeline PNG covers: `3`", catalog)
             self.assertIn("## Theme groups", catalog)
             self.assertIn("### `blocking`", catalog)
             self.assertIn("### `participant-reconnect`", catalog)
@@ -442,11 +444,13 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             catalog = render_catalog_markdown(
                 entries,
                 incident_dashboard_path="peer_assisted_scenarios_catalog_incident_response_dashboard.html",
+                blocked_timeline_gallery_path="peer_assisted_scenarios_catalog_blocked_timeline_gallery.html",
                 include_tags=normalized_tags,
             )
             self.assertIn("## Active filters", catalog)
             self.assertIn("- scenario tags: `any` of `peer-assisted-commit`, `peer-assisted-abort`", catalog)
             self.assertIn("peer_assisted_scenarios_catalog_incident_response_dashboard.html", catalog)
+            self.assertIn("peer_assisted_scenarios_catalog_blocked_timeline_gallery.html", catalog)
             self.assertIn("- scenarios: `2`", catalog)
             self.assertIn("Peer-visible COMMIT evidence", render_incident_response_html(entries))
 
@@ -466,6 +470,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             catalog = render_catalog_markdown(
                 entries,
                 incident_dashboard_path="incident_review_scenarios_catalog_incident_response_dashboard.html",
+                blocked_timeline_gallery_path="incident_review_scenarios_catalog_blocked_timeline_gallery.html",
                 include_tags=normalized_tags,
                 require_all_tags=require_all_tags,
                 bundle_preset=preset,
@@ -492,11 +497,12 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             catalog = render_catalog_markdown(
                 entries,
                 incident_dashboard_path="recovery_story_scenarios_catalog_incident_response_dashboard.html",
+                blocked_timeline_gallery_path="recovery_story_scenarios_catalog_blocked_timeline_gallery.html",
                 include_tags=normalized_tags,
                 require_all_tags=require_all_tags,
                 bundle_preset=preset,
             )
-            self.assertNotIn("Need the blocked-case triage view first?", catalog)
+            self.assertNotIn("Need the blocked-case fast path first?", catalog)
             self.assertIn("- outcomes: `2 commit`, `0 abort`, `0 blocked`", catalog)
 
     def test_catalog_detects_related_compare_and_termination_artifacts(self) -> None:
@@ -519,6 +525,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("- scenarios with protocol-comparison dashboards: `1`", catalog)
             self.assertIn("- scenarios with peer-termination walkthroughs: `1`", catalog)
             self.assertIn("- scenarios with peer-termination timeline visuals: `1`", catalog)
+            self.assertIn("- scenarios with blocked timeline PNG covers: `1`", catalog)
             self.assertIn("[html](reports/coordinator_crash_partial_commit_delivery_protocol_compare.html)", catalog)
             self.assertIn("[md](reports/coordinator_crash_partial_commit_delivery_protocol_compare.md)", catalog)
             self.assertIn("[md](reports/coordinator_crash_partial_commit_delivery_termination.md)", catalog)
@@ -539,6 +546,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             dashboard = render_incident_response_html(
                 entries,
                 catalog_markdown_path="scenario_catalog.md",
+                blocked_timeline_gallery_path="blocked_timeline_gallery.html",
             )
             self.assertIn("Blocked-case triage at a glance", dashboard)
             self.assertIn("Recovery-required / still blocked", dashboard)
@@ -548,16 +556,42 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("Coordinator crash after one COMMIT delivery", dashboard)
             self.assertIn("Coordinator crash after durable ABORT", dashboard)
             self.assertIn('href="scenario_catalog.md"', dashboard)
+            self.assertIn('href="blocked_timeline_gallery.html"', dashboard)
             self.assertIn('href="reports/coordinator_crash_before_decision_report.md"', dashboard)
             self.assertIn('href="reports/coordinator_crash_partial_commit_delivery_report.md"', dashboard)
             self.assertIn('href="reports/coordinator_crash_durable_abort_report.md"', dashboard)
             self.assertIn('href="reports/coordinator_crash_partial_commit_delivery_termination_timeline.png"', dashboard)
+
+    def test_blocked_timeline_gallery_html_lists_png_covers_and_artifact_links(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "scenario_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            entries = build_catalog_entries(
+                collect_scenario_paths([SCENARIO_DIR]),
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            gallery = render_blocked_timeline_gallery_html(
+                entries,
+                catalog_markdown_path="scenario_catalog.md",
+                incident_dashboard_path="incident_response_dashboard.html",
+            )
+            self.assertIn("Blocked incidents, screenshot-first", gallery)
+            self.assertIn("Coordinator crash before durable decision", gallery)
+            self.assertIn("Coordinator crash after one COMMIT delivery", gallery)
+            self.assertIn("Coordinator crash after durable ABORT", gallery)
+            self.assertIn('src="reports/coordinator_crash_before_decision_termination_timeline.png"', gallery)
+            self.assertIn('href="reports/coordinator_crash_partial_commit_delivery_termination_timeline.html"', gallery)
+            self.assertIn('href="reports/coordinator_crash_durable_abort_termination_timeline.svg"', gallery)
+            self.assertIn('href="scenario_catalog.md"', gallery)
+            self.assertIn('href="incident_response_dashboard.html"', gallery)
 
     def test_catalog_command_writes_index_and_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report_dir = Path(temp_dir) / "reports"
             catalog_path = Path(temp_dir) / "scenario_catalog.md"
             dashboard_path = Path(temp_dir) / "incident_response_dashboard.html"
+            gallery_path = Path(temp_dir) / "blocked_timeline_gallery.html"
             completed = subprocess.run(
                 [
                     "python3",
@@ -575,7 +609,9 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                 cwd=REPO_ROOT,
             )
             self.assertIn("wrote 7 scenario reports", completed.stdout)
+            self.assertIn("wrote blocked timeline gallery", completed.stdout)
             self.assertIn("wrote incident-response dashboard", completed.stdout)
+            self.assertTrue(gallery_path.exists())
             self.assertTrue(dashboard_path.exists())
             self.assertTrue((report_dir / "order_success_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_report.md").exists())
@@ -596,10 +632,12 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.png").exists())
             catalog = catalog_path.read_text()
             dashboard = dashboard_path.read_text()
+            gallery = gallery_path.read_text()
             partial_timeline = (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.svg").read_text()
             abort_timeline = (report_dir / "coordinator_crash_durable_abort_termination_timeline.html").read_text()
             partial_timeline_png = (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.png").read_bytes()
             self.assertIn("[incident-response dashboard](incident_response_dashboard.html)", catalog)
+            self.assertIn("[blocked timeline gallery](blocked_timeline_gallery.html)", catalog)
             self.assertIn("[report](reports/order_success_report.md)", catalog)
             self.assertIn("outcome: `blocked` with decision `commit`", catalog)
             self.assertIn("outcome: `blocked` with decision `abort`", catalog)
@@ -607,6 +645,8 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("termination hint: ABORT safe via risk", catalog)
             self.assertIn("Peer-visible COMMIT evidence", dashboard)
             self.assertIn("Safe-ABORT evidence", dashboard)
+            self.assertIn("Blocked incidents, screenshot-first", gallery)
+            self.assertIn("reports/coordinator_crash_before_decision_termination_timeline.png", gallery)
             self.assertIn("Unresolved after the plain run: billing", partial_timeline)
             self.assertIn("and shipping.", partial_timeline)
             self.assertIn("Unresolved after the plain run: inventory and", abort_timeline)
@@ -618,6 +658,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             report_dir = Path(temp_dir) / "reports"
             catalog_path = Path(temp_dir) / "peer_assisted_scenarios_catalog.md"
             dashboard_path = Path(temp_dir) / "peer_assisted_scenarios_catalog_incident_response_dashboard.html"
+            gallery_path = Path(temp_dir) / "peer_assisted_scenarios_catalog_blocked_timeline_gallery.html"
             completed = subprocess.run(
                 [
                     "python3",
@@ -642,6 +683,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("wrote 2 scenario reports", completed.stdout)
             self.assertTrue(catalog_path.exists())
             self.assertTrue(dashboard_path.exists())
+            self.assertTrue(gallery_path.exists())
             catalog = catalog_path.read_text()
             self.assertIn("## Active filters", catalog)
             self.assertIn("Coordinator crash after one COMMIT delivery", catalog)
@@ -655,6 +697,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             report_dir = Path(temp_dir) / "reports"
             catalog_path = Path(temp_dir) / "incident_review_scenarios_catalog.md"
             dashboard_path = Path(temp_dir) / "incident_review_scenarios_catalog_incident_response_dashboard.html"
+            gallery_path = Path(temp_dir) / "incident_review_scenarios_catalog_blocked_timeline_gallery.html"
             completed = subprocess.run(
                 [
                     "python3",
@@ -680,6 +723,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("wrote 5 scenario reports", completed.stdout)
             self.assertTrue(catalog_path.exists())
             self.assertTrue(dashboard_path.exists())
+            self.assertTrue(gallery_path.exists())
             catalog = catalog_path.read_text()
             self.assertIn("- bundle preset: `incident-review`", catalog)
             self.assertIn("Coordinator crash before durable decision", catalog)

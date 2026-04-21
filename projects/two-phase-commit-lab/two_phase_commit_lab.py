@@ -1882,6 +1882,7 @@ def _wrap_svg_text(text: str, width: int) -> list[str]:
 def render_catalog_markdown(
     entries: list[CatalogEntry],
     incident_dashboard_path: str | None = None,
+    blocked_timeline_gallery_path: str | None = None,
     include_tags: list[str] | None = None,
     require_all_tags: bool = False,
     bundle_preset: CatalogBundlePreset | None = None,
@@ -1925,6 +1926,9 @@ def render_catalog_markdown(
         if entry.termination_timeline_svg_path
         or entry.termination_timeline_html_path
         or entry.termination_timeline_png_path
+    )
+    termination_timeline_png_count = sum(
+        1 for entry in entries if entry.termination_timeline_png_path
     )
 
     filter_lines: list[str] = []
@@ -2045,12 +2049,23 @@ def render_catalog_markdown(
         snapshot_lines.append("")
 
     incident_dashboard_lines: list[str] = []
-    if incident_dashboard_path and blocked_count:
-        incident_dashboard_lines = [
-            "Need the blocked-case triage view first? Open the "
-            f"[incident-response dashboard]({incident_dashboard_path}).",
-            "",
-        ]
+    if blocked_count:
+        focus_links: list[str] = []
+        if incident_dashboard_path:
+            focus_links.append(
+                f"[incident-response dashboard]({incident_dashboard_path})"
+            )
+        if blocked_timeline_gallery_path:
+            focus_links.append(
+                f"[blocked timeline gallery]({blocked_timeline_gallery_path})"
+            )
+        if focus_links:
+            joined_focus_links = " and the ".join(focus_links)
+            incident_dashboard_lines = [
+                "Need the blocked-case fast path first? Open the "
+                f"{joined_focus_links}.",
+                "",
+            ]
 
     theme_lines: list[str] = []
     if tag_groups:
@@ -2083,6 +2098,7 @@ def render_catalog_markdown(
         f"- scenarios with protocol-comparison dashboards: `{comparison_dashboard_count}`",
         f"- scenarios with peer-termination walkthroughs: `{termination_artifact_count}`",
         f"- scenarios with peer-termination timeline visuals: `{termination_timeline_count}`",
+        f"- scenarios with blocked timeline PNG covers: `{termination_timeline_png_count}`",
         "",
         *theme_lines,
         "## Scenario comparison",
@@ -2130,6 +2146,12 @@ def _format_catalog_entry_links(entries: list[CatalogEntry]) -> str:
     return "; ".join(labels)
 
 
+def _sentence_case(text: str) -> str:
+    if not text:
+        return text
+    return text[0].upper() + text[1:]
+
+
 def _normalize_scenario_tags(raw_tags: Any) -> list[str]:
     if raw_tags is None:
         return []
@@ -2156,6 +2178,7 @@ def render_incident_response_html(
     entries: list[CatalogEntry],
     *,
     catalog_markdown_path: str | None = None,
+    blocked_timeline_gallery_path: str | None = None,
 ) -> str:
     blocked_entries = [entry for entry in entries if entry.result.outcome == "blocked"]
     group_specs = [
@@ -2217,13 +2240,22 @@ def render_incident_response_html(
         for label, value, description, tone in summary_cards
     )
 
-    catalog_link_html = ""
+    hero_links: list[str] = []
     if catalog_markdown_path:
-        catalog_link_html = (
+        hero_links.append(
             '<a class="catalog-link" href="'
             + _html_escape(catalog_markdown_path)
             + '">Open the full scenario catalog</a>'
         )
+
+    if blocked_timeline_gallery_path and blocked_entries:
+        hero_links.append(
+            '<a class="catalog-link" href="'
+            + _html_escape(blocked_timeline_gallery_path)
+            + '">Open the blocked timeline gallery</a>'
+        )
+
+    hero_links_html = "\n          ".join(hero_links)
 
     if not blocked_entries:
         sections_html = """
@@ -2426,7 +2458,7 @@ def render_incident_response_html(
         <h1>Blocked-case triage at a glance</h1>
         <p class="lede">This static dashboard strips the portfolio bundle down to the incidents that actually block after <code>PREPARE</code>. It groups them by the response story that matters most during triage: waiting for coordinator recovery, following peer-visible <code>COMMIT</code> evidence, or proving a safe <code>ABORT</code> from a peer that never reached <code>PREPARED</code>.</p>
         <div class="hero-links">
-          {catalog_link_html}
+          {hero_links_html}
         </div>
       </section>
 
@@ -2435,6 +2467,279 @@ def render_incident_response_html(
       </section>
 
       {sections_html}
+    </main>
+  </body>
+</html>
+'''
+
+
+def render_blocked_timeline_gallery_html(
+    entries: list[CatalogEntry],
+    *,
+    catalog_markdown_path: str | None = None,
+    incident_dashboard_path: str | None = None,
+) -> str:
+    blocked_entries = [entry for entry in entries if entry.result.outcome == "blocked"]
+    blocked_with_png_count = sum(
+        1 for entry in blocked_entries if entry.termination_timeline_png_path
+    )
+    decisive_evidence_count = sum(
+        1
+        for entry in blocked_entries
+        if entry.result.termination_hint_summary
+        and not entry.result.termination_hint_summary.startswith("wait:")
+    )
+
+    summary_cards = [
+        (
+            "Blocked incidents",
+            str(len(blocked_entries)),
+            "Scenarios that still leave some participants in doubt after the baseline 2PC run.",
+        ),
+        (
+            "PNG covers",
+            str(blocked_with_png_count),
+            "Screenshot-friendly timeline previews that can drop into README sections or slides.",
+        ),
+        (
+            "Decisive peer evidence",
+            str(decisive_evidence_count),
+            "Blocked cases where peers can already prove COMMIT or safe ABORT without waiting in pure darkness.",
+        ),
+    ]
+    summary_cards_html = "".join(
+        f'''<article class="summary-card">
+      <p class="summary-label">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+
+    hero_links: list[str] = []
+    if catalog_markdown_path:
+        hero_links.append(
+            '<a class="nav-link" href="'
+            + _html_escape(catalog_markdown_path)
+            + '">Open the full scenario catalog</a>'
+        )
+    if incident_dashboard_path and blocked_entries:
+        hero_links.append(
+            '<a class="nav-link" href="'
+            + _html_escape(incident_dashboard_path)
+            + '">Open the incident-response dashboard</a>'
+        )
+    hero_links_html = "".join(hero_links)
+
+    if not blocked_entries:
+        gallery_cards_html = '''<article class="empty-state">
+        <p class="eyebrow">No blocked timelines yet</p>
+        <h2>No blocked incidents are active in this bundle</h2>
+        <p>Once the selected scenario set includes blocked 2PC incidents, this gallery will show their PNG timeline covers beside the report, SVG, HTML, and termination walkthrough links.</p>
+      </article>'''
+    else:
+        gallery_cards: list[str] = []
+        for entry in blocked_entries:
+            result = entry.result
+            unresolved_count = sum(
+                1 for participant in result.participants if participant["state"] == "prepared"
+            )
+            decision_label = (result.decision or "undecided").upper()
+            preview_target = (
+                entry.termination_timeline_html_path
+                or entry.termination_timeline_svg_path
+                or entry.termination_timeline_png_path
+            )
+            preview_html = ''
+            if entry.termination_timeline_png_path:
+                preview_html = (
+                    '<a class="preview-link" href="'
+                    + _html_escape(preview_target or entry.termination_timeline_png_path)
+                    + '"><img class="preview-image" src="'
+                    + _html_escape(entry.termination_timeline_png_path)
+                    + '" alt="'
+                    + _html_escape(f"{result.title} blocked timeline cover")
+                    + '" loading="lazy" /></a>'
+                )
+            else:
+                preview_html = (
+                    '<div class="preview-placeholder">'
+                    'Timeline PNG not generated for this scenario yet.'
+                    '</div>'
+                )
+
+            artifact_links: list[tuple[str, str]] = []
+            if entry.report_path:
+                artifact_links.append(("report", entry.report_path))
+            if entry.termination_markdown_path:
+                artifact_links.append(("termination md", entry.termination_markdown_path))
+            if entry.termination_timeline_html_path:
+                artifact_links.append(("timeline html", entry.termination_timeline_html_path))
+            if entry.termination_timeline_svg_path:
+                artifact_links.append(("timeline svg", entry.termination_timeline_svg_path))
+            if entry.termination_timeline_png_path:
+                artifact_links.append(("timeline png", entry.termination_timeline_png_path))
+            if entry.comparison_html_path:
+                artifact_links.append(("compare html", entry.comparison_html_path))
+            if entry.comparison_markdown_path:
+                artifact_links.append(("compare md", entry.comparison_markdown_path))
+            artifact_links_html = "".join(
+                f'<a class="artifact-link" href="{_html_escape(path)}">{_html_escape(label)}</a>'
+                for label, path in artifact_links
+            )
+            gallery_cards.append(
+                f'''<article class="gallery-card">
+          <div class="preview-frame">
+            {preview_html}
+          </div>
+          <div class="gallery-card__body">
+            <p class="eyebrow">transaction {_html_escape(result.transaction_id)}</p>
+            <div class="gallery-card__header">
+              <h2>{_html_escape(result.title)}</h2>
+              <span class="decision-pill">{_html_escape(decision_label)}</span>
+            </div>
+            <p class="gallery-card__description">{_html_escape(result.description)}</p>
+            <dl class="fact-grid">
+              <div><dt>Crash point</dt><dd>{_html_escape(result.failures['coordinator_crash'])}</dd></div>
+              <div><dt>Durable decision</dt><dd>{'yes' if result.decision_durable else 'no'}</dd></div>
+              <div><dt>Still blocked</dt><dd>{unresolved_count}</dd></div>
+              <div><dt>Hint summary</dt><dd>{_html_escape(result.termination_hint_summary or 'wait for recovery')}</dd></div>
+            </dl>
+            <div class="callout">
+              <strong>Why this blocked case matters</strong>
+              {_html_escape(_sentence_case(_primary_takeaway(result)))}
+            </div>
+            <div class="artifact-links">
+              {artifact_links_html}
+            </div>
+          </div>
+        </article>'''
+            )
+        gallery_cards_html = "\n".join(gallery_cards)
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two-phase commit blocked timeline gallery</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-alt: #eef4ff;
+        --text: #172033;
+        --muted: #596274;
+        --border: #d7dfef;
+        --shadow: 0 20px 48px rgba(23, 32, 51, 0.08);
+        --hero-start: #13213d;
+        --hero-mid: #274690;
+        --hero-end: #4f6ef7;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+        color: var(--text);
+      }}
+      main {{ max-width: 1240px; margin: 0 auto; padding: 48px 20px 72px; }}
+      .hero {{
+        background: linear-gradient(145deg, var(--hero-start) 0%, var(--hero-mid) 55%, var(--hero-end) 100%);
+        border-radius: 30px;
+        padding: 32px;
+        color: #fff;
+        box-shadow: var(--shadow);
+      }}
+      .eyebrow {{
+        margin: 0 0 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.76rem;
+        font-weight: 700;
+        opacity: 0.8;
+      }}
+      h1, h2, p {{ margin-top: 0; }}
+      h1 {{ font-size: clamp(2.1rem, 3vw, 3.2rem); margin-bottom: 14px; }}
+      .lede {{ max-width: 76ch; line-height: 1.65; font-size: 1rem; color: rgba(255,255,255,0.9); margin-bottom: 18px; }}
+      .hero-links, .artifact-links {{ display: flex; flex-wrap: wrap; gap: 10px; }}
+      .nav-link, .artifact-link {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 700;
+      }}
+      .nav-link {{ background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); color: #fff; }}
+      .summary-grid, .gallery-grid {{ display: grid; gap: 18px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 24px 0 28px; }}
+      .summary-card, .gallery-card, .empty-state {{
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 26px;
+        box-shadow: var(--shadow);
+      }}
+      .summary-card {{ padding: 20px; }}
+      .summary-card strong {{ display: block; font-size: 2rem; margin-bottom: 8px; }}
+      .summary-card p {{ margin-bottom: 0; color: var(--muted); line-height: 1.55; }}
+      .summary-label {{ font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }}
+      .gallery-grid {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+      .gallery-card {{ overflow: hidden; }}
+      .preview-frame {{ background: linear-gradient(180deg, #ecf2ff 0%, #dde7ff 100%); border-bottom: 1px solid var(--border); }}
+      .preview-link {{ display: block; }}
+      .preview-image {{ display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; object-fit: cover; }}
+      .preview-placeholder {{ padding: 42px 22px; text-align: center; color: var(--muted); font-weight: 600; }}
+      .gallery-card__body {{ padding: 22px; }}
+      .gallery-card__header {{ display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }}
+      .gallery-card__header h2 {{ margin-bottom: 0; font-size: 1.2rem; }}
+      .decision-pill {{
+        flex-shrink: 0;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: var(--surface-alt);
+        color: #2643b3;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }}
+      .gallery-card__description {{ color: var(--muted); line-height: 1.6; margin-bottom: 14px; }}
+      .fact-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 0 0 14px; }}
+      .fact-grid div {{ background: #f8fbff; border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px; }}
+      .fact-grid dt {{ margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; }}
+      .fact-grid dd {{ margin: 0; font-weight: 700; line-height: 1.4; }}
+      .callout {{ background: #fbfcff; border-left: 4px solid #4f6ef7; border-radius: 16px; padding: 12px 14px; margin-bottom: 14px; line-height: 1.55; }}
+      .callout strong {{ display: block; margin-bottom: 4px; }}
+      .artifact-link {{ background: var(--surface-alt); color: #2643b3; }}
+      .empty-state {{ padding: 28px; }}
+      .empty-state p:last-child {{ color: var(--muted); line-height: 1.6; margin-bottom: 0; }}
+      @media (max-width: 760px) {{
+        .hero {{ padding: 24px; border-radius: 24px; }}
+        .fact-grid {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Two-phase commit blocked timeline gallery</p>
+        <h1>Blocked incidents, screenshot-first</h1>
+        <p class="lede">This gallery lines up the blocked-case timeline PNG covers so you can scan the incident story visually before diving into the full SVG, HTML, Markdown, or protocol-comparison artifacts. It is the recruiter-friendly cover-sheet companion to the scenario catalog and incident-response dashboard.</p>
+        <div class="hero-links">
+          {hero_links_html}
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        {summary_cards_html}
+      </section>
+
+      <section class="gallery-grid">
+        {gallery_cards_html}
+      </section>
     </main>
   </body>
 </html>
@@ -2580,6 +2885,7 @@ def write_incident_response_dashboard(
     entries: list[CatalogEntry],
     *,
     catalog_markdown_path: str | None = None,
+    blocked_timeline_gallery_path: str | None = None,
 ) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2587,6 +2893,25 @@ def write_incident_response_dashboard(
         render_incident_response_html(
             entries,
             catalog_markdown_path=catalog_markdown_path,
+            blocked_timeline_gallery_path=blocked_timeline_gallery_path,
+        )
+    )
+
+
+def write_blocked_timeline_gallery(
+    path: str | Path,
+    entries: list[CatalogEntry],
+    *,
+    catalog_markdown_path: str | None = None,
+    incident_dashboard_path: str | None = None,
+) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        render_blocked_timeline_gallery_html(
+            entries,
+            catalog_markdown_path=catalog_markdown_path,
+            incident_dashboard_path=incident_dashboard_path,
         )
     )
 
@@ -2596,6 +2921,7 @@ def write_catalog(
     entries: list[CatalogEntry],
     *,
     incident_dashboard_path: str | None = None,
+    blocked_timeline_gallery_path: str | None = None,
     include_tags: list[str] | None = None,
     require_all_tags: bool = False,
     bundle_preset: CatalogBundlePreset | None = None,
@@ -2606,6 +2932,7 @@ def write_catalog(
         render_catalog_markdown(
             entries,
             incident_dashboard_path=incident_dashboard_path,
+            blocked_timeline_gallery_path=blocked_timeline_gallery_path,
             include_tags=include_tags,
             require_all_tags=require_all_tags,
             bundle_preset=bundle_preset,
@@ -2696,6 +3023,12 @@ def _catalog_incident_dashboard_path(catalog_path: Path) -> Path:
     if catalog_path.name == "scenario_catalog.md":
         return catalog_path.parent / "incident_response_dashboard.html"
     return catalog_path.parent / f"{catalog_path.stem}_incident_response_dashboard.html"
+
+
+def _catalog_blocked_timeline_gallery_path(catalog_path: Path) -> Path:
+    if catalog_path.name == "scenario_catalog.md":
+        return catalog_path.parent / "blocked_timeline_gallery.html"
+    return catalog_path.parent / f"{catalog_path.stem}_blocked_timeline_gallery.html"
 
 
 def _should_generate_catalog_comparison(result: SimulationResult) -> bool:
@@ -3032,19 +3365,34 @@ def main(argv: list[str] | None = None) -> int:
             report_dir=args.report_dir,
         )
         incident_dashboard_path = _catalog_incident_dashboard_path(args.markdown_out)
+        blocked_timeline_gallery_path = _catalog_blocked_timeline_gallery_path(
+            args.markdown_out
+        )
         incident_dashboard_relative_path = _relative_artifact_path(
             incident_dashboard_path,
             start=args.markdown_out.parent,
         ) or incident_dashboard_path.name
+        blocked_timeline_gallery_relative_path = _relative_artifact_path(
+            blocked_timeline_gallery_path,
+            start=args.markdown_out.parent,
+        ) or blocked_timeline_gallery_path.name
+        write_blocked_timeline_gallery(
+            blocked_timeline_gallery_path,
+            entries,
+            catalog_markdown_path=args.markdown_out.name,
+            incident_dashboard_path=incident_dashboard_relative_path,
+        )
         write_incident_response_dashboard(
             incident_dashboard_path,
             entries,
             catalog_markdown_path=args.markdown_out.name,
+            blocked_timeline_gallery_path=blocked_timeline_gallery_relative_path,
         )
         write_catalog(
             args.markdown_out,
             entries,
             incident_dashboard_path=incident_dashboard_relative_path,
+            blocked_timeline_gallery_path=blocked_timeline_gallery_relative_path,
             include_tags=normalized_include_tags,
             require_all_tags=active_require_all_tags,
             bundle_preset=active_bundle_preset,
@@ -3067,6 +3415,7 @@ def main(argv: list[str] | None = None) -> int:
                 + "): "
                 + ", ".join(normalized_include_tags)
             )
+        print(f"wrote blocked timeline gallery to {blocked_timeline_gallery_path}")
         print(f"wrote incident-response dashboard to {incident_dashboard_path}")
         print(f"wrote catalog to {args.markdown_out}")
         return 0

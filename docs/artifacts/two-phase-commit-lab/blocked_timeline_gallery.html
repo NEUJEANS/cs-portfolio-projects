@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two-phase commit blocked timeline gallery</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-alt: #eef4ff;
+        --text: #172033;
+        --muted: #596274;
+        --border: #d7dfef;
+        --shadow: 0 20px 48px rgba(23, 32, 51, 0.08);
+        --hero-start: #13213d;
+        --hero-mid: #274690;
+        --hero-end: #4f6ef7;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+      main { max-width: 1240px; margin: 0 auto; padding: 48px 20px 72px; }
+      .hero {
+        background: linear-gradient(145deg, var(--hero-start) 0%, var(--hero-mid) 55%, var(--hero-end) 100%);
+        border-radius: 30px;
+        padding: 32px;
+        color: #fff;
+        box-shadow: var(--shadow);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.76rem;
+        font-weight: 700;
+        opacity: 0.8;
+      }
+      h1, h2, p { margin-top: 0; }
+      h1 { font-size: clamp(2.1rem, 3vw, 3.2rem); margin-bottom: 14px; }
+      .lede { max-width: 76ch; line-height: 1.65; font-size: 1rem; color: rgba(255,255,255,0.9); margin-bottom: 18px; }
+      .hero-links, .artifact-links { display: flex; flex-wrap: wrap; gap: 10px; }
+      .nav-link, .artifact-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+      .nav-link { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); color: #fff; }
+      .summary-grid, .gallery-grid { display: grid; gap: 18px; }
+      .summary-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 24px 0 28px; }
+      .summary-card, .gallery-card, .empty-state {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 26px;
+        box-shadow: var(--shadow);
+      }
+      .summary-card { padding: 20px; }
+      .summary-card strong { display: block; font-size: 2rem; margin-bottom: 8px; }
+      .summary-card p { margin-bottom: 0; color: var(--muted); line-height: 1.55; }
+      .summary-label { font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+      .gallery-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .gallery-card { overflow: hidden; }
+      .preview-frame { background: linear-gradient(180deg, #ecf2ff 0%, #dde7ff 100%); border-bottom: 1px solid var(--border); }
+      .preview-link { display: block; }
+      .preview-image { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; object-fit: cover; }
+      .preview-placeholder { padding: 42px 22px; text-align: center; color: var(--muted); font-weight: 600; }
+      .gallery-card__body { padding: 22px; }
+      .gallery-card__header { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+      .gallery-card__header h2 { margin-bottom: 0; font-size: 1.2rem; }
+      .decision-pill {
+        flex-shrink: 0;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: var(--surface-alt);
+        color: #2643b3;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .gallery-card__description { color: var(--muted); line-height: 1.6; margin-bottom: 14px; }
+      .fact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 0 0 14px; }
+      .fact-grid div { background: #f8fbff; border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px; }
+      .fact-grid dt { margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; }
+      .fact-grid dd { margin: 0; font-weight: 700; line-height: 1.4; }
+      .callout { background: #fbfcff; border-left: 4px solid #4f6ef7; border-radius: 16px; padding: 12px 14px; margin-bottom: 14px; line-height: 1.55; }
+      .callout strong { display: block; margin-bottom: 4px; }
+      .artifact-link { background: var(--surface-alt); color: #2643b3; }
+      .empty-state { padding: 28px; }
+      .empty-state p:last-child { color: var(--muted); line-height: 1.6; margin-bottom: 0; }
+      @media (max-width: 760px) {
+        .hero { padding: 24px; border-radius: 24px; }
+        .fact-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Two-phase commit blocked timeline gallery</p>
+        <h1>Blocked incidents, screenshot-first</h1>
+        <p class="lede">This gallery lines up the blocked-case timeline PNG covers so you can scan the incident story visually before diving into the full SVG, HTML, Markdown, or protocol-comparison artifacts. It is the recruiter-friendly cover-sheet companion to the scenario catalog and incident-response dashboard.</p>
+        <div class="hero-links">
+          <a class="nav-link" href="scenario_catalog.md">Open the full scenario catalog</a><a class="nav-link" href="incident_response_dashboard.html">Open the incident-response dashboard</a>
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        <article class="summary-card">
+      <p class="summary-label">Blocked incidents</p>
+      <strong>3</strong>
+      <p>Scenarios that still leave some participants in doubt after the baseline 2PC run.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">PNG covers</p>
+      <strong>3</strong>
+      <p>Screenshot-friendly timeline previews that can drop into README sections or slides.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Decisive peer evidence</p>
+      <strong>2</strong>
+      <p>Blocked cases where peers can already prove COMMIT or safe ABORT without waiting in pure darkness.</p>
+    </article>
+      </section>
+
+      <section class="gallery-grid">
+        <article class="gallery-card">
+          <div class="preview-frame">
+            <a class="preview-link" href="coordinator_crash_before_decision_termination_timeline.html"><img class="preview-image" src="coordinator_crash_before_decision_termination_timeline.png" alt="Coordinator crash before durable decision blocked timeline cover" loading="lazy" /></a>
+          </div>
+          <div class="gallery-card__body">
+            <p class="eyebrow">transaction order-2021</p>
+            <div class="gallery-card__header">
+              <h2>Coordinator crash before durable decision</h2>
+              <span class="decision-pill">UNDECIDED</span>
+            </div>
+            <p class="gallery-card__description">Every participant votes YES and enters PREPARED, but the coordinator crashes before it records COMMIT or ABORT. This is the classic blocking case that makes plain 2PC operationally painful.</p>
+            <dl class="fact-grid">
+              <div><dt>Crash point</dt><dd>before-decision</dd></div>
+              <div><dt>Durable decision</dt><dd>no</dd></div>
+              <div><dt>Still blocked</dt><dd>3</dd></div>
+              <div><dt>Hint summary</dt><dd>wait: all prepared peers are still uncertain</dd></div>
+            </dl>
+            <div class="callout">
+              <strong>Why this blocked case matters</strong>
+              All participants are prepared, but the coordinator crashed before a durable decision was recorded; prepared participants remain blocked awaiting recovery
+            </div>
+            <div class="artifact-links">
+              <a class="artifact-link" href="coordinator_crash_before_decision_report.md">report</a><a class="artifact-link" href="coordinator_crash_before_decision_termination.md">termination md</a><a class="artifact-link" href="coordinator_crash_before_decision_termination_timeline.html">timeline html</a><a class="artifact-link" href="coordinator_crash_before_decision_termination_timeline.svg">timeline svg</a><a class="artifact-link" href="coordinator_crash_before_decision_termination_timeline.png">timeline png</a><a class="artifact-link" href="coordinator_crash_before_decision_protocol_compare.html">compare html</a><a class="artifact-link" href="coordinator_crash_before_decision_protocol_compare.md">compare md</a>
+            </div>
+          </div>
+        </article>
+<article class="gallery-card">
+          <div class="preview-frame">
+            <a class="preview-link" href="coordinator_crash_durable_abort_termination_timeline.html"><img class="preview-image" src="coordinator_crash_durable_abort_termination_timeline.png" alt="Coordinator crash after durable ABORT blocked timeline cover" loading="lazy" /></a>
+          </div>
+          <div class="gallery-card__body">
+            <p class="eyebrow">transaction order-6112</p>
+            <div class="gallery-card__header">
+              <h2>Coordinator crash after durable ABORT</h2>
+              <span class="decision-pill">ABORT</span>
+            </div>
+            <p class="gallery-card__description">Inventory and billing vote YES, but risk votes NO. The coordinator durably logs ABORT and crashes before the prepared YES-voters hear the decision. They are blocked in classic 2PC, but a peer-to-peer termination check can still prove ABORT safely because risk never reached PREPARED.</p>
+            <dl class="fact-grid">
+              <div><dt>Crash point</dt><dd>after-decision-log</dd></div>
+              <div><dt>Durable decision</dt><dd>yes</dd></div>
+              <div><dt>Still blocked</dt><dd>2</dd></div>
+              <div><dt>Hint summary</dt><dd>ABORT safe via risk</dd></div>
+            </dl>
+            <div class="callout">
+              <strong>Why this blocked case matters</strong>
+              Blocked does not always mean blind waiting: ABORT safe via risk.
+            </div>
+            <div class="artifact-links">
+              <a class="artifact-link" href="coordinator_crash_durable_abort_report.md">report</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination.md">termination md</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination_timeline.html">timeline html</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination_timeline.svg">timeline svg</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination_timeline.png">timeline png</a>
+            </div>
+          </div>
+        </article>
+<article class="gallery-card">
+          <div class="preview-frame">
+            <a class="preview-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.html"><img class="preview-image" src="coordinator_crash_partial_commit_delivery_termination_timeline.png" alt="Coordinator crash after one COMMIT delivery blocked timeline cover" loading="lazy" /></a>
+          </div>
+          <div class="gallery-card__body">
+            <p class="eyebrow">transaction order-5120</p>
+            <div class="gallery-card__header">
+              <h2>Coordinator crash after one COMMIT delivery</h2>
+              <span class="decision-pill">COMMIT</span>
+            </div>
+            <p class="gallery-card__description">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery.</p>
+            <dl class="fact-grid">
+              <div><dt>Crash point</dt><dd>after-decision-log</dd></div>
+              <div><dt>Durable decision</dt><dd>yes</dd></div>
+              <div><dt>Still blocked</dt><dd>2</dd></div>
+              <div><dt>Hint summary</dt><dd>COMMIT visible via inventory</dd></div>
+            </dl>
+            <div class="callout">
+              <strong>Why this blocked case matters</strong>
+              Blocked does not always mean blind waiting: COMMIT visible via inventory.
+            </div>
+            <div class="artifact-links">
+              <a class="artifact-link" href="coordinator_crash_partial_commit_delivery_report.md">report</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination.md">termination md</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.html">timeline html</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.svg">timeline svg</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.png">timeline png</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_protocol_compare.html">compare html</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_protocol_compare.md">compare md</a>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
