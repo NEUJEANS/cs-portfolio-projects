@@ -15,59 +15,289 @@
       "name": "directory-friendly-read-heavy",
       "description": "Warm up a small user cache, then mostly read/update the stable working set with a few misses and one delete.",
       "operations": [
-        {"op": "put", "key": "user:1001", "value": "Ada"},
-        {"op": "put", "key": "user:1009", "value": "Grace"},
-        {"op": "put", "key": "user:1017", "value": "Linus"},
-        {"op": "put", "key": "user:1025", "value": "Barbara"},
-        {"op": "put", "key": "user:1033", "value": "Margaret"},
-        {"op": "get", "key": "user:1009"},
-        {"op": "get", "key": "user:1025"},
-        {"op": "put", "key": "user:1009", "value": "Grace Hopper"},
-        {"op": "get", "key": "user:9999"},
-        {"op": "delete", "key": "user:1017"},
-        {"op": "get", "key": "user:1017"},
-        {"op": "put", "key": "user:1041", "value": "Katherine"},
-        {"op": "get", "key": "user:1041"}
+        {
+          "op": "put",
+          "key": "user:1001",
+          "value": "Ada"
+        },
+        {
+          "op": "put",
+          "key": "user:1009",
+          "value": "Grace"
+        },
+        {
+          "op": "put",
+          "key": "user:1017",
+          "value": "Linus"
+        },
+        {
+          "op": "put",
+          "key": "user:1025",
+          "value": "Barbara"
+        },
+        {
+          "op": "put",
+          "key": "user:1033",
+          "value": "Margaret"
+        },
+        {
+          "op": "get",
+          "key": "user:1009"
+        },
+        {
+          "op": "get",
+          "key": "user:1025"
+        },
+        {
+          "op": "put",
+          "key": "user:1009",
+          "value": "Grace Hopper"
+        },
+        {
+          "op": "get",
+          "key": "user:9999"
+        },
+        {
+          "op": "delete",
+          "key": "user:1017"
+        },
+        {
+          "op": "get",
+          "key": "user:1017"
+        },
+        {
+          "op": "put",
+          "key": "user:1041",
+          "value": "Katherine"
+        },
+        {
+          "op": "get",
+          "key": "user:1041"
+        }
       ]
     },
     {
       "name": "split-pressure-growth",
       "description": "Force repeated low-bit collisions so extendible hashing must split buckets while cuckoo hashing spends work on displacement and occasional rehashing.",
       "operations": [
-        {"op": "put", "key": "collision:2:0:1", "value": "zero-a"},
-        {"op": "put", "key": "collision:2:1:3", "value": "one-a"},
-        {"op": "put", "key": "collision:2:0:5", "value": "zero-b"},
-        {"op": "put", "key": "collision:2:2:1", "value": "two-a"},
-        {"op": "put", "key": "collision:2:0:9", "value": "zero-c"},
-        {"op": "put", "key": "collision:2:3:3", "value": "three-a"},
-        {"op": "get", "key": "collision:2:0:5"},
-        {"op": "put", "key": "collision:2:3:7", "value": "three-b"},
-        {"op": "put", "key": "collision:2:1:7", "value": "one-b"},
-        {"op": "put", "key": "collision:2:2:5", "value": "two-b"},
-        {"op": "put", "key": "collision:2:0:5", "value": "zero-b-updated"},
-        {"op": "get", "key": "collision:2:0:5"},
-        {"op": "get", "key": "collision:2:1:10"},
-        {"op": "put", "key": "collision:2:1:10", "value": "one-c"}
+        {
+          "op": "put",
+          "key": "collision:2:0:1",
+          "value": "zero-a"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:1:3",
+          "value": "one-a"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:0:5",
+          "value": "zero-b"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:2:1",
+          "value": "two-a"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:0:9",
+          "value": "zero-c"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:3:3",
+          "value": "three-a"
+        },
+        {
+          "op": "get",
+          "key": "collision:2:0:5"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:3:7",
+          "value": "three-b"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:1:7",
+          "value": "one-b"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:2:5",
+          "value": "two-b"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:0:5",
+          "value": "zero-b-updated"
+        },
+        {
+          "op": "get",
+          "key": "collision:2:0:5"
+        },
+        {
+          "op": "get",
+          "key": "collision:2:1:10"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:1:10",
+          "value": "one-c"
+        }
       ]
     },
     {
       "name": "delete-heavy-churn",
       "description": "Grow a clustered directory, delete enough keys to trigger extendible merges and shrinks, then repopulate a smaller live set.",
       "operations": [
-        {"op": "put", "key": "collision:2:0:1", "value": "zero-a"},
-        {"op": "put", "key": "collision:2:1:3", "value": "one-a"},
-        {"op": "put", "key": "collision:2:0:5", "value": "zero-b"},
-        {"op": "put", "key": "collision:2:2:1", "value": "two-a"},
-        {"op": "put", "key": "collision:2:3:3", "value": "three-a"},
-        {"op": "delete", "key": "collision:2:2:1"},
-        {"op": "delete", "key": "collision:2:1:3"},
-        {"op": "get", "key": "collision:2:1:3"},
-        {"op": "put", "key": "collision:2:0:9", "value": "zero-c"},
-        {"op": "put", "key": "collision:2:3:7", "value": "three-b"},
-        {"op": "delete", "key": "collision:2:3:3"},
-        {"op": "put", "key": "collision:2:1:7", "value": "one-b"},
-        {"op": "get", "key": "collision:2:3:7"},
-        {"op": "delete", "key": "collision:2:3:99"}
+        {
+          "op": "put",
+          "key": "collision:2:0:1",
+          "value": "zero-a"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:1:3",
+          "value": "one-a"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:0:5",
+          "value": "zero-b"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:2:1",
+          "value": "two-a"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:3:3",
+          "value": "three-a"
+        },
+        {
+          "op": "delete",
+          "key": "collision:2:2:1"
+        },
+        {
+          "op": "delete",
+          "key": "collision:2:1:3"
+        },
+        {
+          "op": "get",
+          "key": "collision:2:1:3"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:0:9",
+          "value": "zero-c"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:3:7",
+          "value": "three-b"
+        },
+        {
+          "op": "delete",
+          "key": "collision:2:3:3"
+        },
+        {
+          "op": "put",
+          "key": "collision:2:1:7",
+          "value": "one-b"
+        },
+        {
+          "op": "get",
+          "key": "collision:2:3:7"
+        },
+        {
+          "op": "delete",
+          "key": "collision:2:3:99"
+        }
+      ]
+    },
+    {
+      "name": "primary-clustering-tombstone-pressure",
+      "description": "Force several keys into the same linear-probing slot, leave tombstones behind, then trigger a cleanup rebuild so the open-addressing clustering story is obvious in the exported metrics.",
+      "operations": [
+        {
+          "op": "put",
+          "key": "cluster:slot0:2",
+          "value": "alpha"
+        },
+        {
+          "op": "put",
+          "key": "cluster:slot0:11",
+          "value": "bravo"
+        },
+        {
+          "op": "put",
+          "key": "cluster:slot0:19",
+          "value": "charlie"
+        },
+        {
+          "op": "put",
+          "key": "cluster:slot0:20",
+          "value": "delta"
+        },
+        {
+          "op": "put",
+          "key": "cluster:slot0:28",
+          "value": "echo"
+        },
+        {
+          "op": "get",
+          "key": "cluster:slot0:28"
+        },
+        {
+          "op": "get",
+          "key": "cluster:slot0:33"
+        },
+        {
+          "op": "delete",
+          "key": "cluster:slot0:11"
+        },
+        {
+          "op": "delete",
+          "key": "cluster:slot0:20"
+        },
+        {
+          "op": "get",
+          "key": "cluster:slot0:33"
+        },
+        {
+          "op": "put",
+          "key": "cluster:slot0:33",
+          "value": "foxtrot"
+        },
+        {
+          "op": "get",
+          "key": "cluster:slot0:33"
+        },
+        {
+          "op": "delete",
+          "key": "cluster:slot0:2"
+        },
+        {
+          "op": "delete",
+          "key": "cluster:slot0:19"
+        },
+        {
+          "op": "get",
+          "key": "cluster:slot0:42"
+        },
+        {
+          "op": "put",
+          "key": "cluster:slot0:42",
+          "value": "golf"
+        },
+        {
+          "op": "get",
+          "key": "cluster:slot0:42"
+        }
       ]
     }
   ]

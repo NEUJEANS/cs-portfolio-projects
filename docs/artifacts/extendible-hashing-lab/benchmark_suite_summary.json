@@ -10,7 +10,7 @@
   "btree_page_size": 512,
   "btree_value_bytes": 32,
   "trials": 3,
-  "scenario_count": 3,
+  "scenario_count": 4,
   "results": [
     {
       "name": "directory-friendly-read-heavy",
@@ -758,6 +758,256 @@
             "root_keys": 1,
             "page_padding_bytes": 359,
             "paged_file_bytes": 1569
+          }
+        }
+      ]
+    },
+    {
+      "name": "primary-clustering-tombstone-pressure",
+      "description": "Force several keys into the same linear-probing slot, leave tombstones behind, then trigger a cleanup rebuild so the open-addressing clustering story is obvious in the exported metrics.",
+      "operation_count": 17,
+      "final_entry_count": 3,
+      "operation_mix": {
+        "puts": 7,
+        "insertions": 7,
+        "updates": 0,
+        "gets": 6,
+        "get_hits": 3,
+        "get_misses": 3,
+        "deletes": 4,
+        "delete_hits": 4,
+        "delete_misses": 0
+      },
+      "validation": {
+        "trials": 3,
+        "final_state_match": true
+      },
+      "extendible": {
+        "final_global_depth": 3,
+        "peak_global_depth": 3,
+        "final_bucket_count": 4,
+        "peak_bucket_count": 4,
+        "peak_directory_slots": 8,
+        "load_factor": 0.375,
+        "split_count": 7,
+        "merge_count": 4,
+        "directory_growth_count": 7,
+        "directory_shrink_count": 4
+      },
+      "linear": {
+        "initial_capacity": 8,
+        "max_load_factor": 0.75,
+        "max_tombstone_ratio": 0.25,
+        "final_capacity": 8,
+        "final_load_factor": 0.375,
+        "occupied_load_factor": 0.375,
+        "tombstone_count": 0,
+        "resize_count": 1,
+        "average_probe_count": 3.471,
+        "max_probe_count": 6,
+        "rebuild_probe_count": 3
+      },
+      "cuckoo": {
+        "average_rehash_count": 0.0,
+        "average_displacement_count": 1.333,
+        "average_load_factor": 0.4286,
+        "final_capacity_range": [
+          7,
+          7
+        ],
+        "empty_slot_range": [
+          4,
+          4
+        ]
+      },
+      "btree": {
+        "minimum_degree": 2,
+        "page_size": 512,
+        "value_bytes": 32,
+        "final_height": 1,
+        "peak_height": 2,
+        "final_node_count": 1,
+        "peak_node_count": 3,
+        "root_keys": 3,
+        "page_padding_bytes": 359,
+        "paged_file_bytes": 545
+      },
+      "trial_rows": [
+        {
+          "trial": 1,
+          "operation_mix": {
+            "puts": 7,
+            "insertions": 7,
+            "updates": 0,
+            "gets": 6,
+            "get_hits": 3,
+            "get_misses": 3,
+            "deletes": 4,
+            "delete_hits": 4,
+            "delete_misses": 0
+          },
+          "final_entry_count": 3,
+          "extendible": {
+            "final_global_depth": 3,
+            "peak_global_depth": 3,
+            "final_bucket_count": 4,
+            "peak_bucket_count": 4,
+            "peak_directory_slots": 8,
+            "load_factor": 0.375,
+            "split_count": 7,
+            "merge_count": 4,
+            "directory_growth_count": 7,
+            "directory_shrink_count": 4
+          },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.375,
+            "occupied_load_factor": 0.375,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 3.471,
+            "max_probe_count": 6,
+            "rebuild_probe_count": 3
+          },
+          "cuckoo": {
+            "final_capacity": 7,
+            "load_factor": 0.4286,
+            "rehash_count": 0,
+            "displacement_count": 1,
+            "empty_slots": 4
+          },
+          "btree": {
+            "minimum_degree": 2,
+            "page_size": 512,
+            "value_bytes": 32,
+            "final_height": 1,
+            "peak_height": 2,
+            "final_node_count": 1,
+            "peak_node_count": 3,
+            "root_keys": 3,
+            "page_padding_bytes": 359,
+            "paged_file_bytes": 545
+          }
+        },
+        {
+          "trial": 2,
+          "operation_mix": {
+            "puts": 7,
+            "insertions": 7,
+            "updates": 0,
+            "gets": 6,
+            "get_hits": 3,
+            "get_misses": 3,
+            "deletes": 4,
+            "delete_hits": 4,
+            "delete_misses": 0
+          },
+          "final_entry_count": 3,
+          "extendible": {
+            "final_global_depth": 3,
+            "peak_global_depth": 3,
+            "final_bucket_count": 4,
+            "peak_bucket_count": 4,
+            "peak_directory_slots": 8,
+            "load_factor": 0.375,
+            "split_count": 7,
+            "merge_count": 4,
+            "directory_growth_count": 7,
+            "directory_shrink_count": 4
+          },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.375,
+            "occupied_load_factor": 0.375,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 3.471,
+            "max_probe_count": 6,
+            "rebuild_probe_count": 3
+          },
+          "cuckoo": {
+            "final_capacity": 7,
+            "load_factor": 0.4286,
+            "rehash_count": 0,
+            "displacement_count": 1,
+            "empty_slots": 4
+          },
+          "btree": {
+            "minimum_degree": 2,
+            "page_size": 512,
+            "value_bytes": 32,
+            "final_height": 1,
+            "peak_height": 2,
+            "final_node_count": 1,
+            "peak_node_count": 3,
+            "root_keys": 3,
+            "page_padding_bytes": 359,
+            "paged_file_bytes": 545
+          }
+        },
+        {
+          "trial": 3,
+          "operation_mix": {
+            "puts": 7,
+            "insertions": 7,
+            "updates": 0,
+            "gets": 6,
+            "get_hits": 3,
+            "get_misses": 3,
+            "deletes": 4,
+            "delete_hits": 4,
+            "delete_misses": 0
+          },
+          "final_entry_count": 3,
+          "extendible": {
+            "final_global_depth": 3,
+            "peak_global_depth": 3,
+            "final_bucket_count": 4,
+            "peak_bucket_count": 4,
+            "peak_directory_slots": 8,
+            "load_factor": 0.375,
+            "split_count": 7,
+            "merge_count": 4,
+            "directory_growth_count": 7,
+            "directory_shrink_count": 4
+          },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.375,
+            "occupied_load_factor": 0.375,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 3.471,
+            "max_probe_count": 6,
+            "rebuild_probe_count": 3
+          },
+          "cuckoo": {
+            "final_capacity": 7,
+            "load_factor": 0.4286,
+            "rehash_count": 0,
+            "displacement_count": 2,
+            "empty_slots": 4
+          },
+          "btree": {
+            "minimum_degree": 2,
+            "page_size": 512,
+            "value_bytes": 32,
+            "final_height": 1,
+            "peak_height": 2,
+            "final_node_count": 1,
+            "peak_node_count": 3,
+            "root_keys": 3,
+            "page_padding_bytes": 359,
+            "paged_file_bytes": 545
           }
         }
       ]

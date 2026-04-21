@@ -382,7 +382,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
 
     def test_run_benchmark_suite_returns_comparison_metrics(self) -> None:
         summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
-        self.assertEqual(summary["scenario_count"], 3)
+        self.assertEqual(summary["scenario_count"], 4)
         self.assertEqual(summary["trials"], 3)
         self.assertEqual(summary["btree_minimum_degree"], 2)
         self.assertEqual(summary["btree_page_size"], 512)
@@ -394,6 +394,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                 "directory-friendly-read-heavy",
                 "split-pressure-growth",
                 "delete-heavy-churn",
+                "primary-clustering-tombstone-pressure",
             ],
         )
         self.assertTrue(all(row["validation"]["final_state_match"] for row in summary["results"]))
@@ -407,6 +408,17 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertTrue(all(row["cuckoo"]["average_rehash_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["btree"]["final_height"] >= 1 for row in summary["results"]))
         self.assertTrue(all(row["btree"]["paged_file_bytes"] > 0 for row in summary["results"]))
+
+        clustering_row = next(row for row in summary["results"] if row["name"] == "primary-clustering-tombstone-pressure")
+        self.assertGreaterEqual(clustering_row["linear"]["average_probe_count"], 3.0)
+        self.assertGreaterEqual(clustering_row["linear"]["max_probe_count"], 6)
+        self.assertGreaterEqual(clustering_row["linear"]["resize_count"], 1)
+        other_linear_averages = [
+            row["linear"]["average_probe_count"]
+            for row in summary["results"]
+            if row["name"] != "primary-clustering-tombstone-pressure"
+        ]
+        self.assertGreater(clustering_row["linear"]["average_probe_count"], max(other_linear_averages))
 
     def test_summarize_benchmark_trials_rejects_inconsistent_linear_metrics(self) -> None:
         scenario = {
@@ -873,7 +885,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(updated_snapshot_path.exists())
             self.assertIsNotNone(load_snapshot(updated_snapshot_path))
 
-            benchmark_title = "Extendible hashing vs cuckoo hashing and B-tree benchmark comparison"
+            benchmark_title = "Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison"
             benchmark_process = subprocess.run(
                 [
                     sys.executable,
@@ -900,12 +912,13 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(benchmark_md.exists())
             self.assertTrue(benchmark_html.exists())
             self.assertTrue(benchmark_csv.exists())
-            self.assertIn('"scenario_count": 3', benchmark_process.stdout)
+            self.assertIn('"scenario_count": 4', benchmark_process.stdout)
             self.assertIn('"btree_page_size": 512', benchmark_process.stdout)
             self.assertIn(benchmark_title, benchmark_process.stdout)
             benchmark_md_text = benchmark_md.read_text(encoding="utf-8")
             self.assertIn(benchmark_title, benchmark_md_text)
             self.assertIn("directory-friendly-read-heavy", benchmark_md_text)
+            self.assertIn("primary-clustering-tombstone-pressure", benchmark_md_text)
             self.assertIn("Linear probing baseline", benchmark_md_text)
             self.assertIn("B-tree page baseline", benchmark_md_text)
             benchmark_json_payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
@@ -914,6 +927,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn(benchmark_title, benchmark_html_text)
             self.assertIn("Scenario scoreboard", benchmark_html_text)
             self.assertIn("directory-friendly-read-heavy", benchmark_html_text)
+            self.assertIn("primary-clustering-tombstone-pressure", benchmark_html_text)
             self.assertIn("Linear probing baseline", benchmark_html_text)
             benchmark_csv_text = benchmark_csv.read_text(encoding="utf-8")
             self.assertIn("linear_average_probe_count", benchmark_csv_text)

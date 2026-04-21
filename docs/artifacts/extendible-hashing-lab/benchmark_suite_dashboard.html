@@ -57,11 +57,11 @@
   <p class="suite-source"><strong>Suite source:</strong> <code>projects/extendible-hashing-lab/benchmark_suite.json</code></p>
   <section class="summary-grid"><article class="summary-card">
   <h2>Scenarios</h2>
-  <strong>3</strong>
+  <strong>4</strong>
   <p>3 deterministic trial(s) each</p>
 </article><article class="summary-card">
   <h2>Operations</h2>
-  <strong>41</strong>
+  <strong>58</strong>
   <p>largest final live set: 10 entries</p>
 </article><article class="summary-card">
   <h2>Peak extendible depth</h2>
@@ -118,6 +118,16 @@
   <td>0 / 2.333</td>
   <td>2 / 3</td>
   <td>1569</td>
+</tr><tr>
+  <th scope="row">primary-clustering-tombstone-pressure</th>
+  <td>17</td>
+  <td>3</td>
+  <td>7 / 4</td>
+  <td>3 / 8</td>
+  <td>3.471 / 6</td>
+  <td>0 / 1.333</td>
+  <td>1 / 1</td>
+  <td>545</td>
 </tr></tbody>
     </table>
   </section>
@@ -138,7 +148,7 @@
     <span>splits</span>
     <strong>3</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 60.0%; background: #2563eb;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 42.9%; background: #2563eb;"></span></div>
   <div class="metric-detail">final buckets 4</div>
 </div><div class="metric">
   <div class="metric-head">
@@ -178,14 +188,14 @@
     <span>avg probes</span>
     <strong>1.462</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 42.1%; background: #2563eb;"></span></div>
   <div class="metric-detail">max probe 3</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>3</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #7c3aed;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 50.0%; background: #7c3aed;"></span></div>
   <div class="metric-detail">rebuild probes 0</div>
 </div><div class="metric">
   <div class="metric-head">
@@ -330,7 +340,7 @@
     <span>splits</span>
     <strong>5</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 71.4%; background: #2563eb;"></span></div>
   <div class="metric-detail">final buckets 6</div>
 </div><div class="metric">
   <div class="metric-head">
@@ -370,14 +380,14 @@
     <span>avg probes</span>
     <strong>1.357</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 92.8%; background: #2563eb;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 39.1%; background: #2563eb;"></span></div>
   <div class="metric-detail">max probe 2</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>2</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 50.0%; background: #7c3aed;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 33.3%; background: #7c3aed;"></span></div>
   <div class="metric-detail">rebuild probes 6</div>
 </div><div class="metric">
   <div class="metric-head">
@@ -522,14 +532,14 @@
     <span>splits</span>
     <strong>4</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 80.0%; background: #2563eb;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 57.1%; background: #2563eb;"></span></div>
   <div class="metric-detail">final buckets 4</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>merges</span>
     <strong>1</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 25.0%; background: #0f766e;"></span></div>
   <div class="metric-detail">directory shrinks 1</div>
 </div><div class="metric">
   <div class="metric-head">
@@ -562,14 +572,14 @@
     <span>avg probes</span>
     <strong>1.357</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 92.8%; background: #2563eb;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 39.1%; background: #2563eb;"></span></div>
   <div class="metric-detail">max probe 4</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>4</strong>
   </div>
-  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 66.7%; background: #7c3aed;"></span></div>
   <div class="metric-detail">rebuild probes 5</div>
 </div><div class="metric">
   <div class="metric-head">
@@ -694,6 +704,198 @@
   <td>1</td>
   <td>2</td>
   <td>1569</td>
+</tr></tbody>
+    </table>
+  </div>
+</section><section class="scenario-card">
+  <header class="scenario-header">
+    <div>
+      <h2>primary-clustering-tombstone-pressure</h2>
+      <p>Force several keys into the same linear-probing slot, leave tombstones behind, then trigger a cleanup rebuild so the open-addressing clustering story is obvious in the exported metrics.</p>
+    </div>
+    <ul class="chips"><li>ops 17</li><li>entries 3</li><li>puts 7</li><li>gets 6</li><li>deletes 4</li><li>trials 3</li></ul>
+  </header>
+  <div class="metric-grid">
+    <article class="metric-panel">
+      <h3>Extendible hashing</h3>
+      <p>Directory growth and bucket-split behavior for the benchmark workload.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>splits</span>
+    <strong>7</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
+  <div class="metric-detail">final buckets 4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>merges</span>
+    <strong>4</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">directory shrinks 4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak depth</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">final depth 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak directory slots</span>
+    <strong>8</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">directory grows 7</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>load factor</span>
+    <strong>0.375</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 45.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Linear probing baseline</h3>
+      <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg probes</span>
+    <strong>3.471</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
+  <div class="metric-detail">max probe 6</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>max probe</span>
+    <strong>6</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">rebuild probes 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>rebuilds</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">tombstones 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>final load</span>
+    <strong>0.375</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 60.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">occupied load 0.375</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Cuckoo hashing</h3>
+      <p>Relocation pressure and occupancy characteristics across deterministic trials.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg rehashes</span>
+    <strong>0</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 0.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">capacity range 7-7</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg displacements</span>
+    <strong>1.333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 11.8%; background: #ea580c;"></span></div>
+  <div class="metric-detail">empty slots 4-4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg load factor</span>
+    <strong>0.4286</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 60.0%; background: #0891b2;"></span></div>
+  <div class="metric-detail">post-run table occupancy</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>B-tree page baseline</h3>
+      <p>Tree-shape and paged-storage estimates for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>final height</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 50.0%; background: #4f46e5;"></span></div>
+  <div class="metric-detail">peak height 2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>node count</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 25.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">root keys 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>paged file bytes</span>
+    <strong>545</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 26.2%; background: #16a34a;"></span></div>
+  <div class="metric-detail">padding per page 359 bytes</div>
+</div>
+    </article>
+  </div>
+  <div class="trial-table-wrap">
+    <table>
+      <caption>Per-trial validation for primary-clustering-tombstone-pressure</caption>
+      <thead>
+        <tr>
+          <th scope="col">Trial</th>
+          <th scope="col">Ext splits</th>
+          <th scope="col">Ext merges</th>
+          <th scope="col">Peak depth</th>
+          <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear max probe</th>
+          <th scope="col">Linear rebuilds</th>
+          <th scope="col">Cuckoo rehashes</th>
+          <th scope="col">Cuckoo displacements</th>
+          <th scope="col">B-tree height</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+  <td>1</td>
+  <td>7</td>
+  <td>4</td>
+  <td>3</td>
+  <td>3.471</td>
+  <td>6</td>
+  <td>1</td>
+  <td>0</td>
+  <td>1</td>
+  <td>1</td>
+  <td>545</td>
+</tr><tr>
+  <td>2</td>
+  <td>7</td>
+  <td>4</td>
+  <td>3</td>
+  <td>3.471</td>
+  <td>6</td>
+  <td>1</td>
+  <td>0</td>
+  <td>1</td>
+  <td>1</td>
+  <td>545</td>
+</tr><tr>
+  <td>3</td>
+  <td>7</td>
+  <td>4</td>
+  <td>3</td>
+  <td>3.471</td>
+  <td>6</td>
+  <td>1</td>
+  <td>0</td>
+  <td>2</td>
+  <td>1</td>
+  <td>545</td>
 </tr></tbody>
     </table>
   </div>

@@ -1,7 +1,7 @@
 # Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison
 
 - Suite source: `projects/extendible-hashing-lab/benchmark_suite.json`
-- Scenario count: `3`
+- Scenario count: `4`
 - Extendible bucket capacity: `2`
 - Linear probing capacity / max load / tombstone ratio: `8` / `0.75` / `0.25`
 - Cuckoo starting capacity: `7`
@@ -16,6 +16,7 @@
 | directory-friendly-read-heavy | 13 | 5 | 3 | 0 | 3 | 1.462 | 3 | 0.333 | 4.0 | 2 | 3 | 1569 |
 | split-pressure-growth | 14 | 10 | 5 | 0 | 3 | 1.357 | 2 | 1.0 | 11.333 | 2 | 4 | 2081 |
 | delete-heavy-churn | 14 | 5 | 4 | 1 | 3 | 1.357 | 4 | 0.0 | 2.333 | 2 | 3 | 1569 |
+| primary-clustering-tombstone-pressure | 17 | 3 | 7 | 4 | 3 | 3.471 | 6 | 0.0 | 1.333 | 1 | 1 | 545 |
 
 ## Scenario — directory-friendly-read-heavy
 
@@ -64,4 +65,20 @@
 | 1 | 4 | 1 | 3 | 4 | 8 | 1.357 | 4 | 1 | 0 | 4 | 7 | 2 | 3 | 1569 |
 | 2 | 4 | 1 | 3 | 4 | 8 | 1.357 | 4 | 1 | 0 | 2 | 7 | 2 | 3 | 1569 |
 | 3 | 4 | 1 | 3 | 4 | 8 | 1.357 | 4 | 1 | 0 | 1 | 7 | 2 | 3 | 1569 |
+
+## Scenario — primary-clustering-tombstone-pressure
+
+- Description: Force several keys into the same linear-probing slot, leave tombstones behind, then trigger a cleanup rebuild so the open-addressing clustering story is obvious in the exported metrics.
+- Operation mix: `puts=7` (`insertions=7`, `updates=0`), `gets=6` (`hits=3`, `misses=3`), `deletes=4` (`hits=4`, `misses=0`)
+- Extendible hashing finished at global depth `3` with `4` buckets and load factor `0.375` after `7` splits / `4` merges and `7` directory growth(s) / `4` directory shrink(s).
+- Linear probing baseline finished at capacity `8` with load factor `0.375`, tombstones `0`, average probe count `3.471`, max probe `6`, and `1` rebuild(s).
+- Cuckoo hashing averaged `0.0` rehashes and `1.333` displacements, finishing between capacities `7` and `7`.
+- B-tree page baseline finished at height `1` across `1` node(s); at `page_size=512` and `value_bytes=32` the paged snapshot would occupy `545` bytes with `359` bytes of fixed slack per page.
+- Validation: final states matched across `3` deterministic trial(s).
+
+| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Linear avg probes | Linear max probe | Linear rebuilds | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity | B-tree height | B-tree nodes | B-tree paged bytes |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 7 | 4 | 3 | 4 | 8 | 3.471 | 6 | 1 | 0 | 1 | 7 | 1 | 1 | 545 |
+| 2 | 7 | 4 | 3 | 4 | 8 | 3.471 | 6 | 1 | 0 | 1 | 7 | 1 | 1 | 545 |
+| 3 | 7 | 4 | 3 | 4 | 8 | 3.471 | 6 | 1 | 0 | 2 | 7 | 1 | 1 | 545 |
 

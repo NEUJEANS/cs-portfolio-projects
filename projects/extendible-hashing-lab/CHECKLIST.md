@@ -14,4 +14,5 @@
 - [x] broaden the benchmark story with B-tree pages or linear probing as additional baselines
 - [x] add a linear-probing baseline or compact benchmark dashboard for the artifact bundle
 - [x] add a linear-probing baseline so the benchmark suite covers a simpler open-addressing comparison alongside cuckoo hashing
-- [ ] add a clustering-focused benchmark preset so the linear-probing baseline is even easier to demo live
+- [x] add a clustering-focused benchmark preset so the linear-probing baseline is even easier to demo live
+- [ ] add percentile/phase-split probe summaries so successful vs unsuccessful linear-probing lookups are easier to compare in the dashboard
