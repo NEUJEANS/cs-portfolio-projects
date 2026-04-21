@@ -8,6 +8,6 @@
 - [x] add or extend regression coverage for pooled percentile summaries, CSV/JSON exports, and report rendering
 - [x] review the slice at least 3 times and fix issues found
 - [x] run targeted tests, smoke checks, determinism checks, and `git diff --check`
-- [ ] run secret scan before push
-- [ ] commit, push, and append the wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and append the wrap-up
 - [ ] next: support string and integer key generators for more workload shapes
