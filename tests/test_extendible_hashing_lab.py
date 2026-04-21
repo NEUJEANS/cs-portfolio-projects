@@ -32,6 +32,7 @@ render_benchmark_dashboard_html = MODULE.render_benchmark_dashboard_html
 render_benchmark_png = MODULE.render_benchmark_png
 render_visualization_html = MODULE.render_visualization_html
 render_visualization_svg = MODULE.render_visualization_svg
+render_visualization_thumbnail_strip_svg = MODULE.render_visualization_thumbnail_strip_svg
 run_benchmark_suite = MODULE.run_benchmark_suite
 run_workload = MODULE.run_workload
 stable_hash = MODULE.stable_hash
@@ -364,6 +365,12 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         result = run_workload(payload)
         svg = render_visualization_svg("Sample aliasing trace", result.table, result.history, source_label=str(SAMPLE_WORKLOAD))
         html = render_visualization_html("Sample aliasing trace", result.table, result.history, source_label=str(SAMPLE_WORKLOAD))
+        thumbnail_svg = render_visualization_thumbnail_strip_svg(
+            "Sample aliasing trace",
+            result.table,
+            result.history,
+            source_label=str(SAMPLE_WORKLOAD),
+        )
         self.assertIn("<svg", svg)
         self.assertIn("Directory aliases", svg)
         self.assertIn("Bucket state", svg)
@@ -377,6 +384,26 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertIn("Step 1", html)
         self.assertIn("Directory aliases", html)
         self.assertIn("aria-labelledby=\"viz-title-", html)
+        self.assertIn("thumbnail strip", thumbnail_svg)
+        self.assertIn("preserveAspectRatio=\"xMidYMin meet\"", thumbnail_svg)
+        self.assertIn("Compact lifecycle strip for README thumbnails and slide decks.", thumbnail_svg)
+        self.assertIn("Dir: 0→B0", thumbnail_svg)
+        self.assertIn("Buckets: B0(ld0,a1,n1)", thumbnail_svg)
+
+    def test_render_visualization_thumbnail_strip_truncates_dense_rows(self) -> None:
+        payload = {
+            "bucket_capacity": 1,
+            "operations": [
+                {"op": "put", "key": f"k{index}", "value": str(index)}
+                for index in range(10)
+            ],
+        }
+        result = run_workload(payload)
+        thumbnail_svg = render_visualization_thumbnail_strip_svg("Dense aliasing trace", result.table, result.history)
+        self.assertIn("(+", thumbnail_svg)
+        self.assertIn("more dir rows", thumbnail_svg)
+        self.assertIn("more bucket rows", thumbnail_svg)
+        self.assertIn("Step 10", thumbnail_svg)
 
     def test_validate_benchmark_suite_rejects_duplicate_names(self) -> None:
         with self.assertRaises(BenchmarkError):
@@ -937,6 +964,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             benchmark_png = tmp_path / "benchmark.png"
             visualize_svg = tmp_path / "trace.svg"
             visualize_html = tmp_path / "trace.html"
+            visualize_thumbnail = tmp_path / "trace-thumbnail.svg"
 
             run_process = subprocess.run(
                 [
@@ -1108,6 +1136,8 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     str(visualize_svg),
                     "--html-out",
                     str(visualize_html),
+                    "--thumbnail-svg-out",
+                    str(visualize_thumbnail),
                 ],
                 check=True,
                 capture_output=True,
@@ -1115,9 +1145,12 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             )
             self.assertTrue(visualize_svg.exists())
             self.assertTrue(visualize_html.exists())
+            self.assertTrue(visualize_thumbnail.exists())
             self.assertIn('"steps": 7', visualize_process.stdout)
+            self.assertIn(str(visualize_thumbnail), visualize_process.stdout)
             self.assertIn("Directory aliases", visualize_svg.read_text(encoding="utf-8"))
             self.assertIn("Step 1", visualize_html.read_text(encoding="utf-8"))
+            self.assertIn("thumbnail strip", visualize_thumbnail.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

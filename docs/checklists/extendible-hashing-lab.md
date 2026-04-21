@@ -18,4 +18,4 @@
 - [x] add a clustering-focused benchmark preset so the linear-probing baseline is even easier to demo live
 - [x] add percentile/phase-split probe summaries so successful vs unsuccessful linear-probing lookups are easier to compare in the dashboard
 - [x] add a compact theory note or expected-cost overlay so the dashboard can relate observed linear-probing hit/miss probes to classic load-factor intuition
-- [ ] add compact PNG export or thumbnail-strip generation for the benchmark dashboard so README screenshots stay easy to embed
+- [x] add compact PNG export or thumbnail-strip generation for the benchmark dashboard so README screenshots stay easy to embed

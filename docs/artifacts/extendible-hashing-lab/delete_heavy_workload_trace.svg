@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1390" viewBox="0 0 1320 1390" role="img" aria-labelledby="viz-title-2b5af34a1ac8f000 viz-desc-af9a89accf848fca">
-<title id="viz-title-2b5af34a1ac8f000">Extendible hashing delete-heavy split and merge trace</title>
-<desc id="viz-desc-af9a89accf848fca">projects/extendible-hashing-lab/delete_heavy_workload.json. Final depth 0 · buckets 1 · splits 2 · merges 2 · directory grows 2 · directory shrinks 2</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1390" viewBox="0 0 1320 1390" role="img" aria-labelledby="viz-title-5e6d2782f7d7cec5 viz-desc-03a514211a8e8f35">
+<title id="viz-title-5e6d2782f7d7cec5">Extendible hashing delete-heavy split and shrink trace</title>
+<desc id="viz-desc-03a514211a8e8f35">projects/extendible-hashing-lab/delete_heavy_workload.json. Final depth 0 · buckets 1 · splits 2 · merges 2 · directory grows 2 · directory shrinks 2</desc>
 <rect width="1320" height="100%" fill="#f8fafc" />
-<text x="40" y="42" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="30" font-weight="700" fill="#0f172a">Extendible hashing delete-heavy split and merge trace</text>
+<text x="40" y="42" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="30" font-weight="700" fill="#0f172a">Extendible hashing delete-heavy split and shrink trace</text>
 <text x="40" y="68" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" fill="#334155">projects/extendible-hashing-lab/delete_heavy_workload.json</text>
 <text x="40" y="92" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14" font-weight="600" fill="#1d4ed8">Final depth 0 · buckets 1 · splits 2 · merges 2 · directory grows 2 · directory shrinks 2</text>
 <rect x="40" y="118" width="1240" height="170" rx="20" fill="#ffffff" stroke="#cbd5e1" />

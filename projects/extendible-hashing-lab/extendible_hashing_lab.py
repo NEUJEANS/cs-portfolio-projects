@@ -735,6 +735,26 @@ def _svg_text(x: float, y: float, text: str, *, size: int = 14, weight: str = "4
     )
 
 
+def _svg_multiline_text(
+    x: float,
+    y: float,
+    lines: list[str],
+    *,
+    size: int = 14,
+    weight: str = "400",
+    fill: str = "#0f172a",
+    line_height: int = 16,
+) -> str:
+    tspans = []
+    for index, line in enumerate(lines):
+        dy = 0 if index == 0 else line_height
+        tspans.append(f'<tspan x="{x}" dy="{dy}">{escape(line)}</tspan>')
+    return (
+        f'<text x="{x}" y="{y}" font-family="Inter,Segoe UI,Arial,sans-serif" '
+        f'font-size="{size}" font-weight="{weight}" fill="{fill}">{"".join(tspans)}</text>'
+    )
+
+
 def _svg_group(*elements: str, tooltip: str | None = None) -> str:
     parts = ["<g>"]
     if tooltip:
@@ -964,6 +984,145 @@ def render_visualization_html(
 </body>
 </html>
 '''
+
+
+def _chunk_thumbnail_segments(label: str, segments: list[str], *, line_limit: int = 46) -> list[str]:
+    if not segments:
+        return [f"{label}: none"]
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    current_length = 0
+    for segment in segments:
+        segment_length = len(segment) if not current else len(segment) + 3
+        prefix_length = len(label) + 2 if not chunks and not current else 0
+        if current and current_length + segment_length > line_limit:
+            chunks.append(current)
+            current = [segment]
+            current_length = len(segment)
+            continue
+        if not current and prefix_length + len(segment) > line_limit and chunks:
+            chunks.append([segment])
+            current = []
+            current_length = 0
+            continue
+        current.append(segment)
+        current_length += segment_length
+    if current:
+        chunks.append(current)
+    return [f"{label}: {' · '.join(chunk)}" for chunk in chunks]
+
+
+def _thumbnail_directory_segments(directory_rows: list[dict[str, Any]]) -> list[str]:
+    return [f"{row['bits']}→B{row['bucket_id']}" for row in directory_rows]
+
+
+def _thumbnail_bucket_segments(bucket_rows: list[dict[str, Any]]) -> list[str]:
+    return [
+        f"B{bucket['bucket_id']}(ld{bucket['local_depth']},a{bucket['aliases']},n{bucket['size']})"
+        for bucket in bucket_rows
+    ]
+
+
+def _truncate_thumbnail_lines(lines: list[str], *, max_lines: int = 3, overflow_label: str = "more") -> list[str]:
+    if len(lines) <= max_lines:
+        return lines
+    hidden = len(lines) - (max_lines - 1)
+    return [*lines[: max_lines - 1], f"(+{hidden} {overflow_label})"]
+
+
+def _thumbnail_accent_color(item: WorkloadOpResult) -> str:
+    if item.split_delta or item.directory_growth_delta:
+        return "#2563eb"
+    if item.merge_delta or item.directory_shrink_delta:
+        return "#059669"
+    if item.op == "delete":
+        return "#dc2626" if item.outcome == "deleted" else "#f97316"
+    if item.op == "get":
+        return "#7c3aed" if item.outcome != "missing" else "#ea580c"
+    return "#475569"
+
+
+def render_visualization_thumbnail_strip_svg(
+    title: str,
+    table: ExtendibleHashTable,
+    history: list[WorkloadOpResult],
+    source_label: str | None = None,
+) -> str:
+    columns = 3 if len(history) >= 5 else 2 if len(history) >= 3 else 1
+    margin_x = 40
+    margin_y = 118
+    gap_x = 20
+    gap_y = 20
+    total_width = 1320
+    available_width = total_width - (margin_x * 2) - (gap_x * (columns - 1))
+    card_width = available_width // columns
+    card_height = 224
+    cards: list[str] = []
+
+    for index, item in enumerate(history):
+        snapshot = item.snapshot or {"stats": {"buckets": []}, "directory_rows": []}
+        stats = snapshot["stats"]
+        directory_rows = snapshot["directory_rows"]
+        bucket_rows = stats["buckets"]
+        col = index % columns
+        row = index // columns
+        card_left = margin_x + col * (card_width + gap_x)
+        card_top = margin_y + row * (card_height + gap_y)
+        accent = _thumbnail_accent_color(item)
+        directory_lines_full = _chunk_thumbnail_segments("Dir", _thumbnail_directory_segments(directory_rows), line_limit=50)
+        bucket_lines_full = _chunk_thumbnail_segments("Buckets", _thumbnail_bucket_segments(bucket_rows), line_limit=50)
+        directory_lines = _truncate_thumbnail_lines(directory_lines_full, max_lines=3, overflow_label="more dir rows")
+        bucket_lines = _truncate_thumbnail_lines(bucket_lines_full, max_lines=3, overflow_label="more bucket rows")
+        bucket_block_y = card_top + 126 + max(0, len(directory_lines) - 1) * 16
+        tooltip = (
+            f"Step {item.step} · {item.op.upper()} {item.key} · Outcome: {item.outcome} · Events: {_format_step_events(item)} "
+            f"· depth {item.global_depth} · buckets {item.bucket_count} · entries {item.entry_count} "
+            f"· {' | '.join(directory_lines_full + bucket_lines_full)}"
+        )
+        cards.append(
+            _svg_group(
+                f'<rect x="{card_left}" y="{card_top}" width="{card_width}" height="{card_height}" rx="20" fill="#ffffff" stroke="#dbe4f0" />',
+                f'<rect x="{card_left + 16}" y="{card_top + 16}" width="10" height="{card_height - 32}" rx="5" fill="{accent}" />',
+                _svg_text(card_left + 40, card_top + 34, f"Step {item.step} · {item.op.upper()} {_truncate_text(item.key, 18)}", size=18, weight="700"),
+                _svg_text(card_left + 40, card_top + 58, _truncate_text(f"Outcome: {item.outcome} · {_format_step_events(item)}", 44), size=12, weight="600", fill="#334155"),
+                _svg_text(
+                    card_left + 40,
+                    card_top + 80,
+                    f"depth {item.global_depth} · buckets {item.bucket_count} · entries {item.entry_count}",
+                    size=12,
+                    weight="600",
+                    fill="#1d4ed8",
+                ),
+                f'<line x1="{card_left + 40}" y1="{card_top + 94}" x2="{card_left + card_width - 20}" y2="{card_top + 94}" stroke="#dbe4f0" />',
+                _svg_multiline_text(card_left + 40, card_top + 118, directory_lines, size=12, fill="#334155", line_height=16),
+                _svg_multiline_text(card_left + 40, bucket_block_y, bucket_lines, size=12, fill="#334155", line_height=16),
+                _svg_text(card_left + 40, card_top + card_height - 18, "Compact lifecycle strip for README thumbnails and slide decks.", size=11, fill="#64748b"),
+                tooltip=tooltip,
+            )
+        )
+
+    row_count = max(1, math.ceil(len(history) / columns))
+    height = margin_y + row_count * card_height + (row_count - 1) * gap_y + 40
+    subtitle = source_label or "Workload-driven extendible hashing lifecycle strip"
+    summary_line = (
+        f"Final depth {table.global_depth} · buckets {len(table.buckets)} · splits {table.split_count} · merges {table.merge_count} "
+        f"· directory grows {table.directory_growth_count} · directory shrinks {table.directory_shrink_count}"
+    )
+    title_id = _svg_reference_id("viz-strip-title", title, subtitle)
+    desc_id = _svg_reference_id("viz-strip-desc", title, subtitle, summary_line)
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="{height}" viewBox="0 0 {total_width} {height}" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'<title id="{title_id}">{escape(title)} thumbnail strip</title>',
+            f'<desc id="{desc_id}">{escape(subtitle + ". " + summary_line)}</desc>',
+            f'<rect width="{total_width}" height="{height}" fill="#f8fafc" />',
+            _svg_text(40, 42, f"{title} · thumbnail strip", size=30, weight="700"),
+            _svg_text(40, 68, subtitle, size=14, fill="#334155"),
+            _svg_text(40, 92, summary_line, size=14, weight="600", fill="#1d4ed8"),
+            *cards,
+            "</svg>",
+        ]
+    )
 
 
 def load_json(path: Path) -> Any:
@@ -2606,6 +2765,11 @@ def build_parser() -> argparse.ArgumentParser:
     visualize_parser.add_argument("--svg-out", type=Path, help="optional self-contained SVG output")
     visualize_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML output")
     visualize_parser.add_argument(
+        "--thumbnail-svg-out",
+        type=Path,
+        help="optional compact SVG lifecycle strip for README thumbnails or slides",
+    )
+    visualize_parser.add_argument(
         "--title",
         default="Extendible hashing split and aliasing trace",
         help="title to use for visualization artifacts",
@@ -2691,8 +2855,8 @@ def command_benchmark(args: argparse.Namespace) -> int:
 
 
 def command_visualize(args: argparse.Namespace) -> int:
-    if not args.svg_out and not args.html_out:
-        raise ValueError("visualize requires --svg-out and/or --html-out")
+    if not args.svg_out and not args.html_out and not args.thumbnail_svg_out:
+        raise ValueError("visualize requires --svg-out, --html-out, and/or --thumbnail-svg-out")
     workload = load_json(args.input)
     result = run_workload(workload)
     if args.svg_out:
@@ -2707,6 +2871,12 @@ def command_visualize(args: argparse.Namespace) -> int:
             render_visualization_html(args.title, result.table, result.history, source_label=str(args.input)) + "\n",
             encoding="utf-8",
         )
+    if args.thumbnail_svg_out:
+        args.thumbnail_svg_out.parent.mkdir(parents=True, exist_ok=True)
+        args.thumbnail_svg_out.write_text(
+            render_visualization_thumbnail_strip_svg(args.title, result.table, result.history, source_label=str(args.input)) + "\n",
+            encoding="utf-8",
+        )
     print(
         json.dumps(
             {
@@ -2714,6 +2884,7 @@ def command_visualize(args: argparse.Namespace) -> int:
                 "steps": len(result.history),
                 "svg_out": str(args.svg_out) if args.svg_out else None,
                 "html_out": str(args.html_out) if args.html_out else None,
+                "thumbnail_svg_out": str(args.thumbnail_svg_out) if args.thumbnail_svg_out else None,
             },
             indent=2,
         )
