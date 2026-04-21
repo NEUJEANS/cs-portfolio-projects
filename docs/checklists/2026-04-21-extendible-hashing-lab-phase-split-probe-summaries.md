@@ -8,4 +8,4 @@
 - [x] regenerate the committed benchmark artifact bundle
 - [x] run compile + focused unit tests and inspect exported benchmark outputs
 - [x] complete at least 3 review passes and fix issues found
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
