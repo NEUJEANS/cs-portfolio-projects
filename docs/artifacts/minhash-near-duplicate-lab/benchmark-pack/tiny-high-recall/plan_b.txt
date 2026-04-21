@@ -1,0 +1,1 @@
+distributed systems portfolio project uses minhash for document deduplication and jaccard similarity estimates

@@ -1,0 +1,1 @@
+react dashboard card renders revenue total sparkline caption and weekly delta inside a compact layout shell

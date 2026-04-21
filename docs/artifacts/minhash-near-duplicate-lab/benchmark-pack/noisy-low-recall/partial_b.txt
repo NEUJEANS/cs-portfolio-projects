@@ -1,0 +1,1 @@
+background log worker batches events for upload retries failed flushes and rotates spool files nightly

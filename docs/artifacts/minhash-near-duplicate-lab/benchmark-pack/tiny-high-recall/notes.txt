@@ -1,0 +1,1 @@
+operating systems scheduling notes discuss round robin fairness and cpu bursts

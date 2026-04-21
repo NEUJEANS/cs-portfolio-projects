@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MinHash benchmark scenario pack</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #020617; color: #e2e8f0; }
+    main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 56px; }
+    .hero, .card { background: #0f172a; border: 1px solid #334155; border-radius: 18px; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.32); }
+    .hero { padding: 24px; margin-bottom: 24px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .card { padding: 20px; }
+    h1, h2 { margin-top: 0; }
+    .meta, .links { color: #93c5fd; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }
+    ul { padding-left: 20px; }
+    a { color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>MinHash benchmark scenario pack</h1>
+      <p>A side-by-side benchmark pack for explaining how candidate reduction and recall change across tiny, medium, and noisy corpora.</p>
+      <ul>
+        <li>Generated at: <code>2026-04-21T21:11:36.911719+00:00</code></li>
+        <li>Scenario count: <strong>3</strong></li>
+        <li>Total files written: <strong>20</strong></li>
+        <li>Scenarios matching expected recall: <strong>3/3</strong></li>
+      </ul>
+    </section>
+    <section class="grid"><article class="card"><h2>Tiny high-recall benchmark scenario</h2><p>A tiny corpus with one obvious near-duplicate pair and two unrelated distractors so LSH should recover the true match cleanly.</p><ul><li>Files written: <strong>4</strong></li><li>Exact pairs above threshold: <strong>1</strong></li><li>Candidate pairs: <strong>1</strong></li><li>Observed recall: <strong>1.0000</strong></li><li>Expected recall range: <code>1.0000 - 1.0000</code></li><li>Candidate reduction ratio: <strong>0.8333</strong></li></ul><p class="meta">Good for showing the happy path where a small corpus still keeps strong recall while reducing candidate comparisons.</p><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark &#x27;&lt;scenario-root&gt;&#x27; --glob &#x27;*.txt&#x27; --token-mode word --shingle-size 2 --num-hashes 64 --bands 8 --threshold 0.3 --json</pre><p class="meta">Strongest exact pair: docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_a.txt ↔ docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_b.txt</p><p>exact=0.6000 · estimated=0.6094</p><p class="links"><a href="tiny-high-recall-benchmark-report.json">json</a> · <a href="tiny-high-recall-benchmark-report.csv">csv</a> · <a href="tiny-high-recall-benchmark-report.md">markdown</a></p></article><article class="card"><h2>Medium balanced-recall benchmark scenario</h2><p>A medium corpus with multiple topical clusters where one pair is easy for banding and another sits near the threshold, illustrating recall tradeoffs.</p><ul><li>Files written: <strong>8</strong></li><li>Exact pairs above threshold: <strong>2</strong></li><li>Candidate pairs: <strong>1</strong></li><li>Observed recall: <strong>0.5000</strong></li><li>Expected recall range: <code>0.5000 - 0.5000</code></li><li>Candidate reduction ratio: <strong>0.9643</strong></li></ul><p class="meta">Useful for interview discussion about how a realistic portfolio corpus can recover the strongest duplicates while still missing weaker overlaps without retuning.</p><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark &#x27;&lt;scenario-root&gt;&#x27; --glob &#x27;*.txt&#x27; --token-mode word --shingle-size 3 --num-hashes 64 --bands 8 --threshold 0.25 --json</pre><p class="meta">Strongest exact pair: docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_a.txt ↔ docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_b.txt</p><p>exact=0.7333 · estimated=0.7188</p><p class="links"><a href="medium-balanced-benchmark-report.json">json</a> · <a href="medium-balanced-benchmark-report.csv">csv</a> · <a href="medium-balanced-benchmark-report.md">markdown</a></p></article><article class="card"><h2>Noisy low-recall benchmark scenario</h2><p>A noisy corpus where one partial near-duplicate pair exists but the default banding parameters miss it, creating a concrete tuning story instead of a perfect demo.</p><ul><li>Files written: <strong>8</strong></li><li>Exact pairs above threshold: <strong>1</strong></li><li>Candidate pairs: <strong>0</strong></li><li>Observed recall: <strong>0.0000</strong></li><li>Expected recall range: <code>0.0000 - 0.0000</code></li><li>Candidate reduction ratio: <strong>1.0000</strong></li></ul><p class="meta">Shows why LSH parameter tuning matters, especially when only one pair overlaps and the rest of the corpus is unrelated noise.</p><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark &#x27;&lt;scenario-root&gt;&#x27; --glob &#x27;*.txt&#x27; --token-mode word --shingle-size 3 --num-hashes 32 --bands 8 --threshold 0.2 --json</pre><p class="meta">Strongest exact pair: docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/noisy-low-recall/partial_a.txt ↔ docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/noisy-low-recall/partial_b.txt</p><p>exact=0.5294 · estimated=0.3438</p><p class="links"><a href="noisy-low-recall-benchmark-report.json">json</a> · <a href="noisy-low-recall-benchmark-report.csv">csv</a> · <a href="noisy-low-recall-benchmark-report.md">markdown</a></p></article></section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "all_pairs": 28,
+  "bands": 8,
+  "candidate_pairs": 1,
+  "candidate_reduction_ratio": 0.9643,
+  "command": "benchmark",
+  "documents_scanned": 8,
+  "exact_pairs_above_threshold": 2,
+  "lsh_pairs_above_threshold": 1,
+  "lsh_recall_vs_exact": 0.5,
+  "normalize_identifiers": false,
+  "normalize_literals": false,
+  "num_hashes": 64,
+  "seed": 0,
+  "shingle_size": 3,
+  "threshold": 0.25,
+  "timings_seconds": {
+    "build_signatures": 0.0069,
+    "exact_all_pairs_scan": 5.7e-05,
+    "lsh_candidate_generation": 0.000131
+  },
+  "token_mode": "word",
+  "top_exact_pairs": [
+    {
+      "estimated_jaccard": 0.7188,
+      "exact_jaccard": 0.7333,
+      "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_a.txt",
+      "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_b.txt",
+      "shared_bands": 1
+    },
+    {
+      "estimated_jaccard": 0.2656,
+      "exact_jaccard": 0.2727,
+      "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/etl_a.txt",
+      "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/etl_b.txt",
+      "shared_bands": 0
+    }
+  ],
+  "top_lsh_pairs": [
+    {
+      "estimated_jaccard": 0.7188,
+      "exact_jaccard": 0.7333,
+      "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_a.txt",
+      "left_shingles": 13,
+      "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_b.txt",
+      "right_shingles": 13,
+      "shared_bands": 1
+    }
+  ]
+}

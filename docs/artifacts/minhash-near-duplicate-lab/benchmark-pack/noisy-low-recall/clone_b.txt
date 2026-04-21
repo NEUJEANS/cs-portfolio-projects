@@ -1,0 +1,1 @@
+react metrics card renders revenue totals sparkline note and weekly delta in a compact layout shell

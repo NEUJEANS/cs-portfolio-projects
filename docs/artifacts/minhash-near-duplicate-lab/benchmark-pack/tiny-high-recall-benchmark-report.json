@@ -1,0 +1,43 @@
+{
+  "all_pairs": 6,
+  "bands": 8,
+  "candidate_pairs": 1,
+  "candidate_reduction_ratio": 0.8333,
+  "command": "benchmark",
+  "documents_scanned": 4,
+  "exact_pairs_above_threshold": 1,
+  "lsh_pairs_above_threshold": 1,
+  "lsh_recall_vs_exact": 1.0,
+  "normalize_identifiers": false,
+  "normalize_literals": false,
+  "num_hashes": 64,
+  "seed": 0,
+  "shingle_size": 2,
+  "threshold": 0.3,
+  "timings_seconds": {
+    "build_signatures": 0.002995,
+    "exact_all_pairs_scan": 3.3e-05,
+    "lsh_candidate_generation": 8.1e-05
+  },
+  "token_mode": "word",
+  "top_exact_pairs": [
+    {
+      "estimated_jaccard": 0.6094,
+      "exact_jaccard": 0.6,
+      "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_a.txt",
+      "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_b.txt",
+      "shared_bands": 1
+    }
+  ],
+  "top_lsh_pairs": [
+    {
+      "estimated_jaccard": 0.6094,
+      "exact_jaccard": 0.6,
+      "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_a.txt",
+      "left_shingles": 12,
+      "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_b.txt",
+      "right_shingles": 12,
+      "shared_bands": 1
+    }
+  ]
+}

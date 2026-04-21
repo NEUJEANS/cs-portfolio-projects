@@ -1,0 +1,1 @@
+distributed systems course project uses minhash for document deduplication and jaccard similarity estimation

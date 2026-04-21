@@ -1,0 +1,245 @@
+{
+  "directory": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack",
+  "generated_at": "2026-04-21T21:11:36.911719+00:00",
+  "scenario_count": 3,
+  "scenario_names": [
+    "tiny-high-recall",
+    "medium-balanced",
+    "noisy-low-recall"
+  ],
+  "scenarios": [
+    {
+      "benchmark": {
+        "all_pairs": 6,
+        "bands": 8,
+        "candidate_pairs": 1,
+        "candidate_reduction_ratio": 0.8333,
+        "command": "benchmark",
+        "documents_scanned": 4,
+        "exact_pairs_above_threshold": 1,
+        "lsh_pairs_above_threshold": 1,
+        "lsh_recall_vs_exact": 1.0,
+        "normalize_identifiers": false,
+        "normalize_literals": false,
+        "num_hashes": 64,
+        "seed": 0,
+        "shingle_size": 2,
+        "threshold": 0.3,
+        "timings_seconds": {
+          "build_signatures": 0.002995,
+          "exact_all_pairs_scan": 3.3e-05,
+          "lsh_candidate_generation": 8.1e-05
+        },
+        "token_mode": "word",
+        "top_exact_pairs": [
+          {
+            "estimated_jaccard": 0.6094,
+            "exact_jaccard": 0.6,
+            "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_a.txt",
+            "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_b.txt",
+            "shared_bands": 1
+          }
+        ],
+        "top_lsh_pairs": [
+          {
+            "estimated_jaccard": 0.6094,
+            "exact_jaccard": 0.6,
+            "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_a.txt",
+            "left_shingles": 12,
+            "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_b.txt",
+            "right_shingles": 12,
+            "shared_bands": 1
+          }
+        ]
+      },
+      "expected_recall": {
+        "ceiling": 1.0,
+        "floor": 1.0,
+        "matches_expectation": true,
+        "observed": 1.0
+      },
+      "files_written": 4,
+      "recommended_benchmark": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark '<scenario-root>' --glob '*.txt' --token-mode word --shingle-size 2 --num-hashes 64 --bands 8 --threshold 0.3 --json",
+        "glob_pattern": "*.txt",
+        "normalize_identifiers": false,
+        "normalize_literals": false,
+        "num_hashes": 64,
+        "shingle_size": 2,
+        "threshold": 0.3,
+        "token_mode": "word"
+      },
+      "report_csv": "tiny-high-recall-benchmark-report.csv",
+      "report_json": "tiny-high-recall-benchmark-report.json",
+      "report_md": "tiny-high-recall-benchmark-report.md",
+      "scenario_name": "tiny-high-recall",
+      "scenario_root": "tiny-high-recall",
+      "story": "A tiny corpus with one obvious near-duplicate pair and two unrelated distractors so LSH should recover the true match cleanly.",
+      "teaching_note": "Good for showing the happy path where a small corpus still keeps strong recall while reducing candidate comparisons.",
+      "title": "Tiny high-recall benchmark scenario",
+      "top_exact_pair": {
+        "estimated_jaccard": 0.6094,
+        "exact_jaccard": 0.6,
+        "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_a.txt",
+        "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/tiny-high-recall/plan_b.txt",
+        "shared_bands": 1
+      }
+    },
+    {
+      "benchmark": {
+        "all_pairs": 28,
+        "bands": 8,
+        "candidate_pairs": 1,
+        "candidate_reduction_ratio": 0.9643,
+        "command": "benchmark",
+        "documents_scanned": 8,
+        "exact_pairs_above_threshold": 2,
+        "lsh_pairs_above_threshold": 1,
+        "lsh_recall_vs_exact": 0.5,
+        "normalize_identifiers": false,
+        "normalize_literals": false,
+        "num_hashes": 64,
+        "seed": 0,
+        "shingle_size": 3,
+        "threshold": 0.25,
+        "timings_seconds": {
+          "build_signatures": 0.0069,
+          "exact_all_pairs_scan": 5.7e-05,
+          "lsh_candidate_generation": 0.000131
+        },
+        "token_mode": "word",
+        "top_exact_pairs": [
+          {
+            "estimated_jaccard": 0.7188,
+            "exact_jaccard": 0.7333,
+            "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_a.txt",
+            "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_b.txt",
+            "shared_bands": 1
+          },
+          {
+            "estimated_jaccard": 0.2656,
+            "exact_jaccard": 0.2727,
+            "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/etl_a.txt",
+            "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/etl_b.txt",
+            "shared_bands": 0
+          }
+        ],
+        "top_lsh_pairs": [
+          {
+            "estimated_jaccard": 0.7188,
+            "exact_jaccard": 0.7333,
+            "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_a.txt",
+            "left_shingles": 13,
+            "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_b.txt",
+            "right_shingles": 13,
+            "shared_bands": 1
+          }
+        ]
+      },
+      "expected_recall": {
+        "ceiling": 0.5,
+        "floor": 0.5,
+        "matches_expectation": true,
+        "observed": 0.5
+      },
+      "files_written": 8,
+      "recommended_benchmark": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark '<scenario-root>' --glob '*.txt' --token-mode word --shingle-size 3 --num-hashes 64 --bands 8 --threshold 0.25 --json",
+        "glob_pattern": "*.txt",
+        "normalize_identifiers": false,
+        "normalize_literals": false,
+        "num_hashes": 64,
+        "shingle_size": 3,
+        "threshold": 0.25,
+        "token_mode": "word"
+      },
+      "report_csv": "medium-balanced-benchmark-report.csv",
+      "report_json": "medium-balanced-benchmark-report.json",
+      "report_md": "medium-balanced-benchmark-report.md",
+      "scenario_name": "medium-balanced",
+      "scenario_root": "medium-balanced",
+      "story": "A medium corpus with multiple topical clusters where one pair is easy for banding and another sits near the threshold, illustrating recall tradeoffs.",
+      "teaching_note": "Useful for interview discussion about how a realistic portfolio corpus can recover the strongest duplicates while still missing weaker overlaps without retuning.",
+      "title": "Medium balanced-recall benchmark scenario",
+      "top_exact_pair": {
+        "estimated_jaccard": 0.7188,
+        "exact_jaccard": 0.7333,
+        "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_a.txt",
+        "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/medium-balanced/frontend_b.txt",
+        "shared_bands": 1
+      }
+    },
+    {
+      "benchmark": {
+        "all_pairs": 28,
+        "bands": 8,
+        "candidate_pairs": 0,
+        "candidate_reduction_ratio": 1.0,
+        "command": "benchmark",
+        "documents_scanned": 8,
+        "exact_pairs_above_threshold": 1,
+        "lsh_pairs_above_threshold": 0,
+        "lsh_recall_vs_exact": 0.0,
+        "normalize_identifiers": false,
+        "normalize_literals": false,
+        "num_hashes": 32,
+        "seed": 0,
+        "shingle_size": 3,
+        "threshold": 0.2,
+        "timings_seconds": {
+          "build_signatures": 0.003687,
+          "exact_all_pairs_scan": 6.1e-05,
+          "lsh_candidate_generation": 0.000133
+        },
+        "token_mode": "word",
+        "top_exact_pairs": [
+          {
+            "estimated_jaccard": 0.3438,
+            "exact_jaccard": 0.5294,
+            "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/noisy-low-recall/partial_a.txt",
+            "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/noisy-low-recall/partial_b.txt",
+            "shared_bands": 0
+          }
+        ],
+        "top_lsh_pairs": []
+      },
+      "expected_recall": {
+        "ceiling": 0.0,
+        "floor": 0.0,
+        "matches_expectation": true,
+        "observed": 0.0
+      },
+      "files_written": 8,
+      "recommended_benchmark": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark '<scenario-root>' --glob '*.txt' --token-mode word --shingle-size 3 --num-hashes 32 --bands 8 --threshold 0.2 --json",
+        "glob_pattern": "*.txt",
+        "normalize_identifiers": false,
+        "normalize_literals": false,
+        "num_hashes": 32,
+        "shingle_size": 3,
+        "threshold": 0.2,
+        "token_mode": "word"
+      },
+      "report_csv": "noisy-low-recall-benchmark-report.csv",
+      "report_json": "noisy-low-recall-benchmark-report.json",
+      "report_md": "noisy-low-recall-benchmark-report.md",
+      "scenario_name": "noisy-low-recall",
+      "scenario_root": "noisy-low-recall",
+      "story": "A noisy corpus where one partial near-duplicate pair exists but the default banding parameters miss it, creating a concrete tuning story instead of a perfect demo.",
+      "teaching_note": "Shows why LSH parameter tuning matters, especially when only one pair overlaps and the rest of the corpus is unrelated noise.",
+      "title": "Noisy low-recall benchmark scenario",
+      "top_exact_pair": {
+        "estimated_jaccard": 0.3438,
+        "exact_jaccard": 0.5294,
+        "left": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/noisy-low-recall/partial_a.txt",
+        "right": "docs/artifacts/minhash-near-duplicate-lab/benchmark-pack/noisy-low-recall/partial_b.txt",
+        "shared_bands": 0
+      }
+    }
+  ],
+  "scenarios_matching_expectation": 3,
+  "total_files_written": 20
+}

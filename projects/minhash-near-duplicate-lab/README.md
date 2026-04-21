@@ -23,6 +23,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - optional literal normalization for `code` mode so integer, float, string, boolean, and `None`-only edits can be grouped into stronger clone-detection demos
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
+- benchmark-pack export that writes tiny, medium, and noisy corpora plus expected-recall summaries for repeatable demos
 - curated demo corpus presets for mixed Markdown/code notebooks, data-science feature pipelines, systems reconciliation stories, and web-dev component clone portfolios
 - artifact-ready preset bundle export that writes JSON, Markdown, and HTML gallery cards alongside a generated preset corpus
 - cross-preset landing-page export that compares all curated demo bundles side by side with links to each preset gallery
@@ -221,6 +222,16 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
   --json
 ```
 
+Generate a reusable benchmark pack with tiny, medium, and noisy scenarios plus checked-in JSON, CSV, Markdown, and HTML summaries:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-benchmark-pack \
+  docs/artifacts/minhash-near-duplicate-lab/benchmark-pack \
+  --json
+```
+
+That command writes three ready-to-benchmark corpora and a shared pack summary that records the observed recall for each scenario against its expected range.
+
 ## Example JSON output
 
 ```json
@@ -255,6 +266,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 - why a dry-run diff is useful before reindexing a large corpus or deleting stale paths from a saved signature index
 - how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
 - how reusable JSON/CSV/Markdown exports make experimental results easier to paste into portfolio write-ups and charts
+- how tiny, medium, and noisy benchmark packs give you a concrete story for high recall, partial recall, and miss-heavy parameter settings
 - how preset bundle Markdown/HTML cards turn a synthetic corpus into something you can screenshot quickly for a portfolio case study
 - how a cross-preset landing page helps you frame one MinHash project for multiple audiences (algorithms, data, systems, and frontend)
 
@@ -265,6 +277,5 @@ python3 -m unittest tests.test_minhash_near_duplicate
 ```
 
 ## Future improvements
-- add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
 - add language-aware literal buckets for lists, dicts, template strings, and JSX-specific inline objects in code mode
 - add portfolio screenshots or thumbnail assets that can be embedded directly into the landing page cards

@@ -37,6 +37,7 @@ build_preset_bundle_landing = module.build_preset_bundle_landing
 write_preset_artifact_bundle = module.write_preset_artifact_bundle
 write_preset_bundle_landing = module.write_preset_bundle_landing
 write_preset_corpus = module.write_preset_corpus
+write_benchmark_pack = module.write_benchmark_pack
 _preview_text_for_bundle = module._preview_text_for_bundle
 _split_glob_patterns = module._split_glob_patterns
 
@@ -575,6 +576,40 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertIn("MinHash preset bundle landing page", html)
             self.assertIn("gallery html", html)
 
+    def test_write_benchmark_pack_creates_scenarios_and_summary_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "benchmark-pack"
+            outputs = write_benchmark_pack(root)
+
+            self.assertEqual(outputs["scenario_count"], 3)
+            self.assertEqual(outputs["scenario_names"], ["tiny-high-recall", "medium-balanced", "noisy-low-recall"])
+            self.assertTrue(Path(outputs["summary_json"]).exists())
+            self.assertTrue(Path(outputs["summary_md"]).exists())
+            self.assertTrue(Path(outputs["summary_html"]).exists())
+            self.assertTrue((root / "tiny-high-recall" / "plan_a.txt").exists())
+            self.assertTrue((root / "medium-balanced" / "frontend_a.txt").exists())
+            self.assertTrue((root / "noisy-low-recall" / "partial_a.txt").exists())
+
+    def test_write_benchmark_pack_summary_records_expected_recall_ranges(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "benchmark-pack"
+            outputs = write_benchmark_pack(root)
+            payload = json.loads(Path(outputs["summary_json"]).read_text(encoding="utf-8"))
+            by_name = {entry["scenario_name"]: entry for entry in payload["scenarios"]}
+
+            self.assertEqual(by_name["tiny-high-recall"]["expected_recall"]["observed"], 1.0)
+            self.assertEqual(by_name["medium-balanced"]["expected_recall"]["observed"], 0.5)
+            self.assertEqual(by_name["noisy-low-recall"]["expected_recall"]["observed"], 0.0)
+            self.assertTrue(all(entry["expected_recall"]["matches_expectation"] for entry in payload["scenarios"]))
+            self.assertEqual(payload["scenarios_matching_expectation"], 3)
+
+    def test_write_benchmark_pack_requires_force_when_files_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "benchmark-pack"
+            write_benchmark_pack(root)
+            with self.assertRaises(FileExistsError):
+                write_benchmark_pack(root)
+
     def test_write_preset_corpus_requires_force_when_files_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             destination = Path(tmpdir) / "preset"
@@ -843,6 +878,28 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertTrue(Path(payload["landing_html"]).exists())
             landing_payload = json.loads(Path(payload["summary_json"]).read_text(encoding="utf-8"))
             self.assertEqual(landing_payload["preset_names"], ["mixed-markdown-code-notebook", "web-dev-component-clones"])
+
+    def test_cli_write_benchmark_pack_emits_expected_recall_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "benchmark-pack"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-benchmark-pack",
+                    str(root),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "write-benchmark-pack")
+            self.assertEqual(payload["scenario_count"], 3)
+            self.assertEqual(payload["scenarios_matching_expectation"], 3)
+            self.assertTrue(Path(payload["summary_html"]).exists())
 
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

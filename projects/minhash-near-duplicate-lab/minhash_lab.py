@@ -172,6 +172,83 @@ PRESET_SCAN_CONFIGS: dict[str, dict[str, object]] = {
 PRESET_DISPLAY_ORDER = list(PRESET_CORPORA)
 PRESET_ORDER_INDEX = {name: index for index, name in enumerate(PRESET_DISPLAY_ORDER)}
 
+BENCHMARK_SCENARIOS: dict[str, dict[str, object]] = {
+    "tiny-high-recall": {
+        "title": "Tiny high-recall benchmark scenario",
+        "story": "A tiny corpus with one obvious near-duplicate pair and two unrelated distractors so LSH should recover the true match cleanly.",
+        "expected_recall_floor": 1.0,
+        "expected_recall_ceiling": 1.0,
+        "teaching_note": "Good for showing the happy path where a small corpus still keeps strong recall while reducing candidate comparisons.",
+        "glob_pattern": "*.txt",
+        "token_mode": "word",
+        "normalize_identifiers": False,
+        "normalize_literals": False,
+        "shingle_size": 2,
+        "num_hashes": 64,
+        "bands": 8,
+        "threshold": 0.3,
+        "files": {
+            "plan_a.txt": "distributed systems course project uses minhash for document deduplication and jaccard similarity estimation\n",
+            "plan_b.txt": "distributed systems portfolio project uses minhash for document deduplication and jaccard similarity estimates\n",
+            "notes.txt": "operating systems scheduling notes discuss round robin fairness and cpu bursts\n",
+            "recipe.txt": "tomato basil soup recipe with olive oil garlic and roasted peppers\n",
+        },
+    },
+    "medium-balanced": {
+        "title": "Medium balanced-recall benchmark scenario",
+        "story": "A medium corpus with multiple topical clusters where one pair is easy for banding and another sits near the threshold, illustrating recall tradeoffs.",
+        "expected_recall_floor": 0.5,
+        "expected_recall_ceiling": 0.5,
+        "teaching_note": "Useful for interview discussion about how a realistic portfolio corpus can recover the strongest duplicates while still missing weaker overlaps without retuning.",
+        "glob_pattern": "*.txt",
+        "token_mode": "word",
+        "normalize_identifiers": False,
+        "normalize_literals": False,
+        "shingle_size": 3,
+        "num_hashes": 64,
+        "bands": 8,
+        "threshold": 0.25,
+        "files": {
+            "etl_a.txt": "feature engineering pipeline standardizes click counts scales dwell time and keeps conversion labels for model training\n",
+            "etl_b.txt": "feature engineering workflow standardizes click counts rescales dwell time and keeps conversion labels for training models\n",
+            "etl_c.txt": "feature pipeline caps click spikes rescales watch time and preserves conversion labels for downstream training\n",
+            "frontend_a.txt": "dashboard metrics card shows weekly active users conversion trend and engagement delta with reusable layout\n",
+            "frontend_b.txt": "dashboard summary card shows weekly active users conversion trend and engagement delta with reusable layout\n",
+            "systems_a.txt": "replica lag runbook compares wal offsets schedules catch up streaming and snapshot recovery after failover\n",
+            "systems_b.txt": "replica recovery runbook compares wal offsets plans catch up streaming and snapshot restore after failover\n",
+            "noise.txt": "garden compost tips explain soil drainage mulch depth and spring planting timing for tomatoes\n",
+        },
+    },
+    "noisy-low-recall": {
+        "title": "Noisy low-recall benchmark scenario",
+        "story": "A noisy corpus where one partial near-duplicate pair exists but the default banding parameters miss it, creating a concrete tuning story instead of a perfect demo.",
+        "expected_recall_floor": 0.0,
+        "expected_recall_ceiling": 0.0,
+        "teaching_note": "Shows why LSH parameter tuning matters, especially when only one pair overlaps and the rest of the corpus is unrelated noise.",
+        "glob_pattern": "*.txt",
+        "token_mode": "word",
+        "normalize_identifiers": False,
+        "normalize_literals": False,
+        "shingle_size": 3,
+        "num_hashes": 32,
+        "bands": 8,
+        "threshold": 0.2,
+        "files": {
+            "clone_a.txt": "react dashboard card renders revenue total sparkline caption and weekly delta inside a compact layout shell\n",
+            "clone_b.txt": "react metrics card renders revenue totals sparkline note and weekly delta in a compact layout shell\n",
+            "partial_a.txt": "async log worker batches events for upload retries failed flushes and rotates temporary spool files\n",
+            "partial_b.txt": "background log worker batches events for upload retries failed flushes and rotates spool files nightly\n",
+            "distractor_1.txt": "machine learning notes cover gradient descent learning rates batch size and overfitting prevention\n",
+            "distractor_2.txt": "camping checklist includes stove fuel water filter lantern tarp and trail snacks for weekend hiking\n",
+            "distractor_3.txt": "browser performance memo discusses layout thrashing paint timing long tasks and interaction latency\n",
+            "distractor_4.txt": "database lab explores b tree pages lsm compaction tombstones and range scan amplification\n",
+        },
+    },
+}
+
+BENCHMARK_SCENARIO_DISPLAY_ORDER = list(BENCHMARK_SCENARIOS)
+BENCHMARK_SCENARIO_ORDER_INDEX = {name: index for index, name in enumerate(BENCHMARK_SCENARIO_DISPLAY_ORDER)}
+
 
 @dataclass(frozen=True)
 class SimilarityReport:
@@ -529,14 +606,11 @@ def _collect_paths(root: Path, pattern: str) -> list[Path]:
     return [seen[key] for key in sorted(seen)]
 
 
-def write_preset_corpus(preset_name: str, destination: Path, *, force: bool = False) -> list[Path]:
-    if preset_name not in PRESET_CORPORA:
-        raise ValueError(f"unknown preset: {preset_name}")
-    files = PRESET_CORPORA[preset_name]
+def _write_corpus_files(files: dict[str, str], destination: Path, *, force: bool = False) -> list[Path]:
     existing = [destination / relative for relative in files if (destination / relative).exists()]
     if existing and not force:
         joined = ", ".join(str(path) for path in existing)
-        raise FileExistsError(f"destination already contains preset files: {joined}")
+        raise FileExistsError(f"destination already contains corpus files: {joined}")
     destination.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for relative, content in files.items():
@@ -545,6 +619,12 @@ def write_preset_corpus(preset_name: str, destination: Path, *, force: bool = Fa
         path.write_text(content, encoding="utf-8")
         written.append(path)
     return sorted(written)
+
+
+def write_preset_corpus(preset_name: str, destination: Path, *, force: bool = False) -> list[Path]:
+    if preset_name not in PRESET_CORPORA:
+        raise ValueError(f"unknown preset: {preset_name}")
+    return _write_corpus_files(PRESET_CORPORA[preset_name], destination, force=force)
 
 
 def _preset_scan_command(preset_name: str) -> str:
@@ -1015,6 +1095,282 @@ def write_preset_bundle_landing(bundle_root: Path, output_dir: Path) -> dict[str
     }
 
 
+def _benchmark_scenario_command(scenario_name: str) -> str:
+    config = BENCHMARK_SCENARIOS[scenario_name]
+    command = [
+        "python3",
+        "projects/minhash-near-duplicate-lab/minhash_lab.py",
+        "benchmark",
+        "<scenario-root>",
+        "--glob",
+        str(config["glob_pattern"]),
+        "--token-mode",
+        str(config["token_mode"]),
+        "--shingle-size",
+        str(config["shingle_size"]),
+        "--num-hashes",
+        str(config["num_hashes"]),
+        "--bands",
+        str(config["bands"]),
+        "--threshold",
+        str(config["threshold"]),
+        "--json",
+    ]
+    return " ".join(shlex.quote(part) for part in command)
+
+
+def build_benchmark_scenario_summary(scenario_name: str, destination: Path, written: Iterable[Path]) -> dict[str, object]:
+    if scenario_name not in BENCHMARK_SCENARIOS:
+        raise ValueError(f"unknown benchmark scenario: {scenario_name}")
+    config = BENCHMARK_SCENARIOS[scenario_name]
+    written_paths = sorted(written)
+    scan_paths = _select_bundle_scan_paths(written_paths, destination, str(config["glob_pattern"]))
+    benchmark_payload = benchmark_corpus(
+        load_documents(scan_paths),
+        shingle_size=int(config["shingle_size"]),
+        num_hashes=int(config["num_hashes"]),
+        bands=int(config["bands"]),
+        threshold=float(config["threshold"]),
+        token_mode=str(config["token_mode"]),
+        normalize_identifiers=bool(config.get("normalize_identifiers", False)),
+        normalize_literals=bool(config.get("normalize_literals", False)),
+    )
+    observed_recall = float(benchmark_payload["lsh_recall_vs_exact"])
+    expected_floor = float(config["expected_recall_floor"])
+    expected_ceiling = float(config["expected_recall_ceiling"])
+    return {
+        "scenario_name": scenario_name,
+        "title": str(config["title"]),
+        "story": str(config["story"]),
+        "teaching_note": str(config["teaching_note"]),
+        "scenario_root": destination.name,
+        "files_written": len(written_paths),
+        "files": _preset_file_cards(written_paths, destination),
+        "recommended_benchmark": {
+            "glob_pattern": str(config["glob_pattern"]),
+            "token_mode": str(config["token_mode"]),
+            "normalize_identifiers": bool(config.get("normalize_identifiers", False)),
+            "normalize_literals": bool(config.get("normalize_literals", False)),
+            "shingle_size": int(config["shingle_size"]),
+            "num_hashes": int(config["num_hashes"]),
+            "bands": int(config["bands"]),
+            "threshold": float(config["threshold"]),
+            "command": _benchmark_scenario_command(scenario_name),
+        },
+        "expected_recall": {
+            "floor": expected_floor,
+            "ceiling": expected_ceiling,
+            "observed": observed_recall,
+            "matches_expectation": expected_floor <= observed_recall <= expected_ceiling,
+        },
+        "benchmark": benchmark_payload,
+    }
+
+
+def build_benchmark_pack_summary(destination: Path, scenario_summaries: Iterable[dict[str, object]]) -> dict[str, object]:
+    entries = []
+    for summary in scenario_summaries:
+        benchmark = summary["benchmark"]
+        top_exact_pairs = benchmark.get("top_exact_pairs", [])
+        entries.append(
+            {
+                "scenario_name": summary["scenario_name"],
+                "title": summary["title"],
+                "story": summary["story"],
+                "teaching_note": summary["teaching_note"],
+                "scenario_root": summary["scenario_root"],
+                "files_written": summary["files_written"],
+                "recommended_benchmark": summary["recommended_benchmark"],
+                "expected_recall": summary["expected_recall"],
+                "benchmark": benchmark,
+                "top_exact_pair": top_exact_pairs[0] if isinstance(top_exact_pairs, list) and top_exact_pairs else None,
+                "report_json": f"{summary['scenario_name']}-benchmark-report.json",
+                "report_csv": f"{summary['scenario_name']}-benchmark-report.csv",
+                "report_md": f"{summary['scenario_name']}-benchmark-report.md",
+            }
+        )
+    entries.sort(key=lambda item: BENCHMARK_SCENARIO_ORDER_INDEX.get(str(item["scenario_name"]), len(BENCHMARK_SCENARIO_ORDER_INDEX)))
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "scenario_count": len(entries),
+        "scenario_names": [entry["scenario_name"] for entry in entries],
+        "total_files_written": sum(int(entry["files_written"]) for entry in entries),
+        "scenarios_matching_expectation": sum(1 for entry in entries if bool(entry["expected_recall"]["matches_expectation"])),
+        "scenarios": entries,
+        "directory": str(destination),
+    }
+
+
+def _benchmark_pack_summary_markdown(payload: dict[str, object]) -> str:
+    lines = [
+        "# MinHash benchmark scenario pack",
+        "",
+        "A committed benchmark pack with tiny, medium, and noisy corpora so you can demo expected recall behavior without hand-building test data each time.",
+        "",
+        f"- Generated at: `{payload['generated_at']}`",
+        f"- Scenario count: {payload['scenario_count']}",
+        f"- Total files written: {payload['total_files_written']}",
+        f"- Scenarios matching expected recall: {payload['scenarios_matching_expectation']}/{payload['scenario_count']}",
+        "",
+        "## Scenario summaries",
+        "",
+    ]
+    for entry in payload["scenarios"]:
+        benchmark = entry["benchmark"]
+        expected = entry["expected_recall"]
+        command = entry["recommended_benchmark"]["command"]
+        lines.extend(
+            [
+                f"### {entry['title']}",
+                "",
+                str(entry["story"]),
+                "",
+                f"- Scenario key: `{entry['scenario_name']}`",
+                f"- Scenario root: `{entry['scenario_root']}`",
+                f"- Files written: {entry['files_written']}",
+                f"- Exact pairs above threshold: {benchmark['exact_pairs_above_threshold']}",
+                f"- Candidate pairs: {benchmark['candidate_pairs']}",
+                f"- Observed recall vs exact: {expected['observed']:.4f}",
+                f"- Expected recall range: {expected['floor']:.4f} to {expected['ceiling']:.4f}",
+                f"- Matches expectation: {expected['matches_expectation']}",
+                f"- Candidate reduction ratio: {benchmark['candidate_reduction_ratio']:.4f}",
+                f"- Teaching note: {entry['teaching_note']}",
+                f"- Report files: [json]({entry['report_json']}), [csv]({entry['report_csv']}), [markdown]({entry['report_md']})",
+                "",
+                "```bash",
+                str(command),
+                "```",
+                "",
+            ]
+        )
+        top_pair = entry.get("top_exact_pair")
+        if isinstance(top_pair, dict):
+            lines.append(
+                f"- Strongest exact pair: `{top_pair['left']}` <> `{top_pair['right']}` | exact={top_pair['exact_jaccard']:.4f} estimated={top_pair['estimated_jaccard']:.4f}"
+            )
+            lines.append("")
+    return "\n".join(lines)
+
+
+def _benchmark_pack_summary_html(payload: dict[str, object]) -> str:
+    cards = []
+    for entry in payload["scenarios"]:
+        benchmark = entry["benchmark"]
+        expected = entry["expected_recall"]
+        top_pair = entry.get("top_exact_pair")
+        top_pair_html = ""
+        if isinstance(top_pair, dict):
+            top_pair_html = (
+                f"<p class=\"meta\">Strongest exact pair: {html.escape(str(top_pair['left']))} ↔ {html.escape(str(top_pair['right']))}</p>"
+                f"<p>exact={top_pair['exact_jaccard']:.4f} · estimated={top_pair['estimated_jaccard']:.4f}</p>"
+            )
+        cards.append(
+            "<article class=\"card\">"
+            f"<h2>{html.escape(str(entry['title']))}</h2>"
+            f"<p>{html.escape(str(entry['story']))}</p>"
+            "<ul>"
+            f"<li>Files written: <strong>{entry['files_written']}</strong></li>"
+            f"<li>Exact pairs above threshold: <strong>{benchmark['exact_pairs_above_threshold']}</strong></li>"
+            f"<li>Candidate pairs: <strong>{benchmark['candidate_pairs']}</strong></li>"
+            f"<li>Observed recall: <strong>{expected['observed']:.4f}</strong></li>"
+            f"<li>Expected recall range: <code>{expected['floor']:.4f} - {expected['ceiling']:.4f}</code></li>"
+            f"<li>Candidate reduction ratio: <strong>{benchmark['candidate_reduction_ratio']:.4f}</strong></li>"
+            "</ul>"
+            f"<p class=\"meta\">{html.escape(str(entry['teaching_note']))}</p>"
+            f"<pre>{html.escape(str(entry['recommended_benchmark']['command']))}</pre>"
+            f"{top_pair_html}"
+            "<p class=\"links\">"
+            f"<a href=\"{html.escape(str(entry['report_json']))}\">json</a> · "
+            f"<a href=\"{html.escape(str(entry['report_csv']))}\">csv</a> · "
+            f"<a href=\"{html.escape(str(entry['report_md']))}\">markdown</a>"
+            "</p>"
+            "</article>"
+        )
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <title>MinHash benchmark scenario pack</title>
+  <style>
+    body {{ font-family: Inter, system-ui, sans-serif; margin: 0; background: #020617; color: #e2e8f0; }}
+    main {{ max-width: 1280px; margin: 0 auto; padding: 32px 20px 56px; }}
+    .hero, .card {{ background: #0f172a; border: 1px solid #334155; border-radius: 18px; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.32); }}
+    .hero {{ padding: 24px; margin-bottom: 24px; }}
+    .grid {{ display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
+    .card {{ padding: 20px; }}
+    h1, h2 {{ margin-top: 0; }}
+    .meta, .links {{ color: #93c5fd; }}
+    pre {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }}
+    ul {{ padding-left: 20px; }}
+    a {{ color: #38bdf8; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"hero\">
+      <h1>MinHash benchmark scenario pack</h1>
+      <p>A side-by-side benchmark pack for explaining how candidate reduction and recall change across tiny, medium, and noisy corpora.</p>
+      <ul>
+        <li>Generated at: <code>{html.escape(str(payload['generated_at']))}</code></li>
+        <li>Scenario count: <strong>{payload['scenario_count']}</strong></li>
+        <li>Total files written: <strong>{payload['total_files_written']}</strong></li>
+        <li>Scenarios matching expected recall: <strong>{payload['scenarios_matching_expectation']}/{payload['scenario_count']}</strong></li>
+      </ul>
+    </section>
+    <section class=\"grid\">{''.join(cards)}</section>
+  </main>
+</body>
+</html>
+"""
+
+
+def write_benchmark_pack(destination: Path, *, force: bool = False) -> dict[str, object]:
+    destination.mkdir(parents=True, exist_ok=True)
+    scenario_summaries: list[dict[str, object]] = []
+    scenario_outputs: list[dict[str, object]] = []
+    for scenario_name in BENCHMARK_SCENARIO_DISPLAY_ORDER:
+        config = BENCHMARK_SCENARIOS[scenario_name]
+        scenario_dir = destination / scenario_name
+        written = _write_corpus_files(config["files"], scenario_dir, force=force)
+        summary = build_benchmark_scenario_summary(scenario_name, scenario_dir, written)
+        benchmark_payload = summary["benchmark"]
+        report_json = export_benchmark_report(benchmark_payload, destination / f"{scenario_name}-benchmark-report.json")
+        report_csv = export_benchmark_report(benchmark_payload, destination / f"{scenario_name}-benchmark-report.csv")
+        report_md = export_benchmark_report(benchmark_payload, destination / f"{scenario_name}-benchmark-report.md")
+        scenario_summaries.append(summary)
+        scenario_outputs.append(
+            {
+                "scenario_name": scenario_name,
+                "directory": str(scenario_dir),
+                "files_written": summary["files_written"],
+                "observed_recall": summary["expected_recall"]["observed"],
+                "matches_expectation": summary["expected_recall"]["matches_expectation"],
+                "report_json": str(report_json),
+                "report_csv": str(report_csv),
+                "report_md": str(report_md),
+            }
+        )
+
+    pack_payload = build_benchmark_pack_summary(destination, scenario_summaries)
+    summary_json = destination / "benchmark-pack-summary.json"
+    summary_md = destination / "benchmark-pack-summary.md"
+    summary_html = destination / "benchmark-pack-summary.html"
+    summary_json.write_text(json.dumps(pack_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary_md.write_text(_benchmark_pack_summary_markdown(pack_payload) + "\n", encoding="utf-8")
+    summary_html.write_text(_benchmark_pack_summary_html(pack_payload), encoding="utf-8")
+    return {
+        "directory": str(destination),
+        "summary_json": str(summary_json),
+        "summary_md": str(summary_md),
+        "summary_html": str(summary_html),
+        "scenario_count": pack_payload["scenario_count"],
+        "scenario_names": pack_payload["scenario_names"],
+        "total_files_written": pack_payload["total_files_written"],
+        "scenarios_matching_expectation": pack_payload["scenarios_matching_expectation"],
+        "scenarios": scenario_outputs,
+    }
+
+
 def _indexed_document_from_text(
     path: Path,
     text: str,
@@ -1251,6 +1607,10 @@ def benchmark_corpus(
                 }
             )
     exact_seconds = time.perf_counter() - exact_started
+    exact_match_reports.sort(
+        key=lambda item: (item["exact_jaccard"], item["estimated_jaccard"], item["shared_bands"], item["left"], item["right"]),
+        reverse=True,
+    )
 
     candidate_reports = _reports_from_components(
         shingles_by_doc,
@@ -1420,6 +1780,14 @@ def build_parser() -> argparse.ArgumentParser:
     preset_landing_parser.add_argument("output_dir")
     preset_landing_parser.add_argument("--json", action="store_true")
 
+    benchmark_pack_parser = subparsers.add_parser(
+        "write-benchmark-pack",
+        help="write a benchmark scenario pack with expected-recall summaries",
+    )
+    benchmark_pack_parser.add_argument("destination", help="directory where scenario folders and benchmark summaries should be written")
+    benchmark_pack_parser.add_argument("--force", action="store_true", help="overwrite scenario files if they already exist")
+    benchmark_pack_parser.add_argument("--json", action="store_true")
+
     for subparser in (compare_parser, corpus_parser, index_parser, benchmark_parser):
         subparser.add_argument("--shingle-size", type=int, default=3)
         subparser.add_argument("--token-mode", choices=["word", "code", "char"], default="word")
@@ -1474,6 +1842,13 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
             f"(files={payload['total_files_written']}, pairs={payload['total_pairs_detected']})"
         )
         print(f"Landing HTML: {payload['landing_html']}")
+        return 0
+    if command == "write-benchmark-pack":
+        print(
+            f"Wrote benchmark pack for {payload['scenario_count']} scenarios to {payload['directory']} "
+            f"(files={payload['total_files_written']}, matched={payload['scenarios_matching_expectation']})"
+        )
+        print(f"Summary HTML: {payload['summary_html']}")
         return 0
     if command == "benchmark":
         print(f"Documents scanned: {payload['documents_scanned']}")
@@ -1680,6 +2055,13 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "command": "write-preset-landing",
             **write_preset_bundle_landing(Path(args.bundle_root), Path(args.output_dir)),
+        }
+        return _emit(payload, args.json)
+
+    if args.command == "write-benchmark-pack":
+        payload = {
+            "command": "write-benchmark-pack",
+            **write_benchmark_pack(Path(args.destination), force=args.force),
         }
         return _emit(payload, args.json)
 

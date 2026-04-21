@@ -1,0 +1,1 @@
+browser performance memo discusses layout thrashing paint timing long tasks and interaction latency
