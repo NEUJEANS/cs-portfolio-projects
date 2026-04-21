@@ -10,4 +10,4 @@
 - [x] run targeted tests, smoke checks, determinism checks, and `git diff --check`
 - [x] run secret scan before push
 - [x] commit, push, and append the wrap-up
-- [ ] next: support string and integer key generators for more workload shapes
+- [x] next: support string and integer key generators for more workload shapes

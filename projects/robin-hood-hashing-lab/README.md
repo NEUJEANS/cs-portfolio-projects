@@ -14,6 +14,7 @@ A portfolio-friendly Python project that implements a Robin Hood hash table with
 - JSON snapshot save/load for resumable demos
 - CLI commands for build, stats, lookup, remove, export, and benchmark
 - benchmark mode for comparing Robin Hood hashing against a linear-probing baseline across load factors and workload shapes
+- benchmark key profiles for random string IDs and shuffled sequential integer IDs, so the same workload suite can be replayed across multiple input shapes without changing the string-key snapshot format
 - optional fill-only and delete-heavy workloads so post-removal clustering/backward-shift behavior is visible in the exported metrics
 - benchmark output now includes unsuccessful-lookup probe metrics plus failed-search histograms, so misses are part of the same interview story as successful lookups and resident probe distances
 - benchmark reports now surface side-by-side successful vs unsuccessful lookup avg/p50/p95/max callouts, so hit and miss tails are readable without scanning every histogram row
@@ -66,7 +67,7 @@ python3 robin_hood_hashing_lab.py export \
   --output artifacts/robin-hood-table.csv
 ```
 
-Benchmark Robin Hood hashing against a linear-probing baseline and emit screenshot-friendly artifacts, including both fill-only and delete-heavy workload passes plus resident probe-distance histograms and side-by-side hit/miss lookup percentile callouts in the Markdown/HTML reports:
+Benchmark Robin Hood hashing against a linear-probing baseline and emit screenshot-friendly artifacts, including string and integer key profiles, both fill-only and delete-heavy workload passes, resident probe-distance histograms, and side-by-side hit/miss lookup percentile callouts in the Markdown/HTML reports:
 
 ```bash
 python3 robin_hood_hashing_lab.py benchmark \
@@ -74,6 +75,7 @@ python3 robin_hood_hashing_lab.py benchmark \
   --load-factors 0.25,0.5,0.7,0.85 \
   --trials 5 \
   --seed 17 \
+  --key-profiles string,integer \
   --strategies robin-hood,linear-probing \
   --workloads fill-only,delete-heavy \
   --delete-fraction 0.3 \
@@ -84,6 +86,8 @@ python3 robin_hood_hashing_lab.py benchmark \
 ```
 
 Requested load factors are rounded to whole entry counts for the chosen capacity, so the reports show both the requested target and the effective post-workload load factor.
+
+`--key-profiles` accepts `string` and `integer`. The integer profile uses shuffled sequential decimal IDs so the benchmark can compare compact numeric identifiers against longer text-like IDs while keeping the hash-table implementation itself string-keyed.
 
 `--png-out` captures a Chrome/Chromium headless screenshot from a compact screenshot mode of the generated HTML dashboard, hiding lower-priority sections so the exported image stays slide-friendly. Pair it with `--html-out` and optionally pass `--chrome-binary` when the browser is not already on `PATH`.
 
@@ -103,4 +107,4 @@ python3 -m unittest tests.test_robin_hood_hashing_lab -v
 ```
 
 ## Future improvements
-- support string and integer key generators for more workload shapes
+- add collision-focused/adversarial key presets so the benchmark can intentionally stress clustering, not just switch identifier shapes

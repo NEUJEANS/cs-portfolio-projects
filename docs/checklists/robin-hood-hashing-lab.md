@@ -13,3 +13,5 @@
 - [x] add unsuccessful-lookup benchmark histograms so misses become part of the interview story
 - [x] add a compact PNG export path for the benchmark dashboard so portfolio screenshots can be regenerated automatically
 - [x] add side-by-side lookup percentile callouts so hit and miss tails are readable without scanning every histogram row
+- [x] add string and integer benchmark key profiles so the workload suite can compare multiple identifier shapes deterministically
+- [ ] add collision-focused key presets so the benchmark can intentionally stress clustering instead of only changing identifier shape
