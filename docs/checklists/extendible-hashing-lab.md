@@ -16,4 +16,5 @@
 - [x] add a linear-probing baseline or compact benchmark dashboard for the artifact bundle
 - [x] add a linear-probing baseline so the benchmark suite covers a simpler open-addressing comparison alongside cuckoo hashing
 - [x] add a clustering-focused benchmark preset so the linear-probing baseline is even easier to demo live
-- [ ] add percentile/phase-split probe summaries so successful vs unsuccessful linear-probing lookups are easier to compare in the dashboard
+- [x] add percentile/phase-split probe summaries so successful vs unsuccessful linear-probing lookups are easier to compare in the dashboard
+- [ ] add a compact theory note or expected-cost overlay so the dashboard can relate observed linear-probing hit/miss probes to classic load-factor intuition

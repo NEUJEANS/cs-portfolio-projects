@@ -101,6 +101,28 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertEqual(stats["size"], 3)
         self.assertGreaterEqual(stats["max_probe_count"], 2)
 
+    def test_linear_probing_stats_include_lookup_probe_breakdown(self) -> None:
+        table = LinearProbingHashTable(capacity=4, max_load_factor=0.95, max_tombstone_ratio=0.9)
+        alpha, beta, gamma, missing = linear_collision_keys(capacity=4, count=4, slot=0)
+        table.put(alpha, "1")
+        table.put(beta, "2")
+        table.put(gamma, "3")
+
+        self.assertEqual(table.get(alpha), "1")
+        self.assertIsNone(table.get(missing))
+
+        stats = table.stats()
+        success = stats["lookup_probe_breakdown"]["successful"]
+        miss = stats["lookup_probe_breakdown"]["unsuccessful"]
+        self.assertEqual(success["count"], 1)
+        self.assertEqual(success["average_probe_count"], 1.0)
+        self.assertEqual(success["p95_probe_count"], 1)
+        self.assertEqual(miss["count"], 1)
+        self.assertEqual(miss["average_probe_count"], 4.0)
+        self.assertEqual(miss["p95_probe_count"], 4)
+        self.assertEqual(stats["phase_probe_breakdown"]["gets"]["count"], 2)
+        self.assertEqual(stats["phase_probe_breakdown"]["puts"]["count"], 3)
+
     def test_delete_merges_buddy_bucket_and_shrinks_directory(self) -> None:
         table = ExtendibleHashTable(bucket_capacity=2)
         suffix_zero_keys = colliding_keys(depth=1, count=2, suffix=0)
@@ -405,6 +427,13 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertTrue(all(row["extendible"]["directory_growth_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["linear"]["average_probe_count"] >= 1 for row in summary["results"]))
         self.assertTrue(all(row["linear"]["final_capacity"] >= summary["linear_capacity"] for row in summary["results"]))
+        self.assertTrue(all("lookup_probe_breakdown" in row["linear"] for row in summary["results"]))
+        self.assertTrue(all("phase_probe_breakdown" in row["linear"] for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["lookup_probe_breakdown"]["successful"]["count"] == row["operation_mix"]["get_hits"] for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["count"] == row["operation_mix"]["get_misses"] for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["phase_probe_breakdown"]["puts"]["count"] == row["operation_mix"]["puts"] for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["phase_probe_breakdown"]["gets"]["count"] == row["operation_mix"]["gets"] for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["phase_probe_breakdown"]["deletes"]["count"] == row["operation_mix"]["deletes"] for row in summary["results"]))
         self.assertTrue(all(row["cuckoo"]["average_rehash_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["btree"]["final_height"] >= 1 for row in summary["results"]))
         self.assertTrue(all(row["btree"]["paged_file_bytes"] > 0 for row in summary["results"]))
@@ -413,6 +442,14 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertGreaterEqual(clustering_row["linear"]["average_probe_count"], 3.0)
         self.assertGreaterEqual(clustering_row["linear"]["max_probe_count"], 6)
         self.assertGreaterEqual(clustering_row["linear"]["resize_count"], 1)
+        self.assertGreater(
+            clustering_row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"],
+            clustering_row["linear"]["lookup_probe_breakdown"]["successful"]["average_probe_count"],
+        )
+        self.assertGreaterEqual(
+            clustering_row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["p95_probe_count"],
+            clustering_row["linear"]["lookup_probe_breakdown"]["successful"]["p95_probe_count"],
+        )
         other_linear_averages = [
             row["linear"]["average_probe_count"]
             for row in summary["results"]
@@ -801,6 +838,10 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertIn('benchmark_suite.json?x=&lt;unsafe&gt;', html)
         self.assertNotIn('benchmark_suite.json?x=<unsafe>', html)
         self.assertIn('metric-bar', html)
+        self.assertIn('Lookup split:', html)
+        self.assertIn('Linear get hit / miss avg', html)
+        self.assertIn('Linear phase split for', html)
+        self.assertIn('Avg probes', html)
 
     def test_cli_run_inspect_lookup_delete_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -920,17 +961,34 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn("directory-friendly-read-heavy", benchmark_md_text)
             self.assertIn("primary-clustering-tombstone-pressure", benchmark_md_text)
             self.assertIn("Linear probing baseline", benchmark_md_text)
+            self.assertIn("Linear lookup probe split", benchmark_md_text)
+            self.assertIn("Linear phase probe split", benchmark_md_text)
+            self.assertIn("| Linear phase | Count | Avg probes | P50 | P95 | Max |", benchmark_md_text)
             self.assertIn("B-tree page baseline", benchmark_md_text)
             benchmark_json_payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
             self.assertEqual(benchmark_json_payload["title"], benchmark_title)
+            clustering_row = next(row for row in benchmark_json_payload["results"] if row["name"] == "primary-clustering-tombstone-pressure")
+            self.assertIn("lookup_probe_breakdown", clustering_row["linear"])
+            self.assertGreater(
+                clustering_row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"],
+                clustering_row["linear"]["lookup_probe_breakdown"]["successful"]["average_probe_count"],
+            )
             benchmark_html_text = benchmark_html.read_text(encoding="utf-8")
             self.assertIn(benchmark_title, benchmark_html_text)
             self.assertIn("Scenario scoreboard", benchmark_html_text)
             self.assertIn("directory-friendly-read-heavy", benchmark_html_text)
             self.assertIn("primary-clustering-tombstone-pressure", benchmark_html_text)
             self.assertIn("Linear probing baseline", benchmark_html_text)
+            self.assertIn("Lookup split:", benchmark_html_text)
+            self.assertIn("Linear get hit / miss avg", benchmark_html_text)
+            self.assertIn("Linear phase split for", benchmark_html_text)
             benchmark_csv_text = benchmark_csv.read_text(encoding="utf-8")
             self.assertIn("linear_average_probe_count", benchmark_csv_text)
+            self.assertIn("linear_put_phase_average_probe_count", benchmark_csv_text)
+            self.assertIn("linear_get_phase_p95_probe_count", benchmark_csv_text)
+            self.assertIn("linear_delete_phase_max_probe_count", benchmark_csv_text)
+            self.assertIn("linear_get_hit_average_probe_count", benchmark_csv_text)
+            self.assertIn("linear_get_miss_p95_probe_count", benchmark_csv_text)
             self.assertIn("btree_paged_file_bytes", benchmark_csv_text)
             self.assertNotIn("\r", benchmark_csv_text)
 

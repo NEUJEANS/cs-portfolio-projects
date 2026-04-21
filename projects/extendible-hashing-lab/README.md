@@ -18,6 +18,7 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 - benchmark mode that compares extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across JSON suite scenarios with JSON/Markdown/CSV outputs
 - committed benchmark suite now includes a clustering-focused `primary-clustering-tombstone-pressure` preset that exaggerates linear-probing probe growth, tombstones, and cleanup rebuilds
 - compact self-contained HTML benchmark dashboard export for recruiter-friendly browsing of the same deterministic benchmark suite
+- phase-split linear-probing probe summaries (including hit/miss avg + percentile stats) so successful vs unsuccessful lookups are easy to compare in the exported dashboard and reports
 - CLI commands for workload execution, snapshot inspection, lookups, deletions, visualization exports, and benchmark exports
 - unit tests that cover bucket splits, merges, directory shrinking, visualization rendering, benchmark validation, and CLI flows
 
@@ -114,4 +115,4 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 
 ## Future improvements
 - add compact PNG export or thumbnail-strip generation for the visualization and benchmark dashboards so README screenshots stay easy to embed
-- add percentile/phase-split probe summaries so successful vs unsuccessful linear-probing lookups are easier to compare in the dashboard
+- add a small theory/annotation panel that compares observed linear-probing hit/miss probe costs against the classic load-factor expectations so the benchmark tells an even stronger interview story

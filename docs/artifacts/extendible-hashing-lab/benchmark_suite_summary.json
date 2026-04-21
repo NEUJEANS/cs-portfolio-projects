@@ -55,7 +55,90 @@
         "resize_count": 0,
         "average_probe_count": 1.462,
         "max_probe_count": 3,
-        "rebuild_probe_count": 0
+        "rebuild_probe_count": 0,
+        "lookup_probe_breakdown": {
+          "successful": {
+            "count": 3,
+            "average_probe_count": 1.333,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "unsuccessful": {
+            "count": 2,
+            "average_probe_count": 2.5,
+            "max_probe_count": 3,
+            "p50_probe_count": 2,
+            "p95_probe_count": 3
+          }
+        },
+        "phase_probe_breakdown": {
+          "puts": {
+            "count": 7,
+            "average_probe_count": 1.286,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "gets": {
+            "count": 5,
+            "average_probe_count": 1.8,
+            "max_probe_count": 3,
+            "p50_probe_count": 2,
+            "p95_probe_count": 3
+          },
+          "deletes": {
+            "count": 1,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          }
+        },
+        "outcome_probe_breakdown": {
+          "put_inserted": {
+            "count": 6,
+            "average_probe_count": 1.167,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "put_updated": {
+            "count": 1,
+            "average_probe_count": 2.0,
+            "max_probe_count": 2,
+            "p50_probe_count": 2,
+            "p95_probe_count": 2
+          },
+          "get_hit": {
+            "count": 3,
+            "average_probe_count": 1.333,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "get_miss": {
+            "count": 2,
+            "average_probe_count": 2.5,
+            "max_probe_count": 3,
+            "p50_probe_count": 2,
+            "p95_probe_count": 3
+          },
+          "delete_hit": {
+            "count": 1,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "delete_miss": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          }
+        }
       },
       "cuckoo": {
         "average_rehash_count": 0.333,
@@ -120,7 +203,90 @@
             "resize_count": 0,
             "average_probe_count": 1.462,
             "max_probe_count": 3,
-            "rebuild_probe_count": 0
+            "rebuild_probe_count": 0,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "unsuccessful": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 7,
+                "average_probe_count": 1.286,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "gets": {
+                "count": 5,
+                "average_probe_count": 1.8,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              },
+              "deletes": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 6,
+                "average_probe_count": 1.167,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "put_updated": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              },
+              "get_hit": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "get_miss": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              },
+              "delete_hit": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 15,
@@ -179,7 +345,90 @@
             "resize_count": 0,
             "average_probe_count": 1.462,
             "max_probe_count": 3,
-            "rebuild_probe_count": 0
+            "rebuild_probe_count": 0,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "unsuccessful": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 7,
+                "average_probe_count": 1.286,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "gets": {
+                "count": 5,
+                "average_probe_count": 1.8,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              },
+              "deletes": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 6,
+                "average_probe_count": 1.167,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "put_updated": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              },
+              "get_hit": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "get_miss": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              },
+              "delete_hit": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -238,7 +487,90 @@
             "resize_count": 0,
             "average_probe_count": 1.462,
             "max_probe_count": 3,
-            "rebuild_probe_count": 0
+            "rebuild_probe_count": 0,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "unsuccessful": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 7,
+                "average_probe_count": 1.286,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "gets": {
+                "count": 5,
+                "average_probe_count": 1.8,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              },
+              "deletes": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 6,
+                "average_probe_count": 1.167,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "put_updated": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              },
+              "get_hit": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "get_miss": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 3,
+                "p50_probe_count": 2,
+                "p95_probe_count": 3
+              },
+              "delete_hit": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -305,7 +637,90 @@
         "resize_count": 1,
         "average_probe_count": 1.357,
         "max_probe_count": 2,
-        "rebuild_probe_count": 6
+        "rebuild_probe_count": 6,
+        "lookup_probe_breakdown": {
+          "successful": {
+            "count": 2,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "unsuccessful": {
+            "count": 1,
+            "average_probe_count": 2.0,
+            "max_probe_count": 2,
+            "p50_probe_count": 2,
+            "p95_probe_count": 2
+          }
+        },
+        "phase_probe_breakdown": {
+          "puts": {
+            "count": 11,
+            "average_probe_count": 1.364,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "gets": {
+            "count": 3,
+            "average_probe_count": 1.333,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "deletes": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          }
+        },
+        "outcome_probe_breakdown": {
+          "put_inserted": {
+            "count": 10,
+            "average_probe_count": 1.4,
+            "max_probe_count": 2,
+            "p50_probe_count": 1,
+            "p95_probe_count": 2
+          },
+          "put_updated": {
+            "count": 1,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "get_hit": {
+            "count": 2,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "get_miss": {
+            "count": 1,
+            "average_probe_count": 2.0,
+            "max_probe_count": 2,
+            "p50_probe_count": 2,
+            "p95_probe_count": 2
+          },
+          "delete_hit": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          },
+          "delete_miss": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          }
+        }
       },
       "cuckoo": {
         "average_rehash_count": 1.0,
@@ -370,7 +785,90 @@
             "resize_count": 1,
             "average_probe_count": 1.357,
             "max_probe_count": 2,
-            "rebuild_probe_count": 6
+            "rebuild_probe_count": 6,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 2,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "unsuccessful": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 11,
+                "average_probe_count": 1.364,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "gets": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "deletes": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 10,
+                "average_probe_count": 1.4,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "put_updated": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_hit": {
+                "count": 2,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_miss": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              },
+              "delete_hit": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 15,
@@ -429,7 +927,90 @@
             "resize_count": 1,
             "average_probe_count": 1.357,
             "max_probe_count": 2,
-            "rebuild_probe_count": 6
+            "rebuild_probe_count": 6,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 2,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "unsuccessful": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 11,
+                "average_probe_count": 1.364,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "gets": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "deletes": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 10,
+                "average_probe_count": 1.4,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "put_updated": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_hit": {
+                "count": 2,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_miss": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              },
+              "delete_hit": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 15,
@@ -488,7 +1069,90 @@
             "resize_count": 1,
             "average_probe_count": 1.357,
             "max_probe_count": 2,
-            "rebuild_probe_count": 6
+            "rebuild_probe_count": 6,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 2,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "unsuccessful": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 11,
+                "average_probe_count": 1.364,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "gets": {
+                "count": 3,
+                "average_probe_count": 1.333,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "deletes": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 10,
+                "average_probe_count": 1.4,
+                "max_probe_count": 2,
+                "p50_probe_count": 1,
+                "p95_probe_count": 2
+              },
+              "put_updated": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_hit": {
+                "count": 2,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_miss": {
+                "count": 1,
+                "average_probe_count": 2.0,
+                "max_probe_count": 2,
+                "p50_probe_count": 2,
+                "p95_probe_count": 2
+              },
+              "delete_hit": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 15,
@@ -555,7 +1219,90 @@
         "resize_count": 1,
         "average_probe_count": 1.357,
         "max_probe_count": 4,
-        "rebuild_probe_count": 5
+        "rebuild_probe_count": 5,
+        "lookup_probe_breakdown": {
+          "successful": {
+            "count": 1,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "unsuccessful": {
+            "count": 1,
+            "average_probe_count": 4.0,
+            "max_probe_count": 4,
+            "p50_probe_count": 4,
+            "p95_probe_count": 4
+          }
+        },
+        "phase_probe_breakdown": {
+          "puts": {
+            "count": 8,
+            "average_probe_count": 1.25,
+            "max_probe_count": 3,
+            "p50_probe_count": 1,
+            "p95_probe_count": 3
+          },
+          "gets": {
+            "count": 2,
+            "average_probe_count": 2.5,
+            "max_probe_count": 4,
+            "p50_probe_count": 1,
+            "p95_probe_count": 4
+          },
+          "deletes": {
+            "count": 4,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          }
+        },
+        "outcome_probe_breakdown": {
+          "put_inserted": {
+            "count": 8,
+            "average_probe_count": 1.25,
+            "max_probe_count": 3,
+            "p50_probe_count": 1,
+            "p95_probe_count": 3
+          },
+          "put_updated": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          },
+          "get_hit": {
+            "count": 1,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "get_miss": {
+            "count": 1,
+            "average_probe_count": 4.0,
+            "max_probe_count": 4,
+            "p50_probe_count": 4,
+            "p95_probe_count": 4
+          },
+          "delete_hit": {
+            "count": 3,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          },
+          "delete_miss": {
+            "count": 1,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "p50_probe_count": 1,
+            "p95_probe_count": 1
+          }
+        }
       },
       "cuckoo": {
         "average_rehash_count": 0.0,
@@ -620,7 +1367,90 @@
             "resize_count": 1,
             "average_probe_count": 1.357,
             "max_probe_count": 4,
-            "rebuild_probe_count": 5
+            "rebuild_probe_count": 5,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "unsuccessful": {
+                "count": 1,
+                "average_probe_count": 4.0,
+                "max_probe_count": 4,
+                "p50_probe_count": 4,
+                "p95_probe_count": 4
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 8,
+                "average_probe_count": 1.25,
+                "max_probe_count": 3,
+                "p50_probe_count": 1,
+                "p95_probe_count": 3
+              },
+              "gets": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 1,
+                "p95_probe_count": 4
+              },
+              "deletes": {
+                "count": 4,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 8,
+                "average_probe_count": 1.25,
+                "max_probe_count": 3,
+                "p50_probe_count": 1,
+                "p95_probe_count": 3
+              },
+              "put_updated": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "get_hit": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_miss": {
+                "count": 1,
+                "average_probe_count": 4.0,
+                "max_probe_count": 4,
+                "p50_probe_count": 4,
+                "p95_probe_count": 4
+              },
+              "delete_hit": {
+                "count": 3,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "delete_miss": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -679,7 +1509,90 @@
             "resize_count": 1,
             "average_probe_count": 1.357,
             "max_probe_count": 4,
-            "rebuild_probe_count": 5
+            "rebuild_probe_count": 5,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "unsuccessful": {
+                "count": 1,
+                "average_probe_count": 4.0,
+                "max_probe_count": 4,
+                "p50_probe_count": 4,
+                "p95_probe_count": 4
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 8,
+                "average_probe_count": 1.25,
+                "max_probe_count": 3,
+                "p50_probe_count": 1,
+                "p95_probe_count": 3
+              },
+              "gets": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 1,
+                "p95_probe_count": 4
+              },
+              "deletes": {
+                "count": 4,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 8,
+                "average_probe_count": 1.25,
+                "max_probe_count": 3,
+                "p50_probe_count": 1,
+                "p95_probe_count": 3
+              },
+              "put_updated": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "get_hit": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_miss": {
+                "count": 1,
+                "average_probe_count": 4.0,
+                "max_probe_count": 4,
+                "p50_probe_count": 4,
+                "p95_probe_count": 4
+              },
+              "delete_hit": {
+                "count": 3,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "delete_miss": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -738,7 +1651,90 @@
             "resize_count": 1,
             "average_probe_count": 1.357,
             "max_probe_count": 4,
-            "rebuild_probe_count": 5
+            "rebuild_probe_count": 5,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "unsuccessful": {
+                "count": 1,
+                "average_probe_count": 4.0,
+                "max_probe_count": 4,
+                "p50_probe_count": 4,
+                "p95_probe_count": 4
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 8,
+                "average_probe_count": 1.25,
+                "max_probe_count": 3,
+                "p50_probe_count": 1,
+                "p95_probe_count": 3
+              },
+              "gets": {
+                "count": 2,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 1,
+                "p95_probe_count": 4
+              },
+              "deletes": {
+                "count": 4,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 8,
+                "average_probe_count": 1.25,
+                "max_probe_count": 3,
+                "p50_probe_count": 1,
+                "p95_probe_count": 3
+              },
+              "put_updated": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "get_hit": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "get_miss": {
+                "count": 1,
+                "average_probe_count": 4.0,
+                "max_probe_count": 4,
+                "p50_probe_count": 4,
+                "p95_probe_count": 4
+              },
+              "delete_hit": {
+                "count": 3,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              },
+              "delete_miss": {
+                "count": 1,
+                "average_probe_count": 1.0,
+                "max_probe_count": 1,
+                "p50_probe_count": 1,
+                "p95_probe_count": 1
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -805,7 +1801,90 @@
         "resize_count": 1,
         "average_probe_count": 3.471,
         "max_probe_count": 6,
-        "rebuild_probe_count": 3
+        "rebuild_probe_count": 3,
+        "lookup_probe_breakdown": {
+          "successful": {
+            "count": 3,
+            "average_probe_count": 3.333,
+            "max_probe_count": 5,
+            "p50_probe_count": 3,
+            "p95_probe_count": 5
+          },
+          "unsuccessful": {
+            "count": 3,
+            "average_probe_count": 5.0,
+            "max_probe_count": 6,
+            "p50_probe_count": 6,
+            "p95_probe_count": 6
+          }
+        },
+        "phase_probe_breakdown": {
+          "puts": {
+            "count": 7,
+            "average_probe_count": 3.429,
+            "max_probe_count": 6,
+            "p50_probe_count": 3,
+            "p95_probe_count": 6
+          },
+          "gets": {
+            "count": 6,
+            "average_probe_count": 4.167,
+            "max_probe_count": 6,
+            "p50_probe_count": 3,
+            "p95_probe_count": 6
+          },
+          "deletes": {
+            "count": 4,
+            "average_probe_count": 2.5,
+            "max_probe_count": 4,
+            "p50_probe_count": 2,
+            "p95_probe_count": 4
+          }
+        },
+        "outcome_probe_breakdown": {
+          "put_inserted": {
+            "count": 7,
+            "average_probe_count": 3.429,
+            "max_probe_count": 6,
+            "p50_probe_count": 3,
+            "p95_probe_count": 6
+          },
+          "put_updated": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          },
+          "get_hit": {
+            "count": 3,
+            "average_probe_count": 3.333,
+            "max_probe_count": 5,
+            "p50_probe_count": 3,
+            "p95_probe_count": 5
+          },
+          "get_miss": {
+            "count": 3,
+            "average_probe_count": 5.0,
+            "max_probe_count": 6,
+            "p50_probe_count": 6,
+            "p95_probe_count": 6
+          },
+          "delete_hit": {
+            "count": 4,
+            "average_probe_count": 2.5,
+            "max_probe_count": 4,
+            "p50_probe_count": 2,
+            "p95_probe_count": 4
+          },
+          "delete_miss": {
+            "count": 0,
+            "average_probe_count": 0.0,
+            "max_probe_count": 0,
+            "p50_probe_count": 0,
+            "p95_probe_count": 0
+          }
+        }
       },
       "cuckoo": {
         "average_rehash_count": 0.0,
@@ -870,7 +1949,90 @@
             "resize_count": 1,
             "average_probe_count": 3.471,
             "max_probe_count": 6,
-            "rebuild_probe_count": 3
+            "rebuild_probe_count": 3,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 3,
+                "average_probe_count": 3.333,
+                "max_probe_count": 5,
+                "p50_probe_count": 3,
+                "p95_probe_count": 5
+              },
+              "unsuccessful": {
+                "count": 3,
+                "average_probe_count": 5.0,
+                "max_probe_count": 6,
+                "p50_probe_count": 6,
+                "p95_probe_count": 6
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 7,
+                "average_probe_count": 3.429,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "gets": {
+                "count": 6,
+                "average_probe_count": 4.167,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "deletes": {
+                "count": 4,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 2,
+                "p95_probe_count": 4
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 7,
+                "average_probe_count": 3.429,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "put_updated": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "get_hit": {
+                "count": 3,
+                "average_probe_count": 3.333,
+                "max_probe_count": 5,
+                "p50_probe_count": 3,
+                "p95_probe_count": 5
+              },
+              "get_miss": {
+                "count": 3,
+                "average_probe_count": 5.0,
+                "max_probe_count": 6,
+                "p50_probe_count": 6,
+                "p95_probe_count": 6
+              },
+              "delete_hit": {
+                "count": 4,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 2,
+                "p95_probe_count": 4
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -929,7 +2091,90 @@
             "resize_count": 1,
             "average_probe_count": 3.471,
             "max_probe_count": 6,
-            "rebuild_probe_count": 3
+            "rebuild_probe_count": 3,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 3,
+                "average_probe_count": 3.333,
+                "max_probe_count": 5,
+                "p50_probe_count": 3,
+                "p95_probe_count": 5
+              },
+              "unsuccessful": {
+                "count": 3,
+                "average_probe_count": 5.0,
+                "max_probe_count": 6,
+                "p50_probe_count": 6,
+                "p95_probe_count": 6
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 7,
+                "average_probe_count": 3.429,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "gets": {
+                "count": 6,
+                "average_probe_count": 4.167,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "deletes": {
+                "count": 4,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 2,
+                "p95_probe_count": 4
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 7,
+                "average_probe_count": 3.429,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "put_updated": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "get_hit": {
+                "count": 3,
+                "average_probe_count": 3.333,
+                "max_probe_count": 5,
+                "p50_probe_count": 3,
+                "p95_probe_count": 5
+              },
+              "get_miss": {
+                "count": 3,
+                "average_probe_count": 5.0,
+                "max_probe_count": 6,
+                "p50_probe_count": 6,
+                "p95_probe_count": 6
+              },
+              "delete_hit": {
+                "count": 4,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 2,
+                "p95_probe_count": 4
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -988,7 +2233,90 @@
             "resize_count": 1,
             "average_probe_count": 3.471,
             "max_probe_count": 6,
-            "rebuild_probe_count": 3
+            "rebuild_probe_count": 3,
+            "lookup_probe_breakdown": {
+              "successful": {
+                "count": 3,
+                "average_probe_count": 3.333,
+                "max_probe_count": 5,
+                "p50_probe_count": 3,
+                "p95_probe_count": 5
+              },
+              "unsuccessful": {
+                "count": 3,
+                "average_probe_count": 5.0,
+                "max_probe_count": 6,
+                "p50_probe_count": 6,
+                "p95_probe_count": 6
+              }
+            },
+            "phase_probe_breakdown": {
+              "puts": {
+                "count": 7,
+                "average_probe_count": 3.429,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "gets": {
+                "count": 6,
+                "average_probe_count": 4.167,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "deletes": {
+                "count": 4,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 2,
+                "p95_probe_count": 4
+              }
+            },
+            "outcome_probe_breakdown": {
+              "put_inserted": {
+                "count": 7,
+                "average_probe_count": 3.429,
+                "max_probe_count": 6,
+                "p50_probe_count": 3,
+                "p95_probe_count": 6
+              },
+              "put_updated": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              },
+              "get_hit": {
+                "count": 3,
+                "average_probe_count": 3.333,
+                "max_probe_count": 5,
+                "p50_probe_count": 3,
+                "p95_probe_count": 5
+              },
+              "get_miss": {
+                "count": 3,
+                "average_probe_count": 5.0,
+                "max_probe_count": 6,
+                "p50_probe_count": 6,
+                "p95_probe_count": 6
+              },
+              "delete_hit": {
+                "count": 4,
+                "average_probe_count": 2.5,
+                "max_probe_count": 4,
+                "p50_probe_count": 2,
+                "p95_probe_count": 4
+              },
+              "delete_miss": {
+                "count": 0,
+                "average_probe_count": 0.0,
+                "max_probe_count": 0,
+                "p50_probe_count": 0,
+                "p95_probe_count": 0
+              }
+            }
           },
           "cuckoo": {
             "final_capacity": 7,

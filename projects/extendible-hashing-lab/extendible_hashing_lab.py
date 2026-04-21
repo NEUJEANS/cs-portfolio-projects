@@ -4,6 +4,7 @@ import argparse
 import csv
 import importlib.util
 import json
+import math
 import sys
 from html import escape
 from dataclasses import dataclass, field
@@ -122,6 +123,34 @@ class _LinearTombstone:
 LINEAR_TOMBSTONE = _LinearTombstone()
 
 
+def _empty_probe_summary() -> dict[str, Any]:
+    return {
+        "count": 0,
+        "average_probe_count": 0.0,
+        "max_probe_count": 0,
+        "p50_probe_count": 0,
+        "p95_probe_count": 0,
+    }
+
+
+def summarize_probe_samples(probes: list[int]) -> dict[str, Any]:
+    if not probes:
+        return _empty_probe_summary()
+    ordered = sorted(probes)
+
+    def percentile(percent: int) -> int:
+        rank = max(0, math.ceil((percent / 100) * len(ordered)) - 1)
+        return ordered[min(rank, len(ordered) - 1)]
+
+    return {
+        "count": len(ordered),
+        "average_probe_count": round(sum(ordered) / len(ordered), 3),
+        "max_probe_count": ordered[-1],
+        "p50_probe_count": percentile(50),
+        "p95_probe_count": percentile(95),
+    }
+
+
 class LinearProbingHashTable:
     def __init__(
         self,
@@ -147,14 +176,23 @@ class LinearProbingHashTable:
         self.max_probe_count = 0
         self.operation_count = 0
         self.rebuild_probe_count = 0
+        self.probe_samples_by_kind: dict[str, list[int]] = {
+            "put_inserted": [],
+            "put_updated": [],
+            "get_hit": [],
+            "get_miss": [],
+            "delete_hit": [],
+            "delete_miss": [],
+        }
 
     def _hash(self, key: str) -> int:
         return stable_hash(f"linear-probing::{key}") % self.capacity
 
-    def _record_probes(self, probes: int) -> None:
+    def _record_probes(self, probes: int, kind: str) -> None:
         self.total_probe_count += probes
         self.operation_count += 1
         self.max_probe_count = max(self.max_probe_count, probes)
+        self.probe_samples_by_kind[kind].append(probes)
 
     def _should_grow_for_insert(self) -> bool:
         return ((self.size + 1) / self.capacity) > self.max_load_factor or (self.size + self.tombstones) >= self.capacity
@@ -208,7 +246,7 @@ class LinearProbingHashTable:
     def put(self, key: str, value: str) -> str:
         found_index, insert_index, probes = self._locate_slot(key)
         if found_index is not None:
-            self._record_probes(probes)
+            self._record_probes(probes, "put_updated")
             self.slots[found_index] = LinearProbingEntry(key, value)
             return "updated"
 
@@ -220,7 +258,7 @@ class LinearProbingHashTable:
         if insert_index is None:
             raise BenchmarkError("linear probing insert failed to find an insertion slot")
 
-        self._record_probes(probes)
+        self._record_probes(probes, "put_inserted")
         if self.slots[insert_index] is LINEAR_TOMBSTONE:
             self.tombstones -= 1
         self.slots[insert_index] = LinearProbingEntry(key, value)
@@ -229,7 +267,7 @@ class LinearProbingHashTable:
 
     def get(self, key: str) -> str | None:
         found_index, _, probes = self._locate_slot(key)
-        self._record_probes(probes)
+        self._record_probes(probes, "get_hit" if found_index is not None else "get_miss")
         if found_index is None:
             return None
         slot = self.slots[found_index]
@@ -238,7 +276,7 @@ class LinearProbingHashTable:
 
     def delete(self, key: str) -> bool:
         found_index, _, probes = self._locate_slot(key)
-        self._record_probes(probes)
+        self._record_probes(probes, "delete_hit" if found_index is not None else "delete_miss")
         if found_index is None:
             if self._should_rebuild_for_tombstones():
                 self._resize(self.capacity)
@@ -259,6 +297,9 @@ class LinearProbingHashTable:
 
     def stats(self) -> dict[str, Any]:
         average_probe_count = round(self.total_probe_count / self.operation_count, 3) if self.operation_count else 0.0
+        gets_summary = summarize_probe_samples(self.probe_samples_by_kind["get_hit"] + self.probe_samples_by_kind["get_miss"])
+        puts_summary = summarize_probe_samples(self.probe_samples_by_kind["put_inserted"] + self.probe_samples_by_kind["put_updated"])
+        deletes_summary = summarize_probe_samples(self.probe_samples_by_kind["delete_hit"] + self.probe_samples_by_kind["delete_miss"])
         return {
             "capacity": self.capacity,
             "size": self.size,
@@ -270,6 +311,19 @@ class LinearProbingHashTable:
             "average_probe_count": average_probe_count,
             "max_probe_count": self.max_probe_count,
             "rebuild_probe_count": self.rebuild_probe_count,
+            "lookup_probe_breakdown": {
+                "successful": summarize_probe_samples(self.probe_samples_by_kind["get_hit"]),
+                "unsuccessful": summarize_probe_samples(self.probe_samples_by_kind["get_miss"]),
+            },
+            "phase_probe_breakdown": {
+                "puts": puts_summary,
+                "gets": gets_summary,
+                "deletes": deletes_summary,
+            },
+            "outcome_probe_breakdown": {
+                kind: summarize_probe_samples(samples)
+                for kind, samples in self.probe_samples_by_kind.items()
+            },
         }
 
 
@@ -1321,6 +1375,9 @@ def _run_benchmark_trial(
             "average_probe_count": linear_stats["average_probe_count"],
             "max_probe_count": linear_stats["max_probe_count"],
             "rebuild_probe_count": linear_stats["rebuild_probe_count"],
+            "lookup_probe_breakdown": linear_stats["lookup_probe_breakdown"],
+            "phase_probe_breakdown": linear_stats["phase_probe_breakdown"],
+            "outcome_probe_breakdown": linear_stats["outcome_probe_breakdown"],
         },
         "cuckoo": {
             "final_capacity": cuckoo_stats["capacity"],
@@ -1482,13 +1539,13 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
             f"- Trials per scenario: `{summary['trials']}`",
             "",
             "## Scenario scoreboard",
-            "| Scenario | Ops | Final entries | Ext splits | Ext merges | Peak depth | Linear avg probes | Linear max probe | Cuckoo avg rehashes | Cuckoo avg displacements | B-tree height | B-tree nodes | B-tree paged bytes |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Scenario | Ops | Final entries | Ext splits | Ext merges | Peak depth | Linear avg probes | Linear get hit/miss avg | Linear max probe | Cuckoo avg rehashes | Cuckoo avg displacements | B-tree height | B-tree nodes | B-tree paged bytes |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in summary["results"]:
         lines.append(
-            "| {name} | {ops} | {entries} | {splits} | {merges} | {peak_depth} | {linear_avg} | {linear_max} | {rehashes} | {displacements} | {btree_height} | {btree_nodes} | {btree_bytes} |".format(
+            "| {name} | {ops} | {entries} | {splits} | {merges} | {peak_depth} | {linear_avg} | {linear_hit_miss} | {linear_max} | {rehashes} | {displacements} | {btree_height} | {btree_nodes} | {btree_bytes} |".format(
                 name=row["name"],
                 ops=row["operation_count"],
                 entries=row["final_entry_count"],
@@ -1496,6 +1553,10 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
                 merges=row["extendible"]["merge_count"],
                 peak_depth=row["extendible"]["peak_global_depth"],
                 linear_avg=row["linear"]["average_probe_count"],
+                linear_hit_miss=(
+                    f"{row['linear']['lookup_probe_breakdown']['successful']['average_probe_count']}"
+                    f" / {row['linear']['lookup_probe_breakdown']['unsuccessful']['average_probe_count']}"
+                ),
                 linear_max=row["linear"]["max_probe_count"],
                 rehashes=row["cuckoo"]["average_rehash_count"],
                 displacements=row["cuckoo"]["average_displacement_count"],
@@ -1515,21 +1576,36 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
                 f"- Operation mix: `puts={row['operation_mix']['puts']}` (`insertions={row['operation_mix']['insertions']}`, `updates={row['operation_mix']['updates']}`), `gets={row['operation_mix']['gets']}` (`hits={row['operation_mix']['get_hits']}`, `misses={row['operation_mix']['get_misses']}`), `deletes={row['operation_mix']['deletes']}` (`hits={row['operation_mix']['delete_hits']}`, `misses={row['operation_mix']['delete_misses']}`)",
                 f"- Extendible hashing finished at global depth `{row['extendible']['final_global_depth']}` with `{row['extendible']['final_bucket_count']}` buckets and load factor `{row['extendible']['load_factor']}` after `{row['extendible']['split_count']}` splits / `{row['extendible']['merge_count']}` merges and `{row['extendible']['directory_growth_count']}` directory growth(s) / `{row['extendible']['directory_shrink_count']}` directory shrink(s).",
                 f"- Linear probing baseline finished at capacity `{row['linear']['final_capacity']}` with load factor `{row['linear']['final_load_factor']}`, tombstones `{row['linear']['tombstone_count']}`, average probe count `{row['linear']['average_probe_count']}`, max probe `{row['linear']['max_probe_count']}`, and `{row['linear']['resize_count']}` rebuild(s).",
+                f"- Linear lookup probe split: successful gets avg/p50/p95/max = `{_format_probe_summary(row['linear']['lookup_probe_breakdown']['successful'])}`; unsuccessful gets avg/p50/p95/max = `{_format_probe_summary(row['linear']['lookup_probe_breakdown']['unsuccessful'])}`.",
+                f"- Linear phase probe split: puts avg/p50/p95/max = `{_format_probe_summary(row['linear']['phase_probe_breakdown']['puts'])}`; gets avg/p50/p95/max = `{_format_probe_summary(row['linear']['phase_probe_breakdown']['gets'])}`; deletes avg/p50/p95/max = `{_format_probe_summary(row['linear']['phase_probe_breakdown']['deletes'])}`.",
                 f"- Cuckoo hashing averaged `{row['cuckoo']['average_rehash_count']}` rehashes and `{row['cuckoo']['average_displacement_count']}` displacements, finishing between capacities `{row['cuckoo']['final_capacity_range'][0]}` and `{row['cuckoo']['final_capacity_range'][1]}`.",
                 f"- B-tree page baseline finished at height `{row['btree']['final_height']}` across `{row['btree']['final_node_count']}` node(s); at `page_size={row['btree']['page_size']}` and `value_bytes={row['btree']['value_bytes']}` the paged snapshot would occupy `{row['btree']['paged_file_bytes']}` bytes with `{row['btree']['page_padding_bytes']}` bytes of fixed slack per page.",
                 f"- Validation: final states matched across `{row['validation']['trials']}` deterministic trial(s).",
                 "",
-                "| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Linear avg probes | Linear max probe | Linear rebuilds | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity | B-tree height | B-tree nodes | B-tree paged bytes |",
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| Linear phase | Count | Avg probes | P50 | P95 | Max |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+                f"| puts | {row['linear']['phase_probe_breakdown']['puts']['count']} | {row['linear']['phase_probe_breakdown']['puts']['average_probe_count']} | {row['linear']['phase_probe_breakdown']['puts']['p50_probe_count']} | {row['linear']['phase_probe_breakdown']['puts']['p95_probe_count']} | {row['linear']['phase_probe_breakdown']['puts']['max_probe_count']} |",
+                f"| gets | {row['linear']['phase_probe_breakdown']['gets']['count']} | {row['linear']['phase_probe_breakdown']['gets']['average_probe_count']} | {row['linear']['phase_probe_breakdown']['gets']['p50_probe_count']} | {row['linear']['phase_probe_breakdown']['gets']['p95_probe_count']} | {row['linear']['phase_probe_breakdown']['gets']['max_probe_count']} |",
+                f"| deletes | {row['linear']['phase_probe_breakdown']['deletes']['count']} | {row['linear']['phase_probe_breakdown']['deletes']['average_probe_count']} | {row['linear']['phase_probe_breakdown']['deletes']['p50_probe_count']} | {row['linear']['phase_probe_breakdown']['deletes']['p95_probe_count']} | {row['linear']['phase_probe_breakdown']['deletes']['max_probe_count']} |",
+                "",
+                "| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Linear avg probes | Linear get hit avg | Linear get miss avg | Linear get miss p95 | Linear max probe | Linear rebuilds | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity | B-tree height | B-tree nodes | B-tree paged bytes |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for trial_row in row["trial_rows"]:
             lines.append(
-                f"| {trial_row['trial']} | {trial_row['extendible']['split_count']} | {trial_row['extendible']['merge_count']} | {trial_row['extendible']['peak_global_depth']} | {trial_row['extendible']['peak_bucket_count']} | {trial_row['extendible']['peak_directory_slots']} | {trial_row['linear']['average_probe_count']} | {trial_row['linear']['max_probe_count']} | {trial_row['linear']['resize_count']} | {trial_row['cuckoo']['rehash_count']} | {trial_row['cuckoo']['displacement_count']} | {trial_row['cuckoo']['final_capacity']} | {trial_row['btree']['final_height']} | {trial_row['btree']['final_node_count']} | {trial_row['btree']['paged_file_bytes']} |"
+                f"| {trial_row['trial']} | {trial_row['extendible']['split_count']} | {trial_row['extendible']['merge_count']} | {trial_row['extendible']['peak_global_depth']} | {trial_row['extendible']['peak_bucket_count']} | {trial_row['extendible']['peak_directory_slots']} | {trial_row['linear']['average_probe_count']} | {trial_row['linear']['lookup_probe_breakdown']['successful']['average_probe_count']} | {trial_row['linear']['lookup_probe_breakdown']['unsuccessful']['average_probe_count']} | {trial_row['linear']['lookup_probe_breakdown']['unsuccessful']['p95_probe_count']} | {trial_row['linear']['max_probe_count']} | {trial_row['linear']['resize_count']} | {trial_row['cuckoo']['rehash_count']} | {trial_row['cuckoo']['displacement_count']} | {trial_row['cuckoo']['final_capacity']} | {trial_row['btree']['final_height']} | {trial_row['btree']['final_node_count']} | {trial_row['btree']['paged_file_bytes']} |"
             )
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _format_probe_summary(summary: dict[str, Any]) -> str:
+    return (
+        f"{summary['average_probe_count']} / {summary['p50_probe_count']} / "
+        f"{summary['p95_probe_count']} / {summary['max_probe_count']}"
+    )
 
 
 def _format_dashboard_number(value: int | float) -> str:
@@ -1582,6 +1658,12 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
         "extendible_load_factor": max(row["extendible"]["load_factor"] for row in results),
         "linear_average_probe_count": max(row["linear"]["average_probe_count"] for row in results),
         "linear_max_probe_count": max(row["linear"]["max_probe_count"] for row in results),
+        "linear_successful_lookup_average_probe_count": max(
+            row["linear"]["lookup_probe_breakdown"]["successful"]["average_probe_count"] for row in results
+        ),
+        "linear_unsuccessful_lookup_average_probe_count": max(
+            row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"] for row in results
+        ),
         "linear_resize_count": max(row["linear"]["resize_count"] for row in results),
         "linear_final_load_factor": max(row["linear"]["final_load_factor"] for row in results),
         "cuckoo_average_rehash_count": max(row["cuckoo"]["average_rehash_count"] for row in results),
@@ -1615,6 +1697,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   <td>{row['extendible']['split_count']} / {row['extendible']['merge_count']}</td>
   <td>{row['extendible']['peak_global_depth']} / {row['extendible']['peak_directory_slots']}</td>
   <td>{escape(_format_dashboard_number(row['linear']['average_probe_count']))} / {row['linear']['max_probe_count']}</td>
+  <td>{escape(_format_dashboard_number(row['linear']['lookup_probe_breakdown']['successful']['average_probe_count']))} / {escape(_format_dashboard_number(row['linear']['lookup_probe_breakdown']['unsuccessful']['average_probe_count']))}</td>
   <td>{escape(_format_dashboard_number(row['cuckoo']['average_rehash_count']))} / {escape(_format_dashboard_number(row['cuckoo']['average_displacement_count']))}</td>
   <td>{row['btree']['final_height']} / {row['btree']['final_node_count']}</td>
   <td>{row['btree']['paged_file_bytes']}</td>
@@ -1634,6 +1717,32 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
             f"trials {row['validation']['trials']}",
         ]
         chip_html = "".join(f'<li>{escape(chip)}</li>' for chip in chips)
+        successful_lookup = row["linear"]["lookup_probe_breakdown"]["successful"]
+        unsuccessful_lookup = row["linear"]["lookup_probe_breakdown"]["unsuccessful"]
+        linear_lookup_split_html = (
+            f'<div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max '
+            f'{escape(_format_dashboard_number(successful_lookup["average_probe_count"]))} / {successful_lookup["p95_probe_count"]} / {successful_lookup["max_probe_count"]}'
+            f' · misses avg/p95/max {escape(_format_dashboard_number(unsuccessful_lookup["average_probe_count"]))} / {unsuccessful_lookup["p95_probe_count"]} / {unsuccessful_lookup["max_probe_count"]}</div>'
+        )
+        phase_rows = []
+        for label, key in (("puts", "puts"), ("gets", "gets"), ("deletes", "deletes")):
+            phase = row["linear"]["phase_probe_breakdown"][key]
+            phase_rows.append(
+                f'''<tr>
+  <th scope="row">{escape(label)}</th>
+  <td>{phase['count']}</td>
+  <td>{escape(_format_dashboard_number(phase['average_probe_count']))}</td>
+  <td>{phase['p50_probe_count']}</td>
+  <td>{phase['p95_probe_count']}</td>
+  <td>{phase['max_probe_count']}</td>
+</tr>'''
+            )
+        linear_phase_table_html = (
+            '<div class="phase-table-wrap"><table><caption>Linear phase split for '
+            f"{escape(row['name'])}</caption><thead><tr><th scope=\"col\">Phase</th><th scope=\"col\">Count</th><th scope=\"col\">Avg probes</th><th scope=\"col\">P50</th><th scope=\"col\">P95</th><th scope=\"col\">Max</th></tr></thead><tbody>"
+            + "".join(phase_rows)
+            + "</tbody></table></div>"
+        )
         extendible_metrics = "".join(
             [
                 _render_benchmark_dashboard_metric(
@@ -1680,14 +1789,33 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
                     row["linear"]["average_probe_count"],
                     maxima["linear_average_probe_count"],
                     accent="#2563eb",
-                    detail=f"max probe {row['linear']['max_probe_count']}",
+                    detail=(
+                        f"get hit avg {escape(_format_dashboard_number(successful_lookup['average_probe_count']))} · "
+                        f"get miss avg {escape(_format_dashboard_number(unsuccessful_lookup['average_probe_count']))}"
+                    ),
                 ),
                 _render_benchmark_dashboard_metric(
                     "max probe",
                     row["linear"]["max_probe_count"],
                     maxima["linear_max_probe_count"],
                     accent="#7c3aed",
-                    detail=f"rebuild probes {row['linear']['rebuild_probe_count']}",
+                    detail=(
+                        f"miss p95 {unsuccessful_lookup['p95_probe_count']} · rebuild probes {row['linear']['rebuild_probe_count']}"
+                    ),
+                ),
+                _render_benchmark_dashboard_metric(
+                    "get hit avg",
+                    successful_lookup["average_probe_count"],
+                    maxima["linear_successful_lookup_average_probe_count"],
+                    accent="#0f766e",
+                    detail=f"p95 {successful_lookup['p95_probe_count']} across {successful_lookup['count']} hit lookup(s)",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "get miss avg",
+                    unsuccessful_lookup["average_probe_count"],
+                    maxima["linear_unsuccessful_lookup_average_probe_count"],
+                    accent="#dc2626",
+                    detail=f"p95 {unsuccessful_lookup['p95_probe_count']} across {unsuccessful_lookup['count']} miss lookup(s)",
                 ),
                 _render_benchmark_dashboard_metric(
                     "rebuilds",
@@ -1762,6 +1890,9 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   <td>{trial_row['extendible']['merge_count']}</td>
   <td>{trial_row['extendible']['peak_global_depth']}</td>
   <td>{escape(_format_dashboard_number(trial_row['linear']['average_probe_count']))}</td>
+  <td>{escape(_format_dashboard_number(trial_row['linear']['lookup_probe_breakdown']['successful']['average_probe_count']))}</td>
+  <td>{escape(_format_dashboard_number(trial_row['linear']['lookup_probe_breakdown']['unsuccessful']['average_probe_count']))}</td>
+  <td>{trial_row['linear']['lookup_probe_breakdown']['unsuccessful']['p95_probe_count']}</td>
   <td>{trial_row['linear']['max_probe_count']}</td>
   <td>{trial_row['linear']['resize_count']}</td>
   <td>{trial_row['cuckoo']['rehash_count']}</td>
@@ -1790,6 +1921,8 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
       <h3>Linear probing baseline</h3>
       <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
       {linear_metrics}
+      {linear_lookup_split_html}
+      {linear_phase_table_html}
     </article>
     <article class="metric-panel">
       <h3>Cuckoo hashing</h3>
@@ -1812,6 +1945,9 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
           <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear get hit avg</th>
+          <th scope="col">Linear get miss avg</th>
+          <th scope="col">Linear get miss p95</th>
           <th scope="col">Linear max probe</th>
           <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
@@ -1875,6 +2011,10 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   .metric-bar {{ margin-top: 6px; width: 100%; height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }}
   .metric-bar span {{ display: block; height: 100%; border-radius: 999px; }}
   .metric-detail {{ margin-top: 6px; color: #475569; font-size: 0.84rem; }}
+  .split-callout {{ margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: #eef2ff; color: #312e81; font-size: 0.9rem; line-height: 1.45; }}
+  .phase-table-wrap {{ margin-top: 14px; overflow-x: auto; }}
+  .phase-table-wrap table {{ width: 100%; border-collapse: collapse; font-size: 0.88rem; background: #fff; border: 1px solid #dbe4f0; border-radius: 14px; overflow: hidden; }}
+  .phase-table-wrap caption {{ padding-bottom: 10px; }}
   .trial-table-wrap {{ margin-top: 18px; overflow-x: auto; }}
   @media (max-width: 720px) {{
     main {{ padding-left: 14px; padding-right: 14px; }}
@@ -1900,6 +2040,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
           <th scope="col">Ext splits / merges</th>
           <th scope="col">Ext depth / slots</th>
           <th scope="col">Linear avg / max probe</th>
+          <th scope="col">Linear get hit / miss avg</th>
           <th scope="col">Cuckoo rehash / displacements</th>
           <th scope="col">B-tree height / nodes</th>
           <th scope="col">B-tree bytes</th>
@@ -1955,6 +2096,31 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                 "linear_average_probe_count",
                 "linear_max_probe_count",
                 "linear_rebuild_probe_count",
+                "linear_put_phase_count",
+                "linear_put_phase_average_probe_count",
+                "linear_put_phase_p50_probe_count",
+                "linear_put_phase_p95_probe_count",
+                "linear_put_phase_max_probe_count",
+                "linear_get_phase_count",
+                "linear_get_phase_average_probe_count",
+                "linear_get_phase_p50_probe_count",
+                "linear_get_phase_p95_probe_count",
+                "linear_get_phase_max_probe_count",
+                "linear_delete_phase_count",
+                "linear_delete_phase_average_probe_count",
+                "linear_delete_phase_p50_probe_count",
+                "linear_delete_phase_p95_probe_count",
+                "linear_delete_phase_max_probe_count",
+                "linear_get_hit_count",
+                "linear_get_hit_average_probe_count",
+                "linear_get_hit_p50_probe_count",
+                "linear_get_hit_p95_probe_count",
+                "linear_get_hit_max_probe_count",
+                "linear_get_miss_count",
+                "linear_get_miss_average_probe_count",
+                "linear_get_miss_p50_probe_count",
+                "linear_get_miss_p95_probe_count",
+                "linear_get_miss_max_probe_count",
                 "cuckoo_average_rehash_count",
                 "cuckoo_average_displacement_count",
                 "cuckoo_average_load_factor",
@@ -2011,6 +2177,31 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "linear_average_probe_count": row["linear"]["average_probe_count"],
                     "linear_max_probe_count": row["linear"]["max_probe_count"],
                     "linear_rebuild_probe_count": row["linear"]["rebuild_probe_count"],
+                    "linear_put_phase_count": row["linear"]["phase_probe_breakdown"]["puts"]["count"],
+                    "linear_put_phase_average_probe_count": row["linear"]["phase_probe_breakdown"]["puts"]["average_probe_count"],
+                    "linear_put_phase_p50_probe_count": row["linear"]["phase_probe_breakdown"]["puts"]["p50_probe_count"],
+                    "linear_put_phase_p95_probe_count": row["linear"]["phase_probe_breakdown"]["puts"]["p95_probe_count"],
+                    "linear_put_phase_max_probe_count": row["linear"]["phase_probe_breakdown"]["puts"]["max_probe_count"],
+                    "linear_get_phase_count": row["linear"]["phase_probe_breakdown"]["gets"]["count"],
+                    "linear_get_phase_average_probe_count": row["linear"]["phase_probe_breakdown"]["gets"]["average_probe_count"],
+                    "linear_get_phase_p50_probe_count": row["linear"]["phase_probe_breakdown"]["gets"]["p50_probe_count"],
+                    "linear_get_phase_p95_probe_count": row["linear"]["phase_probe_breakdown"]["gets"]["p95_probe_count"],
+                    "linear_get_phase_max_probe_count": row["linear"]["phase_probe_breakdown"]["gets"]["max_probe_count"],
+                    "linear_delete_phase_count": row["linear"]["phase_probe_breakdown"]["deletes"]["count"],
+                    "linear_delete_phase_average_probe_count": row["linear"]["phase_probe_breakdown"]["deletes"]["average_probe_count"],
+                    "linear_delete_phase_p50_probe_count": row["linear"]["phase_probe_breakdown"]["deletes"]["p50_probe_count"],
+                    "linear_delete_phase_p95_probe_count": row["linear"]["phase_probe_breakdown"]["deletes"]["p95_probe_count"],
+                    "linear_delete_phase_max_probe_count": row["linear"]["phase_probe_breakdown"]["deletes"]["max_probe_count"],
+                    "linear_get_hit_count": row["linear"]["lookup_probe_breakdown"]["successful"]["count"],
+                    "linear_get_hit_average_probe_count": row["linear"]["lookup_probe_breakdown"]["successful"]["average_probe_count"],
+                    "linear_get_hit_p50_probe_count": row["linear"]["lookup_probe_breakdown"]["successful"]["p50_probe_count"],
+                    "linear_get_hit_p95_probe_count": row["linear"]["lookup_probe_breakdown"]["successful"]["p95_probe_count"],
+                    "linear_get_hit_max_probe_count": row["linear"]["lookup_probe_breakdown"]["successful"]["max_probe_count"],
+                    "linear_get_miss_count": row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["count"],
+                    "linear_get_miss_average_probe_count": row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"],
+                    "linear_get_miss_p50_probe_count": row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["p50_probe_count"],
+                    "linear_get_miss_p95_probe_count": row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["p95_probe_count"],
+                    "linear_get_miss_max_probe_count": row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["max_probe_count"],
                     "cuckoo_average_rehash_count": row["cuckoo"]["average_rehash_count"],
                     "cuckoo_average_displacement_count": row["cuckoo"]["average_displacement_count"],
                     "cuckoo_average_load_factor": row["cuckoo"]["average_load_factor"],

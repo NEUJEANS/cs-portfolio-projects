@@ -42,6 +42,10 @@
   .metric-bar { margin-top: 6px; width: 100%; height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
   .metric-bar span { display: block; height: 100%; border-radius: 999px; }
   .metric-detail { margin-top: 6px; color: #475569; font-size: 0.84rem; }
+  .split-callout { margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: #eef2ff; color: #312e81; font-size: 0.9rem; line-height: 1.45; }
+  .phase-table-wrap { margin-top: 14px; overflow-x: auto; }
+  .phase-table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.88rem; background: #fff; border: 1px solid #dbe4f0; border-radius: 14px; overflow: hidden; }
+  .phase-table-wrap caption { padding-bottom: 10px; }
   .trial-table-wrap { margin-top: 18px; overflow-x: auto; }
   @media (max-width: 720px) {
     main { padding-left: 14px; padding-right: 14px; }
@@ -83,6 +87,7 @@
           <th scope="col">Ext splits / merges</th>
           <th scope="col">Ext depth / slots</th>
           <th scope="col">Linear avg / max probe</th>
+          <th scope="col">Linear get hit / miss avg</th>
           <th scope="col">Cuckoo rehash / displacements</th>
           <th scope="col">B-tree height / nodes</th>
           <th scope="col">B-tree bytes</th>
@@ -95,6 +100,7 @@
   <td>3 / 0</td>
   <td>3 / 8</td>
   <td>1.462 / 3</td>
+  <td>1.333 / 2.5</td>
   <td>0.333 / 4</td>
   <td>2 / 3</td>
   <td>1569</td>
@@ -105,6 +111,7 @@
   <td>5 / 0</td>
   <td>3 / 8</td>
   <td>1.357 / 2</td>
+  <td>1 / 2</td>
   <td>1 / 11.333</td>
   <td>2 / 4</td>
   <td>2081</td>
@@ -115,6 +122,7 @@
   <td>4 / 1</td>
   <td>3 / 8</td>
   <td>1.357 / 4</td>
+  <td>1 / 4</td>
   <td>0 / 2.333</td>
   <td>2 / 3</td>
   <td>1569</td>
@@ -125,6 +133,7 @@
   <td>7 / 4</td>
   <td>3 / 8</td>
   <td>3.471 / 6</td>
+  <td>3.333 / 5</td>
   <td>0 / 1.333</td>
   <td>1 / 1</td>
   <td>545</td>
@@ -189,14 +198,28 @@
     <strong>1.462</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 42.1%; background: #2563eb;"></span></div>
-  <div class="metric-detail">max probe 3</div>
+  <div class="metric-detail">get hit avg 1.333 · get miss avg 2.5</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>3</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 50.0%; background: #7c3aed;"></span></div>
-  <div class="metric-detail">rebuild probes 0</div>
+  <div class="metric-detail">miss p95 3 · rebuild probes 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get hit avg</span>
+    <strong>1.333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 40.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">p95 2 across 3 hit lookup(s)</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get miss avg</span>
+    <strong>2.5</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 50.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">p95 3 across 2 miss lookup(s)</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>rebuilds</span>
@@ -212,6 +235,29 @@
   <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">occupied load 0.75</div>
 </div>
+      <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 1.333 / 2 / 2 · misses avg/p95/max 2.5 / 3 / 3</div>
+      <div class="phase-table-wrap"><table><caption>Linear phase split for directory-friendly-read-heavy</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
+  <th scope="row">puts</th>
+  <td>7</td>
+  <td>1.286</td>
+  <td>1</td>
+  <td>2</td>
+  <td>2</td>
+</tr><tr>
+  <th scope="row">gets</th>
+  <td>5</td>
+  <td>1.8</td>
+  <td>2</td>
+  <td>3</td>
+  <td>3</td>
+</tr><tr>
+  <th scope="row">deletes</th>
+  <td>1</td>
+  <td>1</td>
+  <td>1</td>
+  <td>1</td>
+  <td>1</td>
+</tr></tbody></table></div>
     </article>
     <article class="metric-panel">
       <h3>Cuckoo hashing</h3>
@@ -276,6 +322,9 @@
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
           <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear get hit avg</th>
+          <th scope="col">Linear get miss avg</th>
+          <th scope="col">Linear get miss p95</th>
           <th scope="col">Linear max probe</th>
           <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
@@ -290,6 +339,9 @@
   <td>0</td>
   <td>3</td>
   <td>1.462</td>
+  <td>1.333</td>
+  <td>2.5</td>
+  <td>3</td>
   <td>3</td>
   <td>0</td>
   <td>1</td>
@@ -302,6 +354,9 @@
   <td>0</td>
   <td>3</td>
   <td>1.462</td>
+  <td>1.333</td>
+  <td>2.5</td>
+  <td>3</td>
   <td>3</td>
   <td>0</td>
   <td>0</td>
@@ -314,6 +369,9 @@
   <td>0</td>
   <td>3</td>
   <td>1.462</td>
+  <td>1.333</td>
+  <td>2.5</td>
+  <td>3</td>
   <td>3</td>
   <td>0</td>
   <td>0</td>
@@ -381,14 +439,28 @@
     <strong>1.357</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 39.1%; background: #2563eb;"></span></div>
-  <div class="metric-detail">max probe 2</div>
+  <div class="metric-detail">get hit avg 1 · get miss avg 2</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>2</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 33.3%; background: #7c3aed;"></span></div>
-  <div class="metric-detail">rebuild probes 6</div>
+  <div class="metric-detail">miss p95 2 · rebuild probes 6</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get hit avg</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 30.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">p95 1 across 2 hit lookup(s)</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get miss avg</span>
+    <strong>2</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 40.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">p95 2 across 1 miss lookup(s)</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>rebuilds</span>
@@ -404,6 +476,29 @@
   <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">occupied load 0.625</div>
 </div>
+      <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 1 / 1 / 1 · misses avg/p95/max 2 / 2 / 2</div>
+      <div class="phase-table-wrap"><table><caption>Linear phase split for split-pressure-growth</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
+  <th scope="row">puts</th>
+  <td>11</td>
+  <td>1.364</td>
+  <td>1</td>
+  <td>2</td>
+  <td>2</td>
+</tr><tr>
+  <th scope="row">gets</th>
+  <td>3</td>
+  <td>1.333</td>
+  <td>1</td>
+  <td>2</td>
+  <td>2</td>
+</tr><tr>
+  <th scope="row">deletes</th>
+  <td>0</td>
+  <td>0</td>
+  <td>0</td>
+  <td>0</td>
+  <td>0</td>
+</tr></tbody></table></div>
     </article>
     <article class="metric-panel">
       <h3>Cuckoo hashing</h3>
@@ -468,6 +563,9 @@
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
           <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear get hit avg</th>
+          <th scope="col">Linear get miss avg</th>
+          <th scope="col">Linear get miss p95</th>
           <th scope="col">Linear max probe</th>
           <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
@@ -482,6 +580,9 @@
   <td>0</td>
   <td>3</td>
   <td>1.357</td>
+  <td>1</td>
+  <td>2</td>
+  <td>2</td>
   <td>2</td>
   <td>1</td>
   <td>1</td>
@@ -494,6 +595,9 @@
   <td>0</td>
   <td>3</td>
   <td>1.357</td>
+  <td>1</td>
+  <td>2</td>
+  <td>2</td>
   <td>2</td>
   <td>1</td>
   <td>1</td>
@@ -506,6 +610,9 @@
   <td>0</td>
   <td>3</td>
   <td>1.357</td>
+  <td>1</td>
+  <td>2</td>
+  <td>2</td>
   <td>2</td>
   <td>1</td>
   <td>1</td>
@@ -573,14 +680,28 @@
     <strong>1.357</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 39.1%; background: #2563eb;"></span></div>
-  <div class="metric-detail">max probe 4</div>
+  <div class="metric-detail">get hit avg 1 · get miss avg 4</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>4</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 66.7%; background: #7c3aed;"></span></div>
-  <div class="metric-detail">rebuild probes 5</div>
+  <div class="metric-detail">miss p95 4 · rebuild probes 5</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get hit avg</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 30.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">p95 1 across 1 hit lookup(s)</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get miss avg</span>
+    <strong>4</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 80.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">p95 4 across 1 miss lookup(s)</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>rebuilds</span>
@@ -596,6 +717,29 @@
   <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">occupied load 0.625</div>
 </div>
+      <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 1 / 1 / 1 · misses avg/p95/max 4 / 4 / 4</div>
+      <div class="phase-table-wrap"><table><caption>Linear phase split for delete-heavy-churn</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
+  <th scope="row">puts</th>
+  <td>8</td>
+  <td>1.25</td>
+  <td>1</td>
+  <td>3</td>
+  <td>3</td>
+</tr><tr>
+  <th scope="row">gets</th>
+  <td>2</td>
+  <td>2.5</td>
+  <td>1</td>
+  <td>4</td>
+  <td>4</td>
+</tr><tr>
+  <th scope="row">deletes</th>
+  <td>4</td>
+  <td>1</td>
+  <td>1</td>
+  <td>1</td>
+  <td>1</td>
+</tr></tbody></table></div>
     </article>
     <article class="metric-panel">
       <h3>Cuckoo hashing</h3>
@@ -660,6 +804,9 @@
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
           <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear get hit avg</th>
+          <th scope="col">Linear get miss avg</th>
+          <th scope="col">Linear get miss p95</th>
           <th scope="col">Linear max probe</th>
           <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
@@ -674,6 +821,9 @@
   <td>1</td>
   <td>3</td>
   <td>1.357</td>
+  <td>1</td>
+  <td>4</td>
+  <td>4</td>
   <td>4</td>
   <td>1</td>
   <td>0</td>
@@ -686,6 +836,9 @@
   <td>1</td>
   <td>3</td>
   <td>1.357</td>
+  <td>1</td>
+  <td>4</td>
+  <td>4</td>
   <td>4</td>
   <td>1</td>
   <td>0</td>
@@ -698,6 +851,9 @@
   <td>1</td>
   <td>3</td>
   <td>1.357</td>
+  <td>1</td>
+  <td>4</td>
+  <td>4</td>
   <td>4</td>
   <td>1</td>
   <td>0</td>
@@ -765,14 +921,28 @@
     <strong>3.471</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
-  <div class="metric-detail">max probe 6</div>
+  <div class="metric-detail">get hit avg 3.333 · get miss avg 5</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>max probe</span>
     <strong>6</strong>
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
-  <div class="metric-detail">rebuild probes 3</div>
+  <div class="metric-detail">miss p95 6 · rebuild probes 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get hit avg</span>
+    <strong>3.333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">p95 5 across 3 hit lookup(s)</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>get miss avg</span>
+    <strong>5</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">p95 6 across 3 miss lookup(s)</div>
 </div><div class="metric">
   <div class="metric-head">
     <span>rebuilds</span>
@@ -788,6 +958,29 @@
   <div class="metric-bar" aria-hidden="true"><span style="width: 60.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">occupied load 0.375</div>
 </div>
+      <div class="split-callout"><strong>Lookup split:</strong> hits avg/p95/max 3.333 / 5 / 5 · misses avg/p95/max 5 / 6 / 6</div>
+      <div class="phase-table-wrap"><table><caption>Linear phase split for primary-clustering-tombstone-pressure</caption><thead><tr><th scope="col">Phase</th><th scope="col">Count</th><th scope="col">Avg probes</th><th scope="col">P50</th><th scope="col">P95</th><th scope="col">Max</th></tr></thead><tbody><tr>
+  <th scope="row">puts</th>
+  <td>7</td>
+  <td>3.429</td>
+  <td>3</td>
+  <td>6</td>
+  <td>6</td>
+</tr><tr>
+  <th scope="row">gets</th>
+  <td>6</td>
+  <td>4.167</td>
+  <td>3</td>
+  <td>6</td>
+  <td>6</td>
+</tr><tr>
+  <th scope="row">deletes</th>
+  <td>4</td>
+  <td>2.5</td>
+  <td>2</td>
+  <td>4</td>
+  <td>4</td>
+</tr></tbody></table></div>
     </article>
     <article class="metric-panel">
       <h3>Cuckoo hashing</h3>
@@ -852,6 +1045,9 @@
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
           <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear get hit avg</th>
+          <th scope="col">Linear get miss avg</th>
+          <th scope="col">Linear get miss p95</th>
           <th scope="col">Linear max probe</th>
           <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
@@ -866,6 +1062,9 @@
   <td>4</td>
   <td>3</td>
   <td>3.471</td>
+  <td>3.333</td>
+  <td>5</td>
+  <td>6</td>
   <td>6</td>
   <td>1</td>
   <td>0</td>
@@ -878,6 +1077,9 @@
   <td>4</td>
   <td>3</td>
   <td>3.471</td>
+  <td>3.333</td>
+  <td>5</td>
+  <td>6</td>
   <td>6</td>
   <td>1</td>
   <td>0</td>
@@ -890,6 +1092,9 @@
   <td>4</td>
   <td>3</td>
   <td>3.471</td>
+  <td>3.333</td>
+  <td>5</td>
+  <td>6</td>
   <td>6</td>
   <td>1</td>
   <td>0</td>
