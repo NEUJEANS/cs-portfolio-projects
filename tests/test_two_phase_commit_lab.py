@@ -40,6 +40,7 @@ render_comparison_markdown = MODULE.render_comparison_markdown
 render_incident_response_html = MODULE.render_incident_response_html
 render_markdown_report = MODULE.render_markdown_report
 render_termination_resolution_markdown = MODULE.render_termination_resolution_markdown
+render_termination_resolution_timeline_social_preview_html = MODULE.render_termination_resolution_timeline_social_preview_html
 render_termination_resolution_timeline_svg = MODULE.render_termination_resolution_timeline_svg
 render_termination_resolution_timeline_html = MODULE.render_termination_resolution_timeline_html
 simulate_two_phase_commit = MODULE.simulate_two_phase_commit
@@ -508,6 +509,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             (report_dir / "coordinator_crash_partial_commit_delivery_termination.md").write_text("# termination")
             (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.svg").write_text("<svg></svg>")
             (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.html").write_text("<html>timeline</html>")
+            (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.png").write_bytes(b"\x89PNG\r\n\x1a\n")
             entries = build_catalog_entries(
                 [PARTIAL_DELIVERY_BLOCKED_SCENARIO],
                 catalog_path=catalog_path,
@@ -522,7 +524,8 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("[md](reports/coordinator_crash_partial_commit_delivery_termination.md)", catalog)
             self.assertIn("[html](reports/coordinator_crash_partial_commit_delivery_termination_timeline.html)", catalog)
             self.assertIn("[svg](reports/coordinator_crash_partial_commit_delivery_termination_timeline.svg)", catalog)
-            self.assertIn("related artifacts: [report](reports/coordinator_crash_partial_commit_delivery_report.md) / [compare html](reports/coordinator_crash_partial_commit_delivery_protocol_compare.html) / [compare md](reports/coordinator_crash_partial_commit_delivery_protocol_compare.md) / [termination md](reports/coordinator_crash_partial_commit_delivery_termination.md) / [timeline html](reports/coordinator_crash_partial_commit_delivery_termination_timeline.html) / [timeline svg](reports/coordinator_crash_partial_commit_delivery_termination_timeline.svg)", catalog)
+            self.assertIn("[png](reports/coordinator_crash_partial_commit_delivery_termination_timeline.png)", catalog)
+            self.assertIn("related artifacts: [report](reports/coordinator_crash_partial_commit_delivery_report.md) / [compare html](reports/coordinator_crash_partial_commit_delivery_protocol_compare.html) / [compare md](reports/coordinator_crash_partial_commit_delivery_protocol_compare.md) / [termination md](reports/coordinator_crash_partial_commit_delivery_termination.md) / [timeline html](reports/coordinator_crash_partial_commit_delivery_termination_timeline.html) / [timeline svg](reports/coordinator_crash_partial_commit_delivery_termination_timeline.svg) / [timeline png](reports/coordinator_crash_partial_commit_delivery_termination_timeline.png)", catalog)
 
     def test_incident_response_dashboard_groups_blocked_cases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -548,6 +551,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn('href="reports/coordinator_crash_before_decision_report.md"', dashboard)
             self.assertIn('href="reports/coordinator_crash_partial_commit_delivery_report.md"', dashboard)
             self.assertIn('href="reports/coordinator_crash_durable_abort_report.md"', dashboard)
+            self.assertIn('href="reports/coordinator_crash_partial_commit_delivery_termination_timeline.png"', dashboard)
 
     def test_catalog_command_writes_index_and_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -585,13 +589,16 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertTrue((report_dir / "coordinator_crash_before_decision_termination.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_termination_timeline.svg").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_termination_timeline.html").exists())
+            self.assertTrue((report_dir / "coordinator_crash_before_decision_termination_timeline.png").exists())
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_termination.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.svg").exists())
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.html").exists())
+            self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.png").exists())
             catalog = catalog_path.read_text()
             dashboard = dashboard_path.read_text()
             partial_timeline = (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.svg").read_text()
             abort_timeline = (report_dir / "coordinator_crash_durable_abort_termination_timeline.html").read_text()
+            partial_timeline_png = (report_dir / "coordinator_crash_partial_commit_delivery_termination_timeline.png").read_bytes()
             self.assertIn("[incident-response dashboard](incident_response_dashboard.html)", catalog)
             self.assertIn("[report](reports/order_success_report.md)", catalog)
             self.assertIn("outcome: `blocked` with decision `commit`", catalog)
@@ -604,6 +611,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("and shipping.", partial_timeline)
             self.assertIn("Unresolved after the plain run: inventory and", abort_timeline)
             self.assertIn("billing.", abort_timeline)
+            self.assertEqual(partial_timeline_png[:8], b"\x89PNG\r\n\x1a\n")
 
     def test_catalog_command_supports_tag_filtered_subset_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -815,6 +823,24 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertIn("billing.", html)
         self.assertIn("ABORT safe via risk", html)
 
+    def test_termination_timeline_social_preview_html_summarizes_story(self) -> None:
+        resolution = build_peer_termination_resolution(
+            load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO)
+        )
+        preview = render_termination_resolution_timeline_social_preview_html(
+            resolution,
+            width=1400,
+            height=700,
+        )
+        self.assertIn("timeline social preview", preview)
+        self.assertIn("Timeline highlights", preview)
+        self.assertIn("Baseline incident state", preview)
+        self.assertIn("Resolution summary", preview)
+        self.assertIn("README hero images, GitHub social previews, and slide decks", preview)
+        self.assertIn("width: 1400px", preview)
+        self.assertIn("height: 700px", preview)
+        self.assertIn("overflow: hidden", preview)
+
     def test_compare_command_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report_path = Path(temp_dir) / "comparison.md"
@@ -899,10 +925,11 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("## Participant actions", report)
             self.assertIn("resolved decision: `commit`", report)
 
-    def test_terminate_command_writes_timeline_svg_and_html(self) -> None:
+    def test_terminate_command_writes_timeline_svg_html_and_png(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             svg_path = Path(temp_dir) / "termination_timeline.svg"
             html_path = Path(temp_dir) / "termination_timeline.html"
+            png_path = Path(temp_dir) / "termination_timeline.png"
             completed = subprocess.run(
                 [
                     "python3",
@@ -913,6 +940,8 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                     str(svg_path),
                     "--timeline-html-out",
                     str(html_path),
+                    "--timeline-png-out",
+                    str(png_path),
                     "--json",
                 ],
                 check=True,
@@ -924,10 +953,12 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertEqual(payload["resolution_outcome"], "abort")
             svg = svg_path.read_text()
             html = html_path.read_text()
+            png = png_path.read_bytes()
             self.assertIn("peer termination timeline", svg)
             self.assertIn("risk acts as an evidence source", svg)
             self.assertIn("Timeline graphic", html)
             self.assertIn("ABORT safe via risk", html)
+            self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
 
     def test_terminate_command_summary_mentions_resolved_decision(self) -> None:
         completed = subprocess.run(

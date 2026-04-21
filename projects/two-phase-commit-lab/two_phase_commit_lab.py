@@ -5,7 +5,10 @@ import html
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import textwrap
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -115,6 +118,7 @@ class CatalogEntry:
     termination_markdown_path: str | None = None
     termination_timeline_svg_path: str | None = None
     termination_timeline_html_path: str | None = None
+    termination_timeline_png_path: str | None = None
 
 
 CATALOG_BUNDLE_PRESETS: dict[str, CatalogBundlePreset] = {
@@ -1490,6 +1494,299 @@ def render_termination_resolution_timeline_html(result: TerminationResolutionRes
 '''
 
 
+def render_termination_resolution_timeline_social_preview_html(
+    result: TerminationResolutionResult,
+    *,
+    width: int = 1280,
+    height: int = 640,
+) -> str:
+    preview_width = max(960, width)
+    preview_height = max(480, height)
+    preview_scale = min(1.0, preview_height / 700)
+    cards = _build_termination_timeline_cards(result)
+    highlight_cards = _select_timeline_preview_cards(cards)
+    summary_cards = [
+        (
+            "Baseline",
+            result.baseline_outcome.upper(),
+            "warning" if result.baseline_outcome == "blocked" else _timeline_tone_for_state(result.baseline_outcome),
+            result.baseline_termination_hint_summary or "No decisive peer evidence yet",
+        ),
+        (
+            "Resolved decision",
+            (result.resolved_decision or result.baseline_decision or "none").upper(),
+            _timeline_tone_for_state(result.resolved_decision or result.baseline_decision or result.resolution_outcome),
+            f"Outcome: {result.resolution_outcome}",
+        ),
+        (
+            "Unresolved after peer exchange",
+            str(len(result.unresolved_participants)),
+            "warning" if result.unresolved_participants else "success",
+            _format_name_list(result.unresolved_participants) or "none",
+        ),
+    ]
+    summary_html = "".join(
+        f'''<article class="summary-card summary-card--{_html_escape(tone)}">
+          <p class="summary-label">{_html_escape(label)}</p>
+          <strong>{_html_escape(value)}</strong>
+          <p>{_html_escape(help_text)}</p>
+        </article>'''
+        for label, value, tone, help_text in summary_cards
+    )
+    card_html = "".join(
+        f'''<article class="story-card story-card--{_html_escape(card["tone"])}">
+          <p class="story-step">{_html_escape(card["step_label"])}</p>
+          <h2>{_html_escape(card["title"])}</h2>
+          <p>{_html_escape(card["body"])}</p>
+        </article>'''
+        for card in highlight_cards
+    )
+    omitted_count = max(0, len(cards) - len(highlight_cards))
+    omitted_html = ""
+    if omitted_count:
+        omitted_html = (
+            '<p class="omitted">'
+            + _html_escape(f"{omitted_count} additional timeline step(s) remain in the full SVG/HTML artifact.")
+            + '</p>'
+        )
+    takeaway = result.takeaways[0] if result.takeaways else "Peer-assisted termination never invents a new global outcome; it only relays durable evidence."
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(result.title)} social preview</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg-top: #14213d;
+        --bg-bottom: #1d4ed8;
+        --surface: rgba(255, 255, 255, 0.16);
+        --surface-strong: rgba(255, 255, 255, 0.96);
+        --text: #eff6ff;
+        --text-strong: #0f172a;
+        --muted: rgba(239, 246, 255, 0.82);
+        --border: rgba(255, 255, 255, 0.16);
+        --warning: #b45309;
+        --warning-bg: #ffedd5;
+        --success: #166534;
+        --success-bg: #dcfce7;
+        --danger: #991b1b;
+        --danger-bg: #fee2e2;
+        --accent: #1d4ed8;
+        --accent-bg: #dbeafe;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        width: {preview_width}px;
+        height: {preview_height}px;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, rgba(96, 165, 250, 0.35), transparent 34%), linear-gradient(135deg, var(--bg-top), var(--bg-bottom));
+        color: var(--text);
+        overflow: hidden;
+      }}
+      main {{
+        padding: 26px 32px 20px;
+        transform-origin: top left;
+        transform: scale({preview_scale:.3f});
+        width: calc(100% / {preview_scale:.3f});
+      }}
+      .eyebrow {{ margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 800; color: rgba(255,255,255,0.72); }}
+      h1 {{ margin: 0 0 8px; font-size: 2rem; line-height: 1.08; max-width: 12ch; }}
+      .lede {{ margin: 0; max-width: 72ch; color: var(--muted); font-size: 0.93rem; line-height: 1.38; }}
+      .hero-meta {{ margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }}
+      .pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 7px 11px; background: rgba(255,255,255,0.12); border: 1px solid var(--border); font-size: 0.8rem; font-weight: 700; }}
+      .layout {{ display: grid; grid-template-columns: 340px 1fr; gap: 18px; margin-top: 18px; align-items: stretch; }}
+      .summary-panel, .story-panel {{ border-radius: 28px; border: 1px solid var(--border); box-shadow: 0 22px 46px rgba(15, 23, 42, 0.18); }}
+      .summary-panel {{ padding: 18px; background: rgba(255,255,255,0.12); backdrop-filter: blur(12px); }}
+      .summary-grid {{ display: grid; gap: 10px; }}
+      .summary-card {{ padding: 14px 16px; border-radius: 20px; background: var(--surface-strong); color: var(--text-strong); min-height: 92px; }}
+      .summary-card strong {{ display: block; margin: 2px 0 6px; font-size: 1.3rem; }}
+      .summary-card p {{ margin: 0; font-size: 0.84rem; line-height: 1.28; color: #334155; }}
+      .summary-label {{ margin: 0; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.72rem; font-weight: 800; color: #475569; }}
+      .summary-card--warning strong {{ color: var(--warning); }}
+      .summary-card--success strong {{ color: var(--success); }}
+      .summary-card--danger strong {{ color: var(--danger); }}
+      .summary-card--accent strong {{ color: var(--accent); }}
+      .takeaway {{ margin-top: 12px; padding: 12px 14px; border-radius: 18px; background: rgba(255,255,255,0.1); border: 1px solid var(--border); font-size: 0.84rem; line-height: 1.35; }}
+      .takeaway strong {{ display: block; margin-bottom: 4px; }}
+      .story-panel {{ padding: 16px; background: rgba(255,255,255,0.95); color: var(--text-strong); }}
+      .story-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }}
+      .story-header h2 {{ margin: 0; font-size: 1.05rem; }}
+      .story-header p {{ margin: 2px 0 0; color: #475569; font-size: 0.82rem; line-height: 1.28; max-width: 48ch; }}
+      .story-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
+      .story-card {{ padding: 14px; border-radius: 20px; border: 2px solid transparent; min-height: 138px; }}
+      .story-card h2 {{ margin: 0 0 8px; font-size: 1rem; line-height: 1.2; }}
+      .story-card p {{ margin: 0; color: #334155; line-height: 1.32; font-size: 0.84rem; }}
+      .story-step {{ margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 800; }}
+      .story-card--warning {{ background: var(--warning-bg); border-color: #f59e0b; }}
+      .story-card--warning .story-step {{ color: var(--warning); }}
+      .story-card--success {{ background: var(--success-bg); border-color: #22c55e; }}
+      .story-card--success .story-step {{ color: var(--success); }}
+      .story-card--danger {{ background: var(--danger-bg); border-color: #ef4444; }}
+      .story-card--danger .story-step {{ color: var(--danger); }}
+      .story-card--accent {{ background: var(--accent-bg); border-color: #60a5fa; }}
+      .story-card--accent .story-step {{ color: var(--accent); }}
+      .omitted {{ margin: 10px 2px 0; color: #475569; font-size: 0.78rem; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Two-phase commit timeline social preview</p>
+      <h1>{_html_escape(result.title)}</h1>
+      <p class="lede">{_html_escape(result.description)} This compact PNG is meant for README hero images, GitHub social previews, and slide decks while the full timeline stays available in the SVG and HTML artifacts.</p>
+      <div class="hero-meta">
+        <span class="pill">transaction {_html_escape(result.transaction_id)}</span>
+        <span class="pill">baseline {_html_escape(result.baseline_outcome)}</span>
+        <span class="pill">peer resolution {_html_escape(result.resolution_outcome)}</span>
+      </div>
+      <section class="layout">
+        <div class="summary-panel">
+          <div class="summary-grid">{summary_html}</div>
+          <div class="takeaway"><strong>Interview hook</strong>{_html_escape(takeaway)}</div>
+        </div>
+        <div class="story-panel">
+          <div class="story-header">
+            <div>
+              <h2>Timeline highlights</h2>
+              <p>Three small cards keep the blocking story legible without needing the full long-form timeline.</p>
+            </div>
+            <span class="pill">{len(cards)} total steps</span>
+          </div>
+          <div class="story-grid">{card_html}</div>
+          {omitted_html}
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def _select_timeline_preview_cards(cards: list[dict[str, str]]) -> list[dict[str, str]]:
+    if not cards:
+        return []
+    selected_indexes = [0]
+    middle_index = next(
+        (
+            index
+            for index, card in enumerate(cards[1:-1], start=1)
+            if "evidence source" in card["title"] or card["tone"] in {"success", "danger"}
+        ),
+        None,
+    )
+    if middle_index is None and len(cards) > 2:
+        middle_index = 1
+    if middle_index is not None and middle_index not in selected_indexes and middle_index != len(cards) - 1:
+        selected_indexes.append(middle_index)
+    if len(cards) > 1 and len(cards) - 1 not in selected_indexes:
+        selected_indexes.append(len(cards) - 1)
+    preview_cards: list[dict[str, str]] = []
+    for index in selected_indexes:
+        card = cards[index]
+        preview_cards.append(
+            _build_preview_story_card(card, step_label=f"Step {index + 1}")
+        )
+    return preview_cards
+
+
+def _build_preview_story_card(card: dict[str, str], *, step_label: str) -> dict[str, str]:
+    return {
+        **card,
+        "step_label": step_label,
+        "body": _truncate_preview_text(card["body"], max_words=14),
+    }
+
+
+def _truncate_preview_text(text: str, *, max_words: int) -> str:
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]).rstrip(".,;:") + "..."
+
+
+def resolve_chrome_binary(preferred: str | Path | None = None) -> str:
+    candidates: list[str] = []
+    if preferred is not None:
+        candidates.append(str(preferred))
+    candidates.extend(["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"])
+    for candidate in candidates:
+        candidate_path = Path(candidate).expanduser()
+        if candidate_path.is_absolute() and candidate_path.exists():
+            return str(candidate_path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError(
+        "Could not find a Chrome/Chromium binary for PNG capture. Pass --chrome-binary or install google-chrome/chromium."
+    )
+
+
+def build_termination_timeline_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    resolved_html = Path(html_output_path).resolve()
+    resolved_png = Path(png_output_path).resolve()
+    return [
+        resolve_chrome_binary(chrome_binary),
+        "--headless",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        f"--window-size={width},{height}",
+        f"--virtual-time-budget={capture_ms}",
+        f"--screenshot={resolved_png}",
+        resolved_html.as_uri(),
+    ]
+
+
+def render_termination_timeline_png(
+    result: TerminationResolutionResult,
+    png_output_path: str | Path,
+    *,
+    width: int = 1280,
+    height: int = 640,
+    capture_ms: int = 1200,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    png_path = Path(png_output_path)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    normalized_width = max(960, width)
+    normalized_height = max(480, height)
+    preview_html = render_termination_resolution_timeline_social_preview_html(
+        result,
+        width=normalized_width,
+        height=normalized_height,
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as handle:
+        handle.write(preview_html)
+        capture_html_path = Path(handle.name)
+    try:
+        command = build_termination_timeline_png_command(
+            capture_html_path,
+            png_path,
+            width=normalized_width,
+            height=normalized_height,
+            capture_ms=max(0, capture_ms),
+            chrome_binary=chrome_binary,
+        )
+        result_exec = subprocess.run(command, capture_output=True, text=True, check=False)
+    finally:
+        capture_html_path.unlink(missing_ok=True)
+    if result_exec.returncode != 0:
+        detail = result_exec.stderr.strip() or result_exec.stdout.strip() or "unknown Chrome headless error"
+        raise RuntimeError(f"PNG capture failed: {detail}")
+    if not png_path.exists():
+        raise RuntimeError(f"PNG capture did not create the expected output file: {png_path}")
+    return png_path
+
+
 def _build_termination_timeline_cards(result: TerminationResolutionResult) -> list[dict[str, str]]:
     baseline_decision = (result.baseline_decision or "none").upper()
     unresolved_label = _format_name_list(result.unresolved_participants) or "none"
@@ -1625,7 +1922,9 @@ def render_catalog_markdown(
     termination_timeline_count = sum(
         1
         for entry in entries
-        if entry.termination_timeline_svg_path or entry.termination_timeline_html_path
+        if entry.termination_timeline_svg_path
+        or entry.termination_timeline_html_path
+        or entry.termination_timeline_png_path
     )
 
     filter_lines: list[str] = []
@@ -1680,6 +1979,8 @@ def render_catalog_markdown(
             timeline_links.append(f"[html]({entry.termination_timeline_html_path})")
         if entry.termination_timeline_svg_path:
             timeline_links.append(f"[svg]({entry.termination_timeline_svg_path})")
+        if entry.termination_timeline_png_path:
+            timeline_links.append(f"[png]({entry.termination_timeline_png_path})")
         compare_cell = " / ".join(compare_links) if compare_links else "-"
         termination_artifact_cell = " / ".join(termination_links) if termination_links else "-"
         timeline_cell = " / ".join(timeline_links) if timeline_links else "-"
@@ -1724,6 +2025,8 @@ def render_catalog_markdown(
             related_artifacts.append(f"[timeline html]({entry.termination_timeline_html_path})")
         if entry.termination_timeline_svg_path:
             related_artifacts.append(f"[timeline svg]({entry.termination_timeline_svg_path})")
+        if entry.termination_timeline_png_path:
+            related_artifacts.append(f"[timeline png]({entry.termination_timeline_png_path})")
         snapshot_lines.extend(
             [
                 f"### {result.title}",
@@ -2167,6 +2470,8 @@ def _render_incident_response_card_html(entry: CatalogEntry) -> str:
         links.append(("timeline html", entry.termination_timeline_html_path))
     if entry.termination_timeline_svg_path:
         links.append(("timeline svg", entry.termination_timeline_svg_path))
+    if entry.termination_timeline_png_path:
+        links.append(("timeline png", entry.termination_timeline_png_path))
     if entry.comparison_html_path:
         links.append(("compare html", entry.comparison_html_path))
     if entry.comparison_markdown_path:
@@ -2249,6 +2554,25 @@ def write_termination_timeline_html(
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_termination_resolution_timeline_html(result))
+
+
+def write_termination_timeline_png(
+    path: str | Path,
+    result: TerminationResolutionResult,
+    *,
+    width: int = 1280,
+    height: int = 640,
+    capture_ms: int = 1200,
+    chrome_binary: str | Path | None = None,
+) -> None:
+    render_termination_timeline_png(
+        result,
+        path,
+        width=width,
+        height=height,
+        capture_ms=capture_ms,
+        chrome_binary=chrome_binary,
+    )
 
 
 def write_incident_response_dashboard(
@@ -2406,6 +2730,7 @@ def build_catalog_entries(
         termination_markdown_file = artifact_dir / f"{scenario_path.stem}_termination.md"
         termination_timeline_svg_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.svg"
         termination_timeline_html_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.html"
+        termination_timeline_png_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.png"
         if report_dir is not None:
             write_markdown_report(report_file, result)
             if _should_generate_catalog_comparison(result):
@@ -2432,6 +2757,10 @@ def build_catalog_entries(
                     termination_timeline_html_file,
                     termination_result,
                 )
+                write_termination_timeline_png(
+                    termination_timeline_png_file,
+                    termination_result,
+                )
         report_path = _relative_artifact_path(report_file, start=catalog_path.parent)
         comparison_markdown_path = _relative_artifact_path(
             artifact_dir / f"{scenario_path.stem}_protocol_compare.md",
@@ -2453,6 +2782,10 @@ def build_catalog_entries(
             termination_timeline_html_file,
             start=catalog_path.parent,
         )
+        termination_timeline_png_path = _relative_artifact_path(
+            termination_timeline_png_file,
+            start=catalog_path.parent,
+        )
         entries.append(
             CatalogEntry(
                 source_path=str(scenario_path).replace(os.sep, "/"),
@@ -2462,6 +2795,7 @@ def build_catalog_entries(
                 termination_markdown_path=termination_markdown_path,
                 termination_timeline_svg_path=termination_timeline_svg_path,
                 termination_timeline_html_path=termination_timeline_html_path,
+                termination_timeline_png_path=termination_timeline_png_path,
                 result=result,
             )
         )
@@ -2521,6 +2855,34 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--timeline-html-out",
         type=Path,
         help="optional path for a standalone HTML peer-resolution timeline artifact",
+    )
+    terminate_parser.add_argument(
+        "--timeline-png-out",
+        type=Path,
+        help="optional path for a compact PNG social-preview timeline artifact",
+    )
+    terminate_parser.add_argument(
+        "--timeline-png-width",
+        type=int,
+        default=1280,
+        help="viewport width in pixels for PNG capture",
+    )
+    terminate_parser.add_argument(
+        "--timeline-png-height",
+        type=int,
+        default=640,
+        help="viewport height in pixels for PNG capture",
+    )
+    terminate_parser.add_argument(
+        "--timeline-png-capture-ms",
+        type=int,
+        default=1200,
+        help="virtual time budget in milliseconds before capturing the PNG screenshot",
+    )
+    terminate_parser.add_argument(
+        "--chrome-binary",
+        type=Path,
+        help="optional Chrome/Chromium binary for PNG capture",
     )
 
     catalog_parser = subparsers.add_parser(
@@ -2626,6 +2988,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.timeline_html_out:
             write_termination_timeline_html(args.timeline_html_out, result)
             print(f"wrote HTML peer-resolution timeline to {args.timeline_html_out}", file=stream)
+        if args.timeline_png_out:
+            write_termination_timeline_png(
+                args.timeline_png_out,
+                result,
+                width=args.timeline_png_width,
+                height=args.timeline_png_height,
+                capture_ms=args.timeline_png_capture_ms,
+                chrome_binary=args.chrome_binary,
+            )
+            print(f"wrote PNG peer-resolution timeline preview to {args.timeline_png_out}", file=stream)
         if args.json:
             print(json.dumps(result.to_dict(), indent=2))
         else:

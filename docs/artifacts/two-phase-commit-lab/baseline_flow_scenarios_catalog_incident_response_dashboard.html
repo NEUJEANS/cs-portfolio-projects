@@ -162,14 +162,14 @@
         <h1>Blocked-case triage at a glance</h1>
         <p class="lede">This static dashboard strips the portfolio bundle down to the incidents that actually block after <code>PREPARE</code>. It groups them by the response story that matters most during triage: waiting for coordinator recovery, following peer-visible <code>COMMIT</code> evidence, or proving a safe <code>ABORT</code> from a peer that never reached <code>PREPARED</code>.</p>
         <div class="hero-links">
-          <a class="catalog-link" href="peer_assisted_scenarios_catalog.md">Open the full scenario catalog</a>
+          <a class="catalog-link" href="baseline_flow_scenarios_catalog.md">Open the full scenario catalog</a>
         </div>
       </section>
 
       <section class="summary-grid">
         <article class="summary-card summary-card--neutral">
       <p class="summary-label">Blocked incidents</p>
-      <strong>2</strong>
+      <strong>0</strong>
       <p>Baseline blocked scenarios in the current 2PC sample bundle.</p>
     </article><article class="summary-card summary-card--warning">
       <p class="summary-label">Recovery-required</p>
@@ -177,97 +177,27 @@
       <p>No decisive peer evidence exists yet, so coordinator recovery still matters most.</p>
     </article><article class="summary-card summary-card--success">
       <p class="summary-label">Peer-visible COMMIT</p>
-      <strong>1</strong>
+      <strong>0</strong>
       <p>A participant already heard durable COMMIT before the crash.</p>
     </article><article class="summary-card summary-card--danger">
       <p class="summary-label">Safe-ABORT evidence</p>
-      <strong>1</strong>
+      <strong>0</strong>
       <p>A non-prepared peer can prove rollback safely.</p>
     </article>
       </section>
 
-      <section class="group group--success">
+      
+        <section class="group group--neutral">
           <div class="group-header">
             <div>
-              <p class="eyebrow">Blocked-case bucket</p>
-              <h2>Peer-visible COMMIT evidence</h2>
+              <p class="eyebrow">No blocked baselines</p>
+              <h2>No incident-response cases yet</h2>
             </div>
-            <span class="group-count">1</span>
+            <span class="group-count">0</span>
           </div>
-          <p class="group-description">At least one peer already knows the durable COMMIT, so the incident can pivot from blind waiting into a concrete peer-assisted resolution drill.</p>
-          <div class="incident-grid">
-            <article class="incident-card">
-      <div class="incident-card__header">
-        <div>
-          <p class="eyebrow">transaction order-5120</p>
-          <h3>Coordinator crash after one COMMIT delivery</h3>
-        </div>
-        <span class="pill pill--success">COMMIT</span>
-      </div>
-      <p class="incident-card__description">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery.</p>
-      <dl class="incident-facts">
-        <div><dt>Crash point</dt><dd>after-decision-log</dd></div>
-        <div><dt>Durable decision</dt><dd>yes</dd></div>
-        <div><dt>Prepared / total</dt><dd>3/3</dd></div>
-        <div><dt>Acked / total</dt><dd>1/3</dd></div>
-        <div><dt>Still blocked</dt><dd>2</dd></div>
-        <div><dt>Recovery configured</dt><dd>no</dd></div>
-      </dl>
-      <div class="incident-card__callout">
-        <strong>Evidence</strong>
-        COMMIT visible via inventory
-      </div>
-      <div class="incident-card__callout">
-        <strong>Blocking story</strong>
-        the durable COMMIT decision exists and inventory already knows it, but billing and shipping remain in doubt until coordinator recovery or a peer-to-peer termination check
-      </div>
-      <div class="artifact-links">
-        <a class="artifact-link" href="coordinator_crash_partial_commit_delivery_report.md">report</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination.md">termination md</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.html">timeline html</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.svg">timeline svg</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_termination_timeline.png">timeline png</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_protocol_compare.html">compare html</a><a class="artifact-link" href="coordinator_crash_partial_commit_delivery_protocol_compare.md">compare md</a>
-      </div>
-    </article>
-          </div>
+          <p class="group-description">Once a scenario blocks after PREPARE, this dashboard will group it by whether recovery, peer-visible COMMIT evidence, or safe-ABORT evidence drives the response.</p>
         </section>
-<section class="group group--danger">
-          <div class="group-header">
-            <div>
-              <p class="eyebrow">Blocked-case bucket</p>
-              <h2>Safe-ABORT evidence</h2>
-            </div>
-            <span class="group-count">1</span>
-          </div>
-          <p class="group-description">A peer that never reached PREPARED can safely prove rollback, which turns the incident into an evidence-backed ABORT response instead of indefinite doubt.</p>
-          <div class="incident-grid">
-            <article class="incident-card">
-      <div class="incident-card__header">
-        <div>
-          <p class="eyebrow">transaction order-6112</p>
-          <h3>Coordinator crash after durable ABORT</h3>
-        </div>
-        <span class="pill pill--danger">ABORT</span>
-      </div>
-      <p class="incident-card__description">Inventory and billing vote YES, but risk votes NO. The coordinator durably logs ABORT and crashes before the prepared YES-voters hear the decision. They are blocked in classic 2PC, but a peer-to-peer termination check can still prove ABORT safely because risk never reached PREPARED.</p>
-      <dl class="incident-facts">
-        <div><dt>Crash point</dt><dd>after-decision-log</dd></div>
-        <div><dt>Durable decision</dt><dd>yes</dd></div>
-        <div><dt>Prepared / total</dt><dd>2/3</dd></div>
-        <div><dt>Acked / total</dt><dd>0/3</dd></div>
-        <div><dt>Still blocked</dt><dd>2</dd></div>
-        <div><dt>Recovery configured</dt><dd>no</dd></div>
-      </dl>
-      <div class="incident-card__callout">
-        <strong>Evidence</strong>
-        ABORT safe via risk
-      </div>
-      <div class="incident-card__callout">
-        <strong>Blocking story</strong>
-        the durable ABORT decision exists, but no prepared participant has learned it yet; prepared participants stay in doubt until recovery or a termination-protocol exchange
-      </div>
-      <div class="artifact-links">
-        <a class="artifact-link" href="coordinator_crash_durable_abort_report.md">report</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination.md">termination md</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination_timeline.html">timeline html</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination_timeline.svg">timeline svg</a><a class="artifact-link" href="coordinator_crash_durable_abort_termination_timeline.png">timeline png</a>
-      </div>
-    </article>
-          </div>
-        </section>
+        
     </main>
   </body>
 </html>
