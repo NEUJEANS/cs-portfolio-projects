@@ -9,9 +9,12 @@ from pathlib import Path
 from library_manager import (
     Library,
     LibraryError,
+    build_borrower_trend_snapshot,
     build_dashboard_snapshot,
     build_trend_snapshot,
     main,
+    render_borrower_trends_csv,
+    render_borrower_trends_svg,
     render_dashboard_html,
     render_dashboard_markdown,
     render_trends_csv,
@@ -430,6 +433,111 @@ class LibraryTests(unittest.TestCase):
         stdout_trends = buffer.getvalue()
         self.assertIn('date,active_loans,overdue_loans,completed_loans,late_returns,checkouts_started,returns_completed', stdout_trends)
         self.assertIn('2026-04-01,1,0,0,0,1,0', stdout_trends)
+
+    def test_borrower_trend_snapshot_and_renderers_focus_on_top_borrowers(self):
+        lib, _ = self.make_library()
+        for title in ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']:
+            lib.add_book(title, 'Author')
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+        lib.checkout(2, 'Sam', loan_days=7, checkout_date=date(2026, 4, 3))
+        lib.return_book(2, return_date=date(2026, 4, 7))
+        lib.checkout(3, 'Alex', loan_days=10, checkout_date=date(2026, 4, 5))
+        lib.checkout(4, 'Priya', loan_days=7, checkout_date=date(2026, 4, 6))
+        lib.return_book(4, return_date=date(2026, 4, 13))
+        lib.checkout(5, 'Sam', loan_days=14, checkout_date=date(2026, 4, 9))
+        lib.checkout(6, 'Alex', loan_days=7, checkout_date=date(2026, 4, 11))
+
+        snapshot = build_borrower_trend_snapshot(
+            lib,
+            start_date=date(2026, 4, 1),
+            end_date=date(2026, 4, 15),
+            top_limit=2,
+            title='Borrower trend pack',
+            generated_at='2026-04-15T12:00:00Z',
+        )
+
+        self.assertEqual(snapshot['start_date'], '2026-04-01')
+        self.assertEqual(snapshot['end_date'], '2026-04-15')
+        self.assertEqual(snapshot['days'], 15)
+        self.assertEqual([row['borrower'] for row in snapshot['borrowers']], ['Alex', 'Sam'])
+        self.assertEqual(snapshot['borrowers'][0]['total_loans'], 3)
+        self.assertEqual(snapshot['borrowers'][0]['peak_active_loans'], 2)
+        self.assertEqual(snapshot['borrowers'][1]['total_loans'], 2)
+
+        by_day = {
+            row['date']: {entry['borrower']: entry for entry in row['borrowers']}
+            for row in snapshot['points']
+        }
+        self.assertEqual(by_day['2026-04-09']['Alex']['active_loans'], 2)
+        self.assertEqual(by_day['2026-04-09']['Alex']['overdue_loans'], 1)
+        self.assertEqual(by_day['2026-04-11']['Alex']['checkouts_started'], 1)
+        self.assertEqual(by_day['2026-04-11']['Alex']['active_loans'], 2)
+        self.assertEqual(by_day['2026-04-09']['Sam']['checkouts_started'], 1)
+
+        csv_output = render_borrower_trends_csv(snapshot)
+        self.assertIn('date,borrower,active_loans,overdue_loans,checkouts_started,returns_completed', csv_output)
+        self.assertIn('2026-04-11,Alex,2,0,1,0', csv_output)
+        self.assertNotIn('Priya', csv_output)
+
+        svg_output = render_borrower_trends_svg(snapshot)
+        self.assertIn('Borrower trend pack', svg_output)
+        self.assertIn('Alex', svg_output)
+        self.assertIn('Sam', svg_output)
+        self.assertIn('borrower-active-panel-title', svg_output)
+        self.assertIn('Borrower summary', svg_output)
+
+    def test_cli_borrower_trends_writes_artifacts_and_supports_stdout_mode(self):
+        lib, db = self.make_library()
+        for title in ['B1', 'B2', 'B3', 'B4']:
+            lib.add_book(title, 'Author')
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 3))
+        lib.checkout(3, 'Alex', loan_days=10, checkout_date=date(2026, 4, 5))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        csv_path = Path(tmp.name) / 'artifacts' / 'borrower_trends.csv'
+        svg_path = Path(tmp.name) / 'artifacts' / 'borrower_trends.svg'
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(
+                [
+                    '--db',
+                    str(db),
+                    'borrower-trends',
+                    '--start-date',
+                    '2026-04-01',
+                    '--end-date',
+                    '2026-04-12',
+                    '--top',
+                    '2',
+                    '--csv-out',
+                    str(csv_path),
+                    '--svg-out',
+                    str(svg_path),
+                    '--title',
+                    'CLI borrower trends',
+                    '--generated-at',
+                    '2026-04-12T09:00:00Z',
+                ]
+            )
+        command_output = buffer.getvalue()
+        self.assertIn('borrower trend artifacts written:', command_output)
+        self.assertTrue(csv_path.exists())
+        self.assertTrue(svg_path.exists())
+        self.assertIn('2026-04-05,Alex,2,0,1,0', csv_path.read_text())
+        self.assertIn('CLI borrower trends', svg_path.read_text())
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'borrower-trends', '--start-date', '2026-04-01', '--end-date', '2026-04-03', '--top', '2'])
+        stdout_breakdown = buffer.getvalue()
+        self.assertIn('date,borrower,active_loans,overdue_loans,checkouts_started,returns_completed', stdout_breakdown)
+        self.assertIn('2026-04-03,Alex,1,0,0,0', stdout_breakdown)
 
     def test_cli_dashboard_writes_artifacts_and_supports_stdout_mode(self):
         lib, db = self.make_library()

@@ -28,8 +28,10 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - `stats` summarizes total loans, overdue activity, return-time averages, and top borrowers
 - `dashboard` exports Markdown and HTML circulation snapshots with accessible tables, status pills, and machine-readable timestamps
 - `trends` exports daily circulation analytics as chart-friendly CSV plus an accessible SVG small-multiples report for portfolio screenshots
+- `borrower-trends` exports top-borrower daily breakdowns as CSV plus a recruiter-friendly SVG cohort dashboard
 - dashboard snapshots respect the selected `--date`, so historical exports do not leak future checkouts or returns into earlier views
 - trend exports respect the requested date range so historical charts stay stable and repeatable in committed artifacts
+- borrower trend exports focus on the top borrower cohorts touching the selected range, so recruiter demos stay readable even as history grows
 - migration path for older databases plus automatic backfill of the search index and any still-active legacy checkouts
 - automated tests for core workflows, migration safety, dashboard and trend rendering, and CLI behavior
 
@@ -47,6 +49,11 @@ python3 library_manager.py --db library.db trends --start-date 2026-04-01 --end-
   --csv-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_trends.csv \
   --svg-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_trends.svg \
   --generated-at 2026-04-30T12:00:00Z
+python3 library_manager.py --db library.db borrower-trends --start-date 2026-04-01 --end-date 2026-04-30 \
+  --top 4 \
+  --csv-out ../../docs/artifacts/library-manager-sqlite/sample_borrower_trends.csv \
+  --svg-out ../../docs/artifacts/library-manager-sqlite/sample_borrower_trends.svg \
+  --generated-at 2026-04-30T12:00:00Z
 python3 library_manager.py --db library.db dashboard --date 2026-04-30 \
   --markdown-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.md \
   --html-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.html \
@@ -59,6 +66,8 @@ python3 library_manager.py --db library.db return 1
 - sample HTML snapshot: `docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.html`
 - sample trends CSV: `docs/artifacts/library-manager-sqlite/sample_circulation_trends.csv`
 - sample trends SVG: `docs/artifacts/library-manager-sqlite/sample_circulation_trends.svg`
+- sample borrower trends CSV: `docs/artifacts/library-manager-sqlite/sample_borrower_trends.csv`
+- sample borrower trends SVG: `docs/artifacts/library-manager-sqlite/sample_borrower_trends.svg`
 
 ## Test
 ```bash
@@ -69,4 +78,4 @@ python3 -m unittest test_library_manager.py
 - support borrower borrowing limits or policy rules
 - add import/export for seed catalogs
 - package the project as an installable CLI
-- add borrower-level trend breakdowns or stacked-category views on top of the new trend pack
+- add category or genre tags so the analytics pack can grow into stacked subject-level trend views

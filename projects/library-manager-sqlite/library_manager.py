@@ -1,6 +1,8 @@
 import argparse
+import csv
 import re
 import sqlite3
+from io import StringIO
 from datetime import date, datetime, timezone, timedelta
 from html import escape
 from pathlib import Path
@@ -8,6 +10,9 @@ from pathlib import Path
 
 class LibraryError(Exception):
     pass
+
+
+BORROWER_TREND_COLORS = ['#2563eb', '#dc2626', '#059669', '#7c3aed', '#d97706', '#0f766e']
 
 
 class Library:
@@ -605,6 +610,155 @@ class Library:
             current_day += timedelta(days=1)
         return points
 
+    def borrower_trend_breakdown(self, start_date=None, end_date=None, top_limit=4):
+        if top_limit <= 0:
+            raise LibraryError('top_limit must be positive')
+
+        today = date.today()
+        with self._connect() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    'SELECT '
+                    'br.name AS borrower, '
+                    'l.checked_out_at, '
+                    'l.due_date, '
+                    'l.returned_at '
+                    'FROM loans AS l '
+                    'JOIN borrowers AS br ON br.id = l.borrower_id '
+                    'ORDER BY l.checked_out_at, l.id'
+                )
+            ]
+
+        parsed_loans = []
+        min_checkout_day = None
+        max_activity_day = None
+        for row in rows:
+            checked_out_day = self._parse_iso_date(row['checked_out_at'])
+            due_day = self._parse_iso_date(row['due_date'])
+            returned_day = self._parse_iso_date(row['returned_at'])
+            if checked_out_day is None or due_day is None:
+                continue
+            parsed_loans.append(
+                {
+                    'borrower': row['borrower'],
+                    'checked_out_day': checked_out_day,
+                    'due_day': due_day,
+                    'returned_day': returned_day,
+                }
+            )
+            min_checkout_day = checked_out_day if min_checkout_day is None else min(min_checkout_day, checked_out_day)
+            activity_day = returned_day or checked_out_day
+            max_activity_day = activity_day if max_activity_day is None else max(max_activity_day, activity_day)
+
+        resolved_start = start_date or min_checkout_day or today
+        resolved_end = end_date or max(max_activity_day or resolved_start, today)
+        if resolved_end < resolved_start:
+            raise LibraryError('end date must be on or after start date')
+
+        borrower_candidates = {}
+        for loan in parsed_loans:
+            if loan['checked_out_day'] > resolved_end:
+                continue
+            if loan['returned_day'] is not None and loan['returned_day'] < resolved_start:
+                continue
+            borrower = loan['borrower']
+            summary = borrower_candidates.setdefault(
+                borrower,
+                {
+                    'borrower': borrower,
+                    'total_loans': 0,
+                    'last_checkout_ordinal': 0,
+                    'last_checkout_at': None,
+                },
+            )
+            summary['total_loans'] += 1
+            summary['last_checkout_ordinal'] = max(
+                summary['last_checkout_ordinal'],
+                loan['checked_out_day'].toordinal(),
+            )
+            checkout_iso = loan['checked_out_day'].isoformat()
+            if summary['last_checkout_at'] is None or checkout_iso > summary['last_checkout_at']:
+                summary['last_checkout_at'] = checkout_iso
+
+        selected_borrowers = sorted(
+            borrower_candidates.values(),
+            key=lambda row: (-row['total_loans'], -row['last_checkout_ordinal'], row['borrower'].lower()),
+        )[:top_limit]
+        selected_names = [row['borrower'] for row in selected_borrowers]
+
+        borrower_summaries = {
+            row['borrower']: {
+                'borrower': row['borrower'],
+                'total_loans': row['total_loans'],
+                'last_checkout_at': row['last_checkout_at'],
+                'peak_active_loans': 0,
+                'peak_overdue_loans': 0,
+                'total_checkouts_started': 0,
+                'total_returns_completed': 0,
+                'days_with_active_loans': 0,
+            }
+            for row in selected_borrowers
+        }
+
+        points = []
+        current_day = resolved_start
+        while current_day <= resolved_end:
+            borrower_points = []
+            for borrower in selected_names:
+                active_loans = 0
+                overdue_loans = 0
+                checkouts_started = 0
+                returns_completed = 0
+
+                for loan in parsed_loans:
+                    if loan['borrower'] != borrower:
+                        continue
+                    if loan['checked_out_day'] == current_day:
+                        checkouts_started += 1
+                    if loan['returned_day'] == current_day:
+                        returns_completed += 1
+                    if loan['checked_out_day'] <= current_day and (
+                        loan['returned_day'] is None or loan['returned_day'] > current_day
+                    ):
+                        active_loans += 1
+                        if loan['due_day'] < current_day:
+                            overdue_loans += 1
+
+                borrower_summaries[borrower]['peak_active_loans'] = max(
+                    borrower_summaries[borrower]['peak_active_loans'],
+                    active_loans,
+                )
+                borrower_summaries[borrower]['peak_overdue_loans'] = max(
+                    borrower_summaries[borrower]['peak_overdue_loans'],
+                    overdue_loans,
+                )
+                borrower_summaries[borrower]['total_checkouts_started'] += checkouts_started
+                borrower_summaries[borrower]['total_returns_completed'] += returns_completed
+                if active_loans:
+                    borrower_summaries[borrower]['days_with_active_loans'] += 1
+
+                borrower_points.append(
+                    {
+                        'borrower': borrower,
+                        'active_loans': active_loans,
+                        'overdue_loans': overdue_loans,
+                        'checkouts_started': checkouts_started,
+                        'returns_completed': returns_completed,
+                    }
+                )
+
+            points.append({'date': current_day.isoformat(), 'borrowers': borrower_points})
+            current_day += timedelta(days=1)
+
+        return {
+            'start_date': resolved_start.isoformat(),
+            'end_date': resolved_end.isoformat(),
+            'borrowers': selected_names,
+            'points': points,
+            'summary': [borrower_summaries[name] for name in selected_names],
+        }
+
 
 
 def format_book(row):
@@ -1160,6 +1314,41 @@ def build_trend_snapshot(
     }
 
 
+def build_borrower_trend_snapshot(
+    library,
+    start_date=None,
+    end_date=None,
+    top_limit=4,
+    title='Library borrower trend breakdown',
+    generated_at=None,
+):
+    snapshot = library.borrower_trend_breakdown(
+        start_date=start_date,
+        end_date=end_date,
+        top_limit=top_limit,
+    )
+    color_map = {
+        borrower: BORROWER_TREND_COLORS[index % len(BORROWER_TREND_COLORS)]
+        for index, borrower in enumerate(snapshot['borrowers'])
+    }
+    return {
+        'title': title.strip() or 'Library borrower trend breakdown',
+        'generated_at': generated_at or _utc_timestamp_iso(),
+        'start_date': snapshot['start_date'],
+        'end_date': snapshot['end_date'],
+        'days': len(snapshot['points']),
+        'top_limit': top_limit,
+        'borrowers': [
+            {
+                **row,
+                'color': color_map[row['borrower']],
+            }
+            for row in snapshot['summary']
+        ],
+        'points': snapshot['points'],
+    }
+
+
 def render_trends_csv(snapshot):
     headers = [
         'date',
@@ -1174,6 +1363,32 @@ def render_trends_csv(snapshot):
     for row in snapshot['points']:
         lines.append(','.join(str(row[header]) for header in headers))
     return '\n'.join(lines).rstrip()
+
+
+def render_borrower_trends_csv(snapshot):
+    buffer = StringIO()
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow([
+        'date',
+        'borrower',
+        'active_loans',
+        'overdue_loans',
+        'checkouts_started',
+        'returns_completed',
+    ])
+    for point in snapshot['points']:
+        for borrower in point['borrowers']:
+            writer.writerow(
+                [
+                    point['date'],
+                    borrower['borrower'],
+                    borrower['active_loans'],
+                    borrower['overdue_loans'],
+                    borrower['checkouts_started'],
+                    borrower['returns_completed'],
+                ]
+            )
+    return buffer.getvalue().rstrip()
 
 
 def _trend_x(index, count, left, width):
@@ -1261,6 +1476,168 @@ def _render_trend_panel(snapshot, metric_key, label, color, left, top, width, he
         f'{axis_labels}'
         '</g>'
     )
+
+
+def _render_borrower_trend_panel(snapshot, metric_key, label, left, top, width, height, panel_id):
+    chart_left = left + 52
+    chart_top = top + 42
+    chart_width = width - 78
+    chart_height = height - 82
+    baseline_y = chart_top + chart_height
+    max_value = 0
+    series = []
+    for borrower in snapshot['borrowers']:
+        values = []
+        for point in snapshot['points']:
+            row = next(item for item in point['borrowers'] if item['borrower'] == borrower['borrower'])
+            values.append(row[metric_key])
+        max_value = max(max_value, max(values, default=0))
+        series.append({'borrower': borrower['borrower'], 'color': borrower['color'], 'values': values})
+
+    mid_value = max((max_value + 1) // 2, 1) if max_value else 0
+    y_ticks = [0]
+    if max_value > 1 and mid_value not in {0, max_value}:
+        y_ticks.append(mid_value)
+    if max_value not in {0, y_ticks[-1]}:
+        y_ticks.append(max_value)
+
+    grid_lines = ''.join(
+        (
+            f'<line x1="{chart_left:.2f}" y1="{_trend_y(tick, max_value, chart_top, chart_height):.2f}" '
+            f'x2="{chart_left + chart_width:.2f}" y2="{_trend_y(tick, max_value, chart_top, chart_height):.2f}" '
+            'stroke="#dbe4f0" stroke-width="1" />'
+            f'<text x="{left + 14:.2f}" y="{_trend_y(tick, max_value, chart_top, chart_height) + 4:.2f}" '
+            'font-size="12" fill="#64748b">'
+            f'{escape(str(tick))}'
+            '</text>'
+        )
+        for tick in y_ticks
+    )
+
+    series_markup = ''.join(
+        (
+            f'<polyline fill="none" stroke="{series_entry["color"]}" stroke-width="3" '
+            'stroke-linecap="round" stroke-linejoin="round" '
+            f'points="{' '.join(
+                f'{_trend_x(index, len(snapshot["points"]), chart_left, chart_width):.2f},{_trend_y(value, max_value, chart_top, chart_height):.2f}'
+                for index, value in enumerate(series_entry["values"])
+            )}" />'
+            + ''.join(
+                (
+                    f'<circle cx="{_trend_x(index, len(snapshot["points"]), chart_left, chart_width):.2f}" '
+                    f'cy="{_trend_y(value, max_value, chart_top, chart_height):.2f}" r="3.5" fill="{series_entry["color"]}">'
+                    f'<title>{escape(series_entry["borrower"])} {escape(label.lower())} on '
+                    f'{escape(snapshot["points"][index]["date"])}: {value}</title>'
+                    '</circle>'
+                )
+                for index, value in enumerate(series_entry['values'])
+            )
+        )
+        for series_entry in series
+    )
+
+    first_date = snapshot['points'][0]['date']
+    mid_date = snapshot['points'][len(snapshot['points']) // 2]['date']
+    last_date = snapshot['points'][-1]['date']
+    axis_labels = ''.join(
+        (
+            f'<text x="{x:.2f}" y="{top + height - 16:.2f}" font-size="12" fill="#64748b" '
+            f'text-anchor="{anchor}">{escape(label_text)}</text>'
+        )
+        for x, label_text, anchor in [
+            (chart_left, first_date, 'start'),
+            (chart_left + chart_width / 2, mid_date, 'middle'),
+            (chart_left + chart_width, last_date, 'end'),
+        ]
+    )
+
+    title_id = f'{panel_id}-title'
+    desc_id = f'{panel_id}-desc'
+    return (
+        f'<g role="group" aria-labelledby="{title_id}" aria-describedby="{desc_id}">'
+        f'<title id="{title_id}">{escape(label)}</title>'
+        f'<desc id="{desc_id}">Daily {escape(label.lower())} for the top {len(snapshot["borrowers"])} borrower cohorts '
+        f'from {escape(snapshot["start_date"])} to {escape(snapshot["end_date"])}. Peak value {max_value}.</desc>'
+        f'<rect x="{left:.2f}" y="{top:.2f}" width="{width:.2f}" height="{height:.2f}" '
+        'rx="22" fill="#ffffff" stroke="#d6deeb" />'
+        f'<text x="{left + 18:.2f}" y="{top + 28:.2f}" font-size="18" font-weight="700" fill="#0f172a">{escape(label)}</text>'
+        f'{grid_lines}'
+        f'<line x1="{chart_left:.2f}" y1="{baseline_y:.2f}" x2="{chart_left + chart_width:.2f}" y2="{baseline_y:.2f}" stroke="#94a3b8" stroke-width="1.2" />'
+        f'{series_markup}'
+        f'{axis_labels}'
+        '</g>'
+    )
+
+
+def render_borrower_trends_svg(snapshot):
+    title_id = 'library-borrower-trends-title'
+    desc_id = 'library-borrower-trends-desc'
+
+    legend_markup = ''.join(
+        (
+            f'<rect x="{40 + (index % 2) * 320:.2f}" y="{126 + (index // 2) * 22:.2f}" width="16" height="16" rx="4" fill="{borrower["color"]}" />'
+            f'<text x="{64 + (index % 2) * 320:.2f}" y="{139 + (index // 2) * 22:.2f}" font-size="14" fill="#334155">{escape(borrower["borrower"])}</text>'
+        )
+        for index, borrower in enumerate(snapshot['borrowers'])
+    )
+    card_width = 260
+    cards_markup = ''.join(
+        (
+            f'<g transform="translate({40 + index * (card_width + 16)}, 160)">'
+            '<rect width="260" height="90" rx="18" fill="#ffffff" stroke="#d6deeb" />'
+            f'<text x="18" y="30" font-size="14" fill="#64748b">{escape(borrower["borrower"])}</text>'
+            f'<text x="18" y="62" font-size="30" font-weight="700" fill="{borrower["color"]}">{borrower["total_loans"]}</text>'
+            f'<text x="18" y="78" font-size="12" fill="#64748b">loans touching this range, peak active {borrower["peak_active_loans"]}</text>'
+            '</g>'
+        )
+        for index, borrower in enumerate(snapshot['borrowers'][:4])
+    )
+    panels = ''.join(
+        [
+            _render_borrower_trend_panel(snapshot, 'active_loans', 'Active loans by borrower', 40, 274, 520, 220, 'borrower-active-panel'),
+            _render_borrower_trend_panel(snapshot, 'overdue_loans', 'Overdue loans by borrower', 600, 274, 520, 220, 'borrower-overdue-panel'),
+        ]
+    )
+
+    table_top = 524
+    row_height = 30
+    table_rows = ''.join(
+        (
+            f'<rect x="40" y="{table_top + 80 + index * row_height:.2f}" width="1080" height="{row_height:.2f}" '
+            f'fill="{"#ffffff" if index % 2 == 0 else "#f8fafc"}" stroke="#e2e8f0" />'
+            f'<text x="58" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{escape(borrower["borrower"])}</text>'
+            f'<text x="380" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{borrower["total_loans"]}</text>'
+            f'<text x="500" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{borrower["peak_active_loans"]}</text>'
+            f'<text x="650" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{borrower["peak_overdue_loans"]}</text>'
+            f'<text x="792" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{borrower["total_checkouts_started"]}</text>'
+            f'<text x="932" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{borrower["total_returns_completed"]}</text>'
+            f'<text x="1046" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{borrower["days_with_active_loans"]}</text>'
+        )
+        for index, borrower in enumerate(snapshot['borrowers'])
+    )
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="760" viewBox="0 0 1160 760" role="img" aria-labelledby="{title_id}" aria-describedby="{desc_id}">
+  <title id="{title_id}">{escape(snapshot['title'])}</title>
+  <desc id="{desc_id}">Borrower-level circulation trend breakdown from {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])}. The export focuses on the top {snapshot['top_limit']} borrowers by loans touching the selected range and includes active-loan and overdue-loan trend panels plus a summary table.</desc>
+  <rect width="1160" height="760" fill="#f4f7fb" />
+  <rect x="24" y="24" width="1112" height="712" rx="28" fill="#eef4ff" stroke="#d6deeb" />
+  <text x="40" y="68" font-size="30" font-weight="700" fill="#0f172a">{escape(snapshot['title'])}</text>
+  <text x="40" y="95" font-size="15" fill="#475569">Top borrower cohorts from the SQLite circulation history, exported as a static trend pack for portfolio screenshots and recruiter walkthroughs.</text>
+  <text x="40" y="118" font-size="14" fill="#475569">Range: {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])} • Days: {snapshot['days']} • Generated at: {escape(snapshot['generated_at'])}</text>
+  {legend_markup}
+  {cards_markup}
+  {panels}
+  <text x="40" y="546" font-size="18" font-weight="700" fill="#0f172a">Borrower summary</text>
+  <rect x="40" y="568" width="1080" height="36" rx="10" fill="#dbeafe" stroke="#bfdbfe" />
+  <text x="58" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Borrower</text>
+  <text x="380" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Loans</text>
+  <text x="500" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Peak active</text>
+  <text x="650" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Peak overdue</text>
+  <text x="792" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Checkouts</text>
+  <text x="932" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Returns</text>
+  <text x="1046" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Active days</text>
+  {table_rows}
+</svg>'''
 
 
 def render_trends_svg(snapshot):
@@ -1372,6 +1749,15 @@ def main(argv=None):
     trends_parser.add_argument('--title', default='Library circulation trends')
     trends_parser.add_argument('--generated-at')
 
+    borrower_trends_parser = sub.add_parser('borrower-trends', help='Export borrower-level circulation trend breakdowns')
+    borrower_trends_parser.add_argument('--start-date')
+    borrower_trends_parser.add_argument('--end-date')
+    borrower_trends_parser.add_argument('--top', type=int, default=4)
+    borrower_trends_parser.add_argument('--csv-out', type=Path)
+    borrower_trends_parser.add_argument('--svg-out', type=Path)
+    borrower_trends_parser.add_argument('--title', default='Library borrower trend breakdown')
+    borrower_trends_parser.add_argument('--generated-at')
+
     dashboard_parser = sub.add_parser('dashboard', help='Export a recruiter-friendly circulation snapshot')
     dashboard_parser.add_argument('--date', dest='reference_date')
     dashboard_parser.add_argument('--top', type=int, default=5)
@@ -1446,6 +1832,30 @@ def main(argv=None):
                 written.append(str(args.svg_out))
             if written:
                 print('trend artifacts written: ' + ', '.join(written))
+            else:
+                print(csv_output)
+        elif args.cmd == 'borrower-trends':
+            start_day = parse_optional_date(args.start_date, 'start date')
+            end_day = parse_optional_date(args.end_date, 'end date')
+            generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
+            snapshot = build_borrower_trend_snapshot(
+                library,
+                start_date=start_day,
+                end_date=end_day,
+                top_limit=args.top,
+                title=args.title,
+                generated_at=generated_at,
+            )
+            csv_output = render_borrower_trends_csv(snapshot)
+            written = []
+            if args.csv_out:
+                _write_text_output(args.csv_out, csv_output + '\n')
+                written.append(str(args.csv_out))
+            if args.svg_out:
+                _write_text_output(args.svg_out, render_borrower_trends_svg(snapshot) + '\n')
+                written.append(str(args.svg_out))
+            if written:
+                print('borrower trend artifacts written: ' + ', '.join(written))
             else:
                 print(csv_output)
         elif args.cmd == 'dashboard':

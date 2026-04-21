@@ -13,3 +13,4 @@
 - [x] backfill still-active legacy checkouts into the normalized loan tables during migration
 - [x] add a small HTML and Markdown circulation dashboard export for recruiter-friendly portfolio screenshots
 - [x] add chart-friendly trend exports (CSV or SVG) so the dashboard can evolve from a point-in-time snapshot into a small analytics pack
+- [x] add borrower-level trend breakdown exports so the analytics pack can tell a stronger multi-borrower circulation story
