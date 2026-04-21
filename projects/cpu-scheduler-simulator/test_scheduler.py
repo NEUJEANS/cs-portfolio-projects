@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from scheduler import Process, load_processes, simulate
+from scheduler import Process, format_report, load_processes, simulate
 
 
 class SchedulerTests(unittest.TestCase):
@@ -116,6 +116,70 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(by_pid["P2"]["waiting"], 6)
         self.assertEqual(by_pid["P3"]["waiting"], 3)
 
+    def test_context_switch_cost_extends_wall_clock_and_waiting_time(self):
+        result = simulate([
+            Process("P1", arrival=0, burst=3),
+            Process("P2", arrival=0, burst=2),
+        ], "fcfs", context_switch_cost=1)
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 3),
+            ("CS", 3, 4),
+            ("P2", 4, 6),
+        ])
+        by_pid = {row["pid"]: row for row in result["processes"]}
+        self.assertEqual(by_pid["P2"]["start"], 4)
+        self.assertEqual(by_pid["P2"]["waiting"], 4)
+        self.assertEqual(result["averages"]["context_switches"], 1)
+        self.assertEqual(result["averages"]["context_switch_overhead_time"], 1)
+        self.assertEqual(result["averages"]["scheduler_overhead_pct"], 16.67)
+        self.assertEqual(result["averages"]["cpu_utilization"], 83.33)
+        self.assertEqual(result["total_time"], 6)
+
+    def test_context_switch_cost_skips_idle_gap(self):
+        result = simulate([
+            Process("P1", arrival=0, burst=2),
+            Process("P2", arrival=5, burst=1),
+        ], "fcfs", context_switch_cost=3)
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 2),
+            ("IDLE", 2, 5),
+            ("P2", 5, 6),
+        ])
+        self.assertEqual(result["averages"]["context_switches"], 0)
+        self.assertEqual(result["averages"]["context_switch_overhead_time"], 0)
+        self.assertEqual(result["total_time"], 6)
+
+    def test_format_report_uses_result_context_switch_cost_by_default(self):
+        result = simulate([
+            Process("P1", arrival=0, burst=2),
+            Process("P2", arrival=0, burst=1),
+        ], "fcfs", context_switch_cost=2)
+        report = format_report(result, "fcfs")
+        self.assertIn("context_switch_cost=2", report)
+        self.assertIn("Context-switch overhead time: 2", report)
+
+    def test_round_robin_context_switch_cost_counts_repeated_dispatches(self):
+        result = simulate([
+            Process("P1", arrival=0, burst=3),
+            Process("P2", arrival=0, burst=2),
+        ], "rr", quantum=1, context_switch_cost=1)
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 1),
+            ("CS", 1, 2),
+            ("P2", 2, 3),
+            ("CS", 3, 4),
+            ("P1", 4, 5),
+            ("CS", 5, 6),
+            ("P2", 6, 7),
+            ("CS", 7, 8),
+            ("P1", 8, 9),
+        ])
+        by_pid = {row["pid"]: row for row in result["processes"]}
+        self.assertEqual(by_pid["P1"]["completion"], 9)
+        self.assertEqual(result["averages"]["context_switches"], 4)
+        self.assertEqual(result["averages"]["context_switch_overhead_time"], 4)
+        self.assertEqual(result["total_time"], 9)
+
     def test_idle_gap_is_tracked(self):
         result = simulate([Process("P1", 3, 2)], "fcfs")
         self.assertEqual(result["timeline"][0], {"start": 0, "end": 3, "pid": "IDLE"})
@@ -130,6 +194,10 @@ class SchedulerTests(unittest.TestCase):
     def test_priority_rejects_negative_aging_interval(self):
         with self.assertRaises(ValueError):
             simulate(self.workload, "priority", aging_interval=-1)
+
+    def test_context_switch_cost_rejects_negative_value(self):
+        with self.assertRaises(ValueError):
+            simulate(self.workload, "fcfs", context_switch_cost=-1)
 
     def test_load_processes_rejects_duplicate_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -187,6 +255,33 @@ class SchedulerTests(unittest.TestCase):
             self.assertEqual(payload["processes"][0]["priority"], 0)
             self.assertEqual(payload["timeline"][0]["pid"], "P1")
             self.assertEqual(payload["timeline"][1]["pid"], "P2")
+
+    def test_cli_json_output_for_context_switch_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workload.json"
+            path.write_text(json.dumps([
+                {"pid": "P1", "arrival": 0, "burst": 2},
+                {"pid": "P2", "arrival": 0, "burst": 1},
+            ]))
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "scheduler.py",
+                    "fcfs",
+                    str(path),
+                    "--context-switch-cost",
+                    "2",
+                    "--json",
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["context_switch_cost"], 2)
+            self.assertEqual(payload["timeline"][1]["pid"], "CS")
+            self.assertEqual(payload["averages"]["context_switch_overhead_time"], 2)
 
 
 if __name__ == "__main__":

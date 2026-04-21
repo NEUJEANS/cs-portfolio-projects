@@ -32,6 +32,8 @@ class TimelineSlice:
 
 
 SUPPORTED_ALGORITHMS = {"fcfs", "priority", "sjf", "srtf", "rr"}
+IDLE_PID = "IDLE"
+CONTEXT_SWITCH_PID = "CS"
 
 
 def load_processes(path: Path) -> List[Process]:
@@ -74,7 +76,13 @@ def append_slice(timeline: List[TimelineSlice], start: int, end: int, pid: str) 
     timeline.append(TimelineSlice(start, end, pid))
 
 
-def finalize(processes: List[Process], timeline: List[TimelineSlice], first_start: Dict[str, int], completion: Dict[str, int]) -> Dict:
+def finalize(
+    processes: List[Process],
+    timeline: List[TimelineSlice],
+    first_start: Dict[str, int],
+    completion: Dict[str, int],
+    context_switch_cost: int = 0,
+) -> Dict:
     per_process = []
     for proc in sorted(processes, key=lambda proc: proc.pid):
         complete = completion[proc.pid]
@@ -100,11 +108,19 @@ def finalize(processes: List[Process], timeline: List[TimelineSlice], first_star
         for metric in ("turnaround", "waiting", "response")
     }
     total_time = timeline[-1].end if timeline else 0
-    busy_time = sum(slice_.duration for slice_ in timeline if slice_.pid != "IDLE")
+    useful_time = sum(
+        slice_.duration
+        for slice_ in timeline
+        if slice_.pid not in {IDLE_PID, CONTEXT_SWITCH_PID}
+    )
+    context_switch_time = sum(slice_.duration for slice_ in timeline if slice_.pid == CONTEXT_SWITCH_PID)
     summary = {
         **averages,
-        "cpu_utilization": round((busy_time / total_time) * 100, 2) if total_time else 0.0,
+        "cpu_utilization": round((useful_time / total_time) * 100, 2) if total_time else 0.0,
         "throughput": round(len(processes) / total_time, 4) if total_time else 0.0,
+        "context_switches": sum(1 for slice_ in timeline if slice_.pid == CONTEXT_SWITCH_PID),
+        "context_switch_overhead_time": context_switch_time,
+        "scheduler_overhead_pct": round((context_switch_time / total_time) * 100, 2) if total_time else 0.0,
     }
 
     return {
@@ -112,7 +128,76 @@ def finalize(processes: List[Process], timeline: List[TimelineSlice], first_star
         "timeline": [slice_.__dict__ for slice_ in timeline],
         "averages": summary,
         "total_time": total_time,
+        "context_switch_cost": context_switch_cost,
     }
+
+
+def build_result_from_timeline(
+    processes: Iterable[Process],
+    timeline: List[TimelineSlice],
+    context_switch_cost: int = 0,
+) -> Dict:
+    processes = normalize_processes(processes)
+    first_start: Dict[str, int] = {}
+    completion: Dict[str, int] = {}
+
+    for slice_ in timeline:
+        if slice_.pid in {IDLE_PID, CONTEXT_SWITCH_PID}:
+            continue
+        first_start.setdefault(slice_.pid, slice_.start)
+        completion[slice_.pid] = slice_.end
+
+    return finalize(
+        processes,
+        timeline,
+        first_start,
+        completion,
+        context_switch_cost=context_switch_cost,
+    )
+
+
+def should_charge_context_switch(previous_pid: Optional[str], next_pid: str) -> bool:
+    if previous_pid is None:
+        return False
+    return (
+        previous_pid not in {IDLE_PID, CONTEXT_SWITCH_PID}
+        and next_pid not in {IDLE_PID, CONTEXT_SWITCH_PID}
+        and previous_pid != next_pid
+    )
+
+
+def apply_context_switch_overhead(
+    processes: Iterable[Process],
+    base_timeline: Iterable[TimelineSlice],
+    context_switch_cost: int,
+) -> Dict:
+    if context_switch_cost < 0:
+        raise ValueError("context switch cost must be >= 0")
+
+    timeline = list(base_timeline)
+    if context_switch_cost == 0:
+        return build_result_from_timeline(processes, timeline, context_switch_cost=0)
+
+    augmented: List[TimelineSlice] = []
+    previous_pid: Optional[str] = None
+    offset = 0
+
+    for slice_ in timeline:
+        start = slice_.start + offset
+        end = slice_.end + offset
+        if should_charge_context_switch(previous_pid, slice_.pid):
+            append_slice(augmented, start, start + context_switch_cost, CONTEXT_SWITCH_PID)
+            start += context_switch_cost
+            end += context_switch_cost
+            offset += context_switch_cost
+        append_slice(augmented, start, end, slice_.pid)
+        previous_pid = slice_.pid
+
+    return build_result_from_timeline(
+        processes,
+        augmented,
+        context_switch_cost=context_switch_cost,
+    )
 
 
 def simulate_fcfs(processes: Iterable[Process]) -> Dict:
@@ -124,7 +209,7 @@ def simulate_fcfs(processes: Iterable[Process]) -> Dict:
 
     for proc in processes:
         if time < proc.arrival:
-            append_slice(timeline, time, proc.arrival, "IDLE")
+            append_slice(timeline, time, proc.arrival, IDLE_PID)
             time = proc.arrival
         first_start[proc.pid] = time
         end = time + proc.burst
@@ -151,7 +236,7 @@ def simulate_sjf(processes: Iterable[Process]) -> Dict:
 
         if not ready:
             next_arrival = processes[index].arrival
-            append_slice(timeline, time, next_arrival, "IDLE")
+            append_slice(timeline, time, next_arrival, IDLE_PID)
             time = next_arrival
             continue
 
@@ -192,7 +277,7 @@ def simulate_priority(processes: Iterable[Process], aging_interval: int = 0) -> 
 
         if not ready:
             next_arrival = processes[index].arrival
-            append_slice(timeline, time, next_arrival, "IDLE")
+            append_slice(timeline, time, next_arrival, IDLE_PID)
             time = next_arrival
             continue
 
@@ -230,7 +315,7 @@ def simulate_srtf(processes: Iterable[Process]) -> Dict:
 
         if not ready:
             next_arrival = processes[index].arrival
-            append_slice(timeline, time, next_arrival, "IDLE")
+            append_slice(timeline, time, next_arrival, IDLE_PID)
             time = next_arrival
             continue
 
@@ -281,7 +366,7 @@ def simulate_round_robin(processes: Iterable[Process], quantum: int) -> Dict:
 
         if not ready:
             next_arrival = processes[index].arrival
-            append_slice(timeline, time, next_arrival, "IDLE")
+            append_slice(timeline, time, next_arrival, IDLE_PID)
             time = next_arrival
             continue
 
@@ -305,27 +390,59 @@ def simulate_round_robin(processes: Iterable[Process], quantum: int) -> Dict:
     return finalize(processes, timeline, first_start, completion)
 
 
-def simulate(processes: Iterable[Process], algorithm: str, quantum: int = 2, aging_interval: int = 0) -> Dict:
+def simulate(
+    processes: Iterable[Process],
+    algorithm: str,
+    quantum: int = 2,
+    aging_interval: int = 0,
+    context_switch_cost: int = 0,
+) -> Dict:
+    if context_switch_cost < 0:
+        raise ValueError("context switch cost must be >= 0")
+
+    process_list = list(processes)
     algorithm = algorithm.lower()
     if algorithm == "fcfs":
-        return simulate_fcfs(processes)
-    if algorithm == "priority":
-        return simulate_priority(processes, aging_interval=aging_interval)
-    if algorithm == "sjf":
-        return simulate_sjf(processes)
-    if algorithm == "srtf":
-        return simulate_srtf(processes)
-    if algorithm == "rr":
-        return simulate_round_robin(processes, quantum=quantum)
-    raise ValueError(f"unsupported algorithm: {algorithm}")
+        result = simulate_fcfs(process_list)
+    elif algorithm == "priority":
+        result = simulate_priority(process_list, aging_interval=aging_interval)
+    elif algorithm == "sjf":
+        result = simulate_sjf(process_list)
+    elif algorithm == "srtf":
+        result = simulate_srtf(process_list)
+    elif algorithm == "rr":
+        result = simulate_round_robin(process_list, quantum=quantum)
+    else:
+        raise ValueError(f"unsupported algorithm: {algorithm}")
+
+    if context_switch_cost == 0:
+        return result
+
+    return apply_context_switch_overhead(
+        process_list,
+        [TimelineSlice(**slice_) for slice_ in result["timeline"]],
+        context_switch_cost,
+    )
 
 
-def format_report(result: Dict, algorithm: str, quantum: Optional[int] = None, aging_interval: int = 0) -> str:
+def format_report(
+    result: Dict,
+    algorithm: str,
+    quantum: Optional[int] = None,
+    aging_interval: int = 0,
+    context_switch_cost: int = 0,
+) -> str:
+    effective_context_switch_cost = context_switch_cost or result.get("context_switch_cost", 0)
     header = f"Algorithm: {algorithm.upper()}"
+    modifiers = []
     if algorithm == "rr" and quantum is not None:
-        header += f" (quantum={quantum})"
+        modifiers.append(f"quantum={quantum}")
     if algorithm == "priority" and aging_interval > 0:
-        header += f" (aging_interval={aging_interval})"
+        modifiers.append(f"aging_interval={aging_interval}")
+    if effective_context_switch_cost > 0:
+        modifiers.append(f"context_switch_cost={effective_context_switch_cost}")
+    if modifiers:
+        header += f" ({', '.join(modifiers)})"
 
     timeline = "\n".join(
         f"  [{slice_['start']},{slice_['end']}): {slice_['pid']}"
@@ -337,13 +454,21 @@ def format_report(result: Dict, algorithm: str, quantum: Optional[int] = None, a
         for row in result["processes"]
     )
     averages = result["averages"]
+    context_switch_lines = ""
+    if effective_context_switch_cost > 0:
+        context_switch_lines = (
+            f"\nContext switches: {averages['context_switches']}"
+            f"\nContext-switch overhead time: {averages['context_switch_overhead_time']}"
+            f"\nScheduler overhead: {averages['scheduler_overhead_pct']}%"
+        )
     return (
         f"{header}\n"
         f"Timeline:\n{timeline}\n"
         f"Per-process metrics:\n{rows}\n"
         f"Averages: turnaround={averages['turnaround']}, waiting={averages['waiting']}, response={averages['response']}\n"
         f"CPU utilization: {averages['cpu_utilization']}%\n"
-        f"Throughput: {averages['throughput']} processes/unit\n"
+        f"Throughput: {averages['throughput']} processes/unit"
+        f"{context_switch_lines}\n"
         f"Total time: {result['total_time']}"
     )
 
@@ -361,6 +486,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="priority boost interval for priority scheduling (0 disables aging)",
     )
+    parser.add_argument(
+        "--context-switch-cost",
+        type=int,
+        default=0,
+        help="fixed dispatch overhead charged between two different runnable processes",
+    )
     parser.add_argument("--json", action="store_true", help="print raw JSON result")
     return parser
 
@@ -369,7 +500,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     processes = load_processes(args.workload)
-    result = simulate(processes, args.algorithm, quantum=args.quantum, aging_interval=args.aging_interval)
+    result = simulate(
+        processes,
+        args.algorithm,
+        quantum=args.quantum,
+        aging_interval=args.aging_interval,
+        context_switch_cost=args.context_switch_cost,
+    )
     if args.json:
         print(json.dumps(result, indent=2))
     else:
@@ -379,6 +516,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.algorithm,
                 args.quantum if args.algorithm == "rr" else None,
                 aging_interval=args.aging_interval,
+                context_switch_cost=args.context_switch_cost,
             )
         )
     return 0

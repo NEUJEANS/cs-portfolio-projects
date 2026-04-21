@@ -42,3 +42,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, context-switch overhead
+- [x] identify the next weakest scheduler gap after priority aging and choose context-switch overhead modeling
+- [x] do brief context-switch overhead research and capture a short self-test note
+- [x] add a resumable slice checklist entry
+- [x] implement optional context-switch overhead accounting in the simulator and CLI
+- [x] update the README and sample artifact so the new behavior is easy to demo
+- [x] add unit and CLI tests for overhead timing, idle-gap behavior, repeated RR dispatches, and validation
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
