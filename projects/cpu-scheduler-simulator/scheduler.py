@@ -11,6 +11,7 @@ class Process:
     pid: str
     arrival: int
     burst: int
+    priority: int = 0
 
     def __post_init__(self):
         if self.arrival < 0:
@@ -30,7 +31,7 @@ class TimelineSlice:
         return self.end - self.start
 
 
-SUPPORTED_ALGORITHMS = {"fcfs", "sjf", "srtf", "rr"}
+SUPPORTED_ALGORITHMS = {"fcfs", "priority", "sjf", "srtf", "rr"}
 
 
 def load_processes(path: Path) -> List[Process]:
@@ -50,6 +51,7 @@ def load_processes(path: Path) -> List[Process]:
                 pid=pid,
                 arrival=int(item["arrival"]),
                 burst=int(item["burst"]),
+                priority=int(item.get("priority", 0)),
             )
         )
     return processes
@@ -84,6 +86,7 @@ def finalize(processes: List[Process], timeline: List[TimelineSlice], first_star
                 "pid": proc.pid,
                 "arrival": proc.arrival,
                 "burst": proc.burst,
+                "priority": proc.priority,
                 "start": first_start[proc.pid],
                 "completion": complete,
                 "turnaround": turnaround,
@@ -153,6 +156,53 @@ def simulate_sjf(processes: Iterable[Process]) -> Dict:
             continue
 
         ready.sort(key=lambda proc: (proc.burst, proc.arrival, proc.pid))
+        proc = ready.pop(0)
+        first_start.setdefault(proc.pid, time)
+        end = time + proc.burst
+        append_slice(timeline, time, end, proc.pid)
+        time = end
+        completion[proc.pid] = time
+
+    return finalize(processes, timeline, first_start, completion)
+
+
+def effective_priority(proc: Process, time: int, aging_interval: int) -> int:
+    if aging_interval <= 0:
+        return proc.priority
+    waited = max(0, time - proc.arrival)
+    return proc.priority - (waited // aging_interval)
+
+
+def simulate_priority(processes: Iterable[Process], aging_interval: int = 0) -> Dict:
+    if aging_interval < 0:
+        raise ValueError("aging interval must be >= 0")
+
+    processes = normalize_processes(processes)
+    time = 0
+    index = 0
+    ready: List[Process] = []
+    timeline: List[TimelineSlice] = []
+    first_start: Dict[str, int] = {}
+    completion: Dict[str, int] = {}
+
+    while index < len(processes) or ready:
+        while index < len(processes) and processes[index].arrival <= time:
+            ready.append(processes[index])
+            index += 1
+
+        if not ready:
+            next_arrival = processes[index].arrival
+            append_slice(timeline, time, next_arrival, "IDLE")
+            time = next_arrival
+            continue
+
+        ready.sort(
+            key=lambda proc: (
+                effective_priority(proc, time, aging_interval),
+                proc.arrival,
+                proc.pid,
+            )
+        )
         proc = ready.pop(0)
         first_start.setdefault(proc.pid, time)
         end = time + proc.burst
@@ -255,10 +305,12 @@ def simulate_round_robin(processes: Iterable[Process], quantum: int) -> Dict:
     return finalize(processes, timeline, first_start, completion)
 
 
-def simulate(processes: Iterable[Process], algorithm: str, quantum: int = 2) -> Dict:
+def simulate(processes: Iterable[Process], algorithm: str, quantum: int = 2, aging_interval: int = 0) -> Dict:
     algorithm = algorithm.lower()
     if algorithm == "fcfs":
         return simulate_fcfs(processes)
+    if algorithm == "priority":
+        return simulate_priority(processes, aging_interval=aging_interval)
     if algorithm == "sjf":
         return simulate_sjf(processes)
     if algorithm == "srtf":
@@ -268,17 +320,19 @@ def simulate(processes: Iterable[Process], algorithm: str, quantum: int = 2) -> 
     raise ValueError(f"unsupported algorithm: {algorithm}")
 
 
-def format_report(result: Dict, algorithm: str, quantum: Optional[int] = None) -> str:
+def format_report(result: Dict, algorithm: str, quantum: Optional[int] = None, aging_interval: int = 0) -> str:
     header = f"Algorithm: {algorithm.upper()}"
     if algorithm == "rr" and quantum is not None:
         header += f" (quantum={quantum})"
+    if algorithm == "priority" and aging_interval > 0:
+        header += f" (aging_interval={aging_interval})"
 
     timeline = "\n".join(
         f"  [{slice_['start']},{slice_['end']}): {slice_['pid']}"
         for slice_ in result["timeline"]
     )
     rows = "\n".join(
-        "  {pid}: arrival={arrival}, burst={burst}, start={start}, completion={completion}, "
+        "  {pid}: arrival={arrival}, burst={burst}, priority={priority}, start={start}, completion={completion}, "
         "turnaround={turnaround}, waiting={waiting}, response={response}".format(**row)
         for row in result["processes"]
     )
@@ -295,10 +349,18 @@ def format_report(result: Dict, algorithm: str, quantum: Optional[int] = None) -
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Simulate classic CPU scheduling algorithms")
+    parser = argparse.ArgumentParser(
+        description="Simulate classic CPU scheduling algorithms (priority mode treats lower numbers as higher priority)"
+    )
     parser.add_argument("algorithm", choices=sorted(SUPPORTED_ALGORITHMS))
     parser.add_argument("workload", type=Path, help="JSON file with process definitions")
     parser.add_argument("--quantum", type=int, default=2, help="time quantum for round robin")
+    parser.add_argument(
+        "--aging-interval",
+        type=int,
+        default=0,
+        help="priority boost interval for priority scheduling (0 disables aging)",
+    )
     parser.add_argument("--json", action="store_true", help="print raw JSON result")
     return parser
 
@@ -307,11 +369,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     processes = load_processes(args.workload)
-    result = simulate(processes, args.algorithm, quantum=args.quantum)
+    result = simulate(processes, args.algorithm, quantum=args.quantum, aging_interval=args.aging_interval)
     if args.json:
         print(json.dumps(result, indent=2))
     else:
-        print(format_report(result, args.algorithm, args.quantum if args.algorithm == "rr" else None))
+        print(
+            format_report(
+                result,
+                args.algorithm,
+                args.quantum if args.algorithm == "rr" else None,
+                aging_interval=args.aging_interval,
+            )
+        )
     return 0
 
 
