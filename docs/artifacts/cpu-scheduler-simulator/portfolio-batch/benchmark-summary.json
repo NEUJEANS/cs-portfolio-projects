@@ -32,7 +32,31 @@
         "total_time": 6
       },
       "total_wins": 18,
-      "score_points": 5.5
+      "score_points": 5.5,
+      "win_rates": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 0.0,
+        "slowdown_stddev": 0.0,
+        "throughput": 100.0,
+        "scheduler_overhead_pct": 100.0
+      },
+      "goal_points": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 0.0,
+        "slowdown_stddev": 0.0,
+        "throughput": 1.8333333333333333,
+        "scheduler_overhead_pct": 1.8333333333333333
+      },
+      "goal_ranks": {
+        "avg_turnaround": 4,
+        "avg_waiting": 4,
+        "avg_response": 6,
+        "slowdown_stddev": 6,
+        "throughput": 1,
+        "scheduler_overhead_pct": 1
+      }
     },
     {
       "algorithm": "sjf",
@@ -62,7 +86,31 @@
         "total_time": 6
       },
       "total_wins": 33,
-      "score_points": 16.0
+      "score_points": 16.0,
+      "win_rates": {
+        "avg_turnaround": 66.7,
+        "avg_waiting": 66.7,
+        "avg_response": 16.7,
+        "slowdown_stddev": 50.0,
+        "throughput": 100.0,
+        "scheduler_overhead_pct": 100.0
+      },
+      "goal_points": {
+        "avg_turnaround": 3.0,
+        "avg_waiting": 3.0,
+        "avg_response": 0.5,
+        "slowdown_stddev": 2.0,
+        "throughput": 1.8333333333333333,
+        "scheduler_overhead_pct": 1.8333333333333333
+      },
+      "goal_ranks": {
+        "avg_turnaround": 2,
+        "avg_waiting": 2,
+        "avg_response": 4,
+        "slowdown_stddev": 3,
+        "throughput": 3,
+        "scheduler_overhead_pct": 3
+      }
     },
     {
       "algorithm": "srtf",
@@ -92,7 +140,31 @@
         "total_time": 2
       },
       "total_wins": 24,
-      "score_points": 15.0
+      "score_points": 15.0,
+      "win_rates": {
+        "avg_turnaround": 66.7,
+        "avg_waiting": 66.7,
+        "avg_response": 50.0,
+        "slowdown_stddev": 50.0,
+        "throughput": 33.3,
+        "scheduler_overhead_pct": 33.3
+      },
+      "goal_points": {
+        "avg_turnaround": 3.0,
+        "avg_waiting": 3.0,
+        "avg_response": 2.5,
+        "slowdown_stddev": 2.0,
+        "throughput": 0.5,
+        "scheduler_overhead_pct": 0.5
+      },
+      "goal_ranks": {
+        "avg_turnaround": 1,
+        "avg_waiting": 1,
+        "avg_response": 2,
+        "slowdown_stddev": 1,
+        "throughput": 4,
+        "scheduler_overhead_pct": 4
+      }
     },
     {
       "algorithm": "priority",
@@ -122,7 +194,31 @@
         "total_time": 6
       },
       "total_wins": 18,
-      "score_points": 5.5
+      "score_points": 5.5,
+      "win_rates": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 0.0,
+        "slowdown_stddev": 0.0,
+        "throughput": 100.0,
+        "scheduler_overhead_pct": 100.0
+      },
+      "goal_points": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 0.0,
+        "slowdown_stddev": 0.0,
+        "throughput": 1.8333333333333333,
+        "scheduler_overhead_pct": 1.8333333333333333
+      },
+      "goal_ranks": {
+        "avg_turnaround": 3,
+        "avg_waiting": 3,
+        "avg_response": 5,
+        "slowdown_stddev": 5,
+        "throughput": 2,
+        "scheduler_overhead_pct": 2
+      }
     },
     {
       "algorithm": "rr",
@@ -152,7 +248,31 @@
         "total_time": 0
       },
       "total_wins": 0,
-      "score_points": 0.0
+      "score_points": 0.0,
+      "win_rates": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 0.0,
+        "slowdown_stddev": 0.0,
+        "throughput": 0.0,
+        "scheduler_overhead_pct": 0.0
+      },
+      "goal_points": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 0.0,
+        "slowdown_stddev": 0.0,
+        "throughput": 0.0,
+        "scheduler_overhead_pct": 0.0
+      },
+      "goal_ranks": {
+        "avg_turnaround": 6,
+        "avg_waiting": 6,
+        "avg_response": 3,
+        "slowdown_stddev": 4,
+        "throughput": 6,
+        "scheduler_overhead_pct": 6
+      }
     },
     {
       "algorithm": "mlfq",
@@ -182,7 +302,31 @@
         "total_time": 0
       },
       "total_wins": 6,
-      "score_points": 6.0
+      "score_points": 6.0,
+      "win_rates": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 50.0,
+        "slowdown_stddev": 33.3,
+        "throughput": 0.0,
+        "scheduler_overhead_pct": 0.0
+      },
+      "goal_points": {
+        "avg_turnaround": 0.0,
+        "avg_waiting": 0.0,
+        "avg_response": 3.0,
+        "slowdown_stddev": 2.0,
+        "throughput": 0.0,
+        "scheduler_overhead_pct": 0.0
+      },
+      "goal_ranks": {
+        "avg_turnaround": 5,
+        "avg_waiting": 5,
+        "avg_response": 1,
+        "slowdown_stddev": 2,
+        "throughput": 5,
+        "scheduler_overhead_pct": 5
+      }
     }
   ],
   "scenarios": [
@@ -8963,5 +9107,463 @@
     4,
     8
   ],
-  "mlfq_boost_interval": 12
+  "mlfq_boost_interval": 12,
+  "goal_heatmap_columns": [
+    {
+      "key": "avg_turnaround",
+      "label": "Turnaround"
+    },
+    {
+      "key": "avg_waiting",
+      "label": "Waiting"
+    },
+    {
+      "key": "avg_response",
+      "label": "Response"
+    },
+    {
+      "key": "slowdown_stddev",
+      "label": "Fairness"
+    },
+    {
+      "key": "throughput",
+      "label": "Throughput"
+    },
+    {
+      "key": "scheduler_overhead_pct",
+      "label": "Low overhead"
+    }
+  ],
+  "goal_heatmap": [
+    {
+      "algorithm": "fcfs",
+      "label": "FCFS",
+      "score_points": 5.5,
+      "metrics": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_response",
+          "label": "Response",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput",
+          "win_count": 6,
+          "scenario_count": 6,
+          "win_rate_pct": 100.0
+        },
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead",
+          "win_count": 6,
+          "scenario_count": 6,
+          "win_rate_pct": 100.0
+        }
+      ]
+    },
+    {
+      "algorithm": "sjf",
+      "label": "SJF",
+      "score_points": 16.0,
+      "metrics": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround",
+          "win_count": 4,
+          "scenario_count": 6,
+          "win_rate_pct": 66.7
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting",
+          "win_count": 4,
+          "scenario_count": 6,
+          "win_rate_pct": 66.7
+        },
+        {
+          "key": "avg_response",
+          "label": "Response",
+          "win_count": 1,
+          "scenario_count": 6,
+          "win_rate_pct": 16.7
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness",
+          "win_count": 3,
+          "scenario_count": 6,
+          "win_rate_pct": 50.0
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput",
+          "win_count": 6,
+          "scenario_count": 6,
+          "win_rate_pct": 100.0
+        },
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead",
+          "win_count": 6,
+          "scenario_count": 6,
+          "win_rate_pct": 100.0
+        }
+      ]
+    },
+    {
+      "algorithm": "srtf",
+      "label": "SRTF",
+      "score_points": 15.0,
+      "metrics": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround",
+          "win_count": 4,
+          "scenario_count": 6,
+          "win_rate_pct": 66.7
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting",
+          "win_count": 4,
+          "scenario_count": 6,
+          "win_rate_pct": 66.7
+        },
+        {
+          "key": "avg_response",
+          "label": "Response",
+          "win_count": 3,
+          "scenario_count": 6,
+          "win_rate_pct": 50.0
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness",
+          "win_count": 3,
+          "scenario_count": 6,
+          "win_rate_pct": 50.0
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput",
+          "win_count": 2,
+          "scenario_count": 6,
+          "win_rate_pct": 33.3
+        },
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead",
+          "win_count": 2,
+          "scenario_count": 6,
+          "win_rate_pct": 33.3
+        }
+      ]
+    },
+    {
+      "algorithm": "priority",
+      "label": "PRIORITY (aging=2)",
+      "score_points": 5.5,
+      "metrics": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_response",
+          "label": "Response",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput",
+          "win_count": 6,
+          "scenario_count": 6,
+          "win_rate_pct": 100.0
+        },
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead",
+          "win_count": 6,
+          "scenario_count": 6,
+          "win_rate_pct": 100.0
+        }
+      ]
+    },
+    {
+      "algorithm": "rr",
+      "label": "RR (q=2)",
+      "score_points": 0.0,
+      "metrics": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_response",
+          "label": "Response",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        }
+      ]
+    },
+    {
+      "algorithm": "mlfq",
+      "label": "MLFQ (q=2/4/8, boost=12)",
+      "score_points": 6.0,
+      "metrics": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "avg_response",
+          "label": "Response",
+          "win_count": 3,
+          "scenario_count": 6,
+          "win_rate_pct": 50.0
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness",
+          "win_count": 2,
+          "scenario_count": 6,
+          "win_rate_pct": 33.3
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        },
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead",
+          "win_count": 0,
+          "scenario_count": 6,
+          "win_rate_pct": 0.0
+        }
+      ]
+    }
+  ],
+  "scorecards": [
+    {
+      "algorithm": "fcfs",
+      "label": "FCFS",
+      "score_points": 5.5,
+      "primary_goals": [
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead"
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput"
+        }
+      ],
+      "use_when": "best when minimizing dispatch churn matters most",
+      "headline": "low overhead 6/6, throughput 6/6",
+      "signature_scenarios": [
+        "convoy-mix",
+        "interactive-bursts",
+        "aging-pressure"
+      ],
+      "watch_out": "watch out for slower first-response time across the pack"
+    },
+    {
+      "algorithm": "sjf",
+      "label": "SJF",
+      "score_points": 16.0,
+      "primary_goals": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround"
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting"
+        }
+      ],
+      "use_when": "best when total batch completion time matters most",
+      "headline": "turnaround 4/6, waiting 4/6",
+      "signature_scenarios": [
+        "interactive-bursts",
+        "balanced-seed-17",
+        "convoy-spike-seed-23"
+      ],
+      "watch_out": "watch out for slower first-response time across the pack"
+    },
+    {
+      "algorithm": "srtf",
+      "label": "SRTF",
+      "score_points": 15.0,
+      "primary_goals": [
+        {
+          "key": "avg_turnaround",
+          "label": "Turnaround"
+        },
+        {
+          "key": "avg_waiting",
+          "label": "Waiting"
+        }
+      ],
+      "use_when": "best when total batch completion time matters most",
+      "headline": "turnaround 4/6, waiting 4/6",
+      "signature_scenarios": [
+        "convoy-mix",
+        "aging-pressure",
+        "convoy-spike-seed-23"
+      ],
+      "watch_out": "watch out for heavier context-switch overhead across the pack"
+    },
+    {
+      "algorithm": "priority",
+      "label": "PRIORITY (aging=2)",
+      "score_points": 5.5,
+      "primary_goals": [
+        {
+          "key": "scheduler_overhead_pct",
+          "label": "Low overhead"
+        },
+        {
+          "key": "throughput",
+          "label": "Throughput"
+        }
+      ],
+      "use_when": "best when minimizing dispatch churn matters most",
+      "headline": "low overhead 6/6, throughput 6/6",
+      "signature_scenarios": [
+        "convoy-mix",
+        "interactive-bursts",
+        "aging-pressure"
+      ],
+      "watch_out": "watch out for a less even slowdown spread across processes"
+    },
+    {
+      "algorithm": "rr",
+      "label": "RR (q=2)",
+      "score_points": 0.0,
+      "primary_goals": [
+        {
+          "key": "avg_response",
+          "label": "Response"
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness"
+        }
+      ],
+      "use_when": "best when interactive first-response speed matters most",
+      "headline": "strongest relative showing on response, fairness without outright pack wins",
+      "signature_scenarios": [],
+      "watch_out": "watch out for higher queueing delay across the pack"
+    },
+    {
+      "algorithm": "mlfq",
+      "label": "MLFQ (q=2/4/8, boost=12)",
+      "score_points": 6.0,
+      "primary_goals": [
+        {
+          "key": "avg_response",
+          "label": "Response"
+        },
+        {
+          "key": "slowdown_stddev",
+          "label": "Fairness"
+        }
+      ],
+      "use_when": "best when interactive first-response speed matters most",
+      "headline": "response 3/6, fairness 2/6",
+      "signature_scenarios": [
+        "interactive-bursts",
+        "aging-pressure",
+        "balanced-seed-17"
+      ],
+      "watch_out": "watch out for heavier context-switch overhead across the pack"
+    }
+  ]
 }

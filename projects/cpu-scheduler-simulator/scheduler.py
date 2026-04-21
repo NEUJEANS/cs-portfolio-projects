@@ -114,6 +114,33 @@ BENCHMARK_WIN_LABELS = {
     "total_time": "completion wins",
 }
 
+BENCHMARK_HEATMAP_COLUMNS = [
+    {"key": "avg_turnaround", "label": "Turnaround"},
+    {"key": "avg_waiting", "label": "Waiting"},
+    {"key": "avg_response", "label": "Response"},
+    {"key": "slowdown_stddev", "label": "Fairness"},
+    {"key": "throughput", "label": "Throughput"},
+    {"key": "scheduler_overhead_pct", "label": "Low overhead"},
+]
+
+BENCHMARK_SCORECARD_FIT = {
+    "avg_turnaround": "best when total batch completion time matters most",
+    "avg_waiting": "best when reducing queue buildup matters most",
+    "avg_response": "best when interactive first-response speed matters most",
+    "slowdown_stddev": "best when per-process fairness matters most",
+    "throughput": "best when raw pack throughput matters most",
+    "scheduler_overhead_pct": "best when minimizing dispatch churn matters most",
+}
+
+BENCHMARK_SCORECARD_CAUTIONS = {
+    "avg_turnaround": "watch out for slower total turnaround across the pack",
+    "avg_waiting": "watch out for higher queueing delay across the pack",
+    "avg_response": "watch out for slower first-response time across the pack",
+    "slowdown_stddev": "watch out for a less even slowdown spread across processes",
+    "throughput": "watch out for lower throughput across the pack",
+    "scheduler_overhead_pct": "watch out for heavier context-switch overhead across the pack",
+}
+
 
 def ordered_algorithms(algorithms: Iterable[str]) -> List[str]:
     requested = {algorithm.lower() for algorithm in algorithms}
@@ -1100,6 +1127,8 @@ def benchmark_algorithm_family(
             }
         )
 
+    goal_heatmap, scorecards = build_benchmark_portfolio_views(aggregate_rows, scenarios)
+
     return {
         "mode": "benchmark",
         "family": family["name"],
@@ -1112,6 +1141,9 @@ def benchmark_algorithm_family(
         "context_switch_cost": context_switch_cost,
         "mlfq_quantums": queue_quantums,
         "mlfq_boost_interval": mlfq_boost_interval,
+        "goal_heatmap_columns": BENCHMARK_HEATMAP_COLUMNS,
+        "goal_heatmap": goal_heatmap,
+        "scorecards": scorecards,
     }
 
 
@@ -1180,6 +1212,254 @@ def comparison_includes_mlfq(comparison: Dict) -> bool:
 
 def benchmark_includes_mlfq(benchmark: Dict) -> bool:
     return any(entry["algorithm"] == "mlfq" for entry in benchmark["algorithms"])
+
+
+def blend_hex_color(start: str, end: str, ratio: float) -> str:
+    ratio = max(0.0, min(1.0, ratio))
+    start_channels = [int(start[index:index + 2], 16) for index in range(1, 7, 2)]
+    end_channels = [int(end[index:index + 2], 16) for index in range(1, 7, 2)]
+    channels = [
+        round(start_value + (end_value - start_value) * ratio)
+        for start_value, end_value in zip(start_channels, end_channels)
+    ]
+    return "#" + "".join(f"{value:02x}" for value in channels)
+
+
+def benchmark_win_rate(win_count: int, scenario_count: int) -> float:
+    if scenario_count <= 0:
+        return 0.0
+    return round((win_count / scenario_count) * 100, 1)
+
+
+def best_fit_text(metric_key: str) -> str:
+    return BENCHMARK_SCORECARD_FIT[metric_key]
+
+
+def caution_text(metric_key: str) -> str:
+    return BENCHMARK_SCORECARD_CAUTIONS[metric_key]
+
+
+def infer_scorecard_caution(entry: Dict, aggregate_rows: Sequence[Dict]) -> str:
+    comparisons = [
+        ("avg_response", False),
+        ("avg_waiting", False),
+        ("scheduler_overhead_pct", False),
+        ("slowdown_stddev", False),
+        ("avg_turnaround", False),
+        ("throughput", True),
+    ]
+    for metric_key, higher_is_better in comparisons:
+        values = [row["averages"][metric_key] for row in aggregate_rows]
+        target = min(values) if higher_is_better else max(values)
+        if entry["averages"][metric_key] == target:
+            return caution_text(metric_key)
+
+    weakest_goal = min(
+        BENCHMARK_HEATMAP_COLUMNS,
+        key=lambda column: (
+            entry["win_rates"][column["key"]],
+            entry["win_counts"][column["key"]],
+            column["label"],
+        ),
+    )
+    return caution_text(weakest_goal["key"])
+
+
+def build_benchmark_portfolio_views(aggregate_rows: Sequence[Dict], scenarios: Sequence[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    scorecards = []
+    heatmap_rows = []
+
+    for entry in aggregate_rows:
+        win_rates = {
+            column["key"]: benchmark_win_rate(
+                entry["win_counts"][column["key"]],
+                entry["scenario_count"],
+            )
+            for column in BENCHMARK_HEATMAP_COLUMNS
+        }
+        entry["win_rates"] = win_rates
+        entry["goal_points"] = {column["key"]: 0.0 for column in BENCHMARK_HEATMAP_COLUMNS}
+
+    for scenario in scenarios:
+        for column in BENCHMARK_HEATMAP_COLUMNS:
+            winners = scenario["comparison"]["winners"][column["key"]]
+            point_value = 1 / len(winners)
+            for entry in aggregate_rows:
+                if entry["algorithm"] in winners:
+                    entry["goal_points"][column["key"]] += point_value
+
+    rank_directions = {
+        "avg_turnaround": False,
+        "avg_waiting": False,
+        "avg_response": False,
+        "slowdown_stddev": False,
+        "throughput": True,
+        "scheduler_overhead_pct": False,
+    }
+    for column in BENCHMARK_HEATMAP_COLUMNS:
+        sorted_entries = sorted(
+            aggregate_rows,
+            key=lambda row: (
+                -row["averages"][column["key"]],
+                row["label"],
+            ) if rank_directions[column["key"]] else (
+                row["averages"][column["key"]],
+                row["label"],
+            ),
+        )
+        for rank_index, ranked_entry in enumerate(sorted_entries, start=1):
+            ranked_entry.setdefault("goal_ranks", {})[column["key"]] = rank_index
+
+    for entry in aggregate_rows:
+        sorted_goals = sorted(
+            BENCHMARK_HEATMAP_COLUMNS,
+            key=lambda column: (
+                -entry["goal_points"][column["key"]],
+                -entry["win_rates"][column["key"]],
+                -entry["win_counts"][column["key"]],
+                column["label"],
+            ),
+        )
+        primary_goals = [
+            {"key": column["key"], "label": column["label"]}
+            for column in sorted_goals
+            if entry["win_counts"][column["key"]] > 0
+        ][:2]
+        if not primary_goals:
+            fallback_goals = sorted(
+                BENCHMARK_HEATMAP_COLUMNS,
+                key=lambda column: (
+                    entry["goal_ranks"][column["key"]],
+                    column["label"],
+                ),
+            )[:2]
+            primary_goals = [
+                {"key": column["key"], "label": column["label"]}
+                for column in fallback_goals
+            ]
+
+        signature_scenarios = []
+        goal_keys = [goal["key"] for goal in primary_goals]
+        for scenario in scenarios:
+            if any(entry["algorithm"] in scenario["comparison"]["winners"][goal_key] for goal_key in goal_keys):
+                signature_scenarios.append(scenario["name"])
+
+        if not signature_scenarios:
+            for scenario in scenarios:
+                if any(
+                    entry["algorithm"] in scenario["comparison"]["winners"][column["key"]]
+                    for column in BENCHMARK_HEATMAP_COLUMNS
+                ):
+                    signature_scenarios.append(scenario["name"])
+
+        heatmap_rows.append(
+            {
+                "algorithm": entry["algorithm"],
+                "label": entry["label"],
+                "score_points": entry["score_points"],
+                "metrics": [
+                    {
+                        "key": column["key"],
+                        "label": column["label"],
+                        "win_count": entry["win_counts"][column["key"]],
+                        "scenario_count": entry["scenario_count"],
+                        "win_rate_pct": entry["win_rates"][column["key"]],
+                    }
+                    for column in BENCHMARK_HEATMAP_COLUMNS
+                ],
+            }
+        )
+
+        scorecards.append(
+            {
+                "algorithm": entry["algorithm"],
+                "label": entry["label"],
+                "score_points": entry["score_points"],
+                "primary_goals": primary_goals,
+                "use_when": best_fit_text(primary_goals[0]["key"]),
+                "headline": (
+                    ", ".join(
+                        f"{goal['label'].lower()} {entry['win_counts'][goal['key']]}/{entry['scenario_count']}"
+                        for goal in primary_goals
+                    )
+                    if any(entry["win_counts"][goal["key"]] > 0 for goal in primary_goals)
+                    else "strongest relative showing on "
+                    + ", ".join(goal["label"].lower() for goal in primary_goals)
+                    + " without outright pack wins"
+                ),
+                "signature_scenarios": signature_scenarios[:3],
+                "watch_out": infer_scorecard_caution(entry, aggregate_rows),
+            }
+        )
+
+    return heatmap_rows, scorecards
+
+
+def format_benchmark_heatmap_svg(benchmark: Dict) -> str:
+    columns = benchmark["goal_heatmap_columns"]
+    rows = benchmark["goal_heatmap"]
+    label_width = 250
+    cell_width = 116
+    row_height = 64
+    left = 40
+    top = 150
+    width = left + label_width + cell_width * len(columns) + 30
+    total_height = top + row_height * len(rows) + 120
+
+    def cell_fill(rate: float) -> str:
+        return blend_hex_color("#e2e8f0", "#0f766e", rate / 100)
+
+    def cell_text(rate: float) -> str:
+        return "#f8fafc" if rate >= 56 else "#0f172a"
+
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{total_height}' viewBox='0 0 {width} {total_height}' role='img' aria-labelledby='title desc'>",
+        f"  <title id='title'>CPU Scheduler benchmark goal heatmap for {html.escape(benchmark['family'])}</title>",
+        f"  <desc id='desc'>Win-rate heatmap showing how often each algorithm leads on turnaround, waiting, response, fairness, throughput, and low-overhead goals across the benchmark scenarios.</desc>",
+        f"  <rect width='{width}' height='{total_height}' fill='#f8fafc' />",
+        "  <text x='40' y='56' font-size='28' font-weight='700' fill='#0f172a'>CPU Scheduler benchmark goal heatmap</text>",
+        f"  <text x='40' y='84' font-size='15' fill='#334155'>{html.escape(benchmark['family_description'])}</text>",
+        f"  <text x='40' y='106' font-size='13' fill='#475569'>{html.escape('Win rate = scenarios where the algorithm ties or leads that goal. Higher is darker.')}</text>",
+    ]
+
+    for index, column in enumerate(columns):
+        x = left + label_width + index * cell_width + cell_width / 2
+        parts.append(
+            f"  <text x='{x:.2f}' y='{top - 18}' text-anchor='middle' font-size='13' font-weight='700' fill='#0f172a'>{html.escape(column['label'])}</text>"
+        )
+
+    for row_index, row in enumerate(rows):
+        y = top + row_index * row_height
+        parts.extend(
+            [
+                f"  <text x='{left}' y='{y + 24}' font-size='15' font-weight='700' fill='#0f172a'>{html.escape(row['label'])}</text>",
+                f"  <text x='{left}' y='{y + 44}' font-size='12' fill='#475569'>score points {html.escape(format_metric_value(row['score_points']))}</text>",
+            ]
+        )
+        for column_index, metric in enumerate(row["metrics"]):
+            x = left + label_width + column_index * cell_width
+            fill = cell_fill(metric["win_rate_pct"])
+            text_color = cell_text(metric["win_rate_pct"])
+            parts.extend(
+                [
+                    f"  <rect x='{x}' y='{y}' width='{cell_width - 10}' height='{row_height - 10}' rx='12' ry='12' fill='{fill}' stroke='#cbd5e1' />",
+                    f"  <text x='{x + (cell_width - 10) / 2:.2f}' y='{y + 24}' text-anchor='middle' font-size='16' font-weight='700' fill='{text_color}'>{metric['win_count']}/{metric['scenario_count']}</text>",
+                    f"  <text x='{x + (cell_width - 10) / 2:.2f}' y='{y + 44}' text-anchor='middle' font-size='12' fill='{text_color}'>{html.escape(format_metric_value(metric['win_rate_pct']))}%</text>",
+                ]
+            )
+
+    legend_y = total_height - 44
+    for step, ratio in enumerate([0.0, 0.5, 1.0]):
+        legend_x = left + step * 124
+        parts.append(
+            f"  <rect x='{legend_x}' y='{legend_y}' width='96' height='18' rx='9' ry='9' fill='{cell_fill(ratio * 100)}' stroke='#cbd5e1' />"
+        )
+        parts.append(
+            f"  <text x='{legend_x + 106}' y='{legend_y + 13}' font-size='12' fill='#334155'>{html.escape(format_metric_value(ratio * 100))}%</text>"
+        )
+
+    parts.append("</svg>")
+    return "\n".join(parts)
 
 
 def format_compare_markdown(comparison: Dict) -> str:
@@ -1657,6 +1937,51 @@ def format_benchmark_markdown(benchmark: Dict) -> str:
     lines.extend(
         [
             "",
+            "## Portfolio scorecards",
+        ]
+    )
+    for card in benchmark["scorecards"]:
+        signature = ", ".join(card["signature_scenarios"]) if card["signature_scenarios"] else "none yet"
+        headline = (
+            card["headline"]
+            if card["headline"].startswith("strongest relative showing")
+            else f"wins concentrated at {card['headline']}"
+        )
+        lines.extend(
+            [
+                f"### {card['label']}",
+                f"- headline: {headline}",
+                f"- use when: {card['use_when']}",
+                f"- signature scenarios: {signature}",
+                f"- watch out: {card['watch_out']}",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Goal heatmap",
+            "Win rates below show how often each algorithm ties or leads that headline goal across the benchmark roster.",
+            "",
+            "| Algorithm | Turnaround | Waiting | Response | Fairness | Throughput | Low overhead |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in benchmark["goal_heatmap"]:
+        metric_cells = []
+        for metric in row["metrics"]:
+            metric_cells.append(f"{metric['win_count']}/{metric['scenario_count']} ({format_metric_value(metric['win_rate_pct'])}%)")
+        lines.append(f"| {row['label']} | " + " | ".join(metric_cells) + " |")
+    lines.extend(
+        [
+            "",
+            "- screenshot artifact: `benchmark-heatmap.svg`",
+        ]
+    )
+
+    lines.extend(
+        [
+            "",
             "## Win counts",
             "| Algorithm | Turnaround wins | Waiting wins | Response wins | Slowdown wins | Even-slowdown wins | Throughput wins | Overhead wins | Completion wins | Total wins |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -1730,6 +2055,38 @@ def format_benchmark_html(benchmark: Dict) -> str:
             f"<td>{entry['score_points']}</td>"
             "</tr>"
         )
+
+    scorecard_cards = []
+    for card in benchmark["scorecards"]:
+        signature = ", ".join(card["signature_scenarios"]) if card["signature_scenarios"] else "none yet"
+        headline = (
+            card["headline"]
+            if card["headline"].startswith("strongest relative showing")
+            else f"wins concentrated at {card['headline']}"
+        )
+        scorecard_cards.append(
+            "<article class='card'>"
+            f"<h3>{html.escape(card['label'])}</h3>"
+            f"<p><strong>Headline:</strong> {html.escape(headline)}</p>"
+            f"<p><strong>Use when:</strong> {html.escape(card['use_when'])}</p>"
+            f"<p><strong>Signature scenarios:</strong> {html.escape(signature)}</p>"
+            f"<p><strong>Watch out:</strong> {html.escape(card['watch_out'])}</p>"
+            "</article>"
+        )
+
+    heatmap_rows = []
+    for row in benchmark["goal_heatmap"]:
+        heatmap_rows.append(
+            "<tr>"
+            f"<td>{html.escape(row['label'])}</td>"
+            + "".join(
+                f"<td>{metric['win_count']}/{metric['scenario_count']} ({html.escape(format_metric_value(metric['win_rate_pct']))}%)</td>"
+                for metric in row["metrics"]
+            )
+            + "</tr>"
+        )
+
+    heatmap_svg = format_benchmark_heatmap_svg(benchmark)
 
     win_rows = []
     for entry in benchmark["algorithms"]:
@@ -1812,6 +2169,23 @@ def format_benchmark_html(benchmark: Dict) -> str:
       padding: 1rem;
       background: color-mix(in srgb, Canvas 92%, currentColor 3%);
     }}
+    .scorecards {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }}
+    .heatmap {{
+      overflow-x: auto;
+      margin-top: 1rem;
+    }}
+    .heatmap svg {{
+      width: 100%;
+      height: auto;
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      border-radius: 16px;
+      background: #f8fafc;
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -1848,6 +2222,17 @@ def format_benchmark_html(benchmark: Dict) -> str:
     <tbody>{''.join(scoreboard_rows)}</tbody>
   </table>
 
+  <h2>Portfolio scorecards</h2>
+  <div class="scorecards">{''.join(scorecard_cards)}</div>
+
+  <h2>Goal heatmap</h2>
+  <p>Win rates below show how often each algorithm ties or leads that headline goal across the benchmark roster.</p>
+  <div class="heatmap">{heatmap_svg}</div>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Turnaround</th><th>Waiting</th><th>Response</th><th>Fairness</th><th>Throughput</th><th>Low overhead</th></tr></thead>
+    <tbody>{''.join(heatmap_rows)}</tbody>
+  </table>
+
   <h2>Win counts</h2>
   <table>
     <thead><tr><th>Algorithm</th><th>Turnaround wins</th><th>Waiting wins</th><th>Response wins</th><th>Slowdown wins</th><th>Even-slowdown wins</th><th>Throughput wins</th><th>Overhead wins</th><th>Completion wins</th><th>Total wins</th></tr></thead>
@@ -1869,6 +2254,7 @@ def write_benchmark_bundle(output_dir: Path, benchmark: Dict) -> None:
     write_text(output_dir / "benchmark-summary.md", format_benchmark_markdown(benchmark))
     write_text(output_dir / "benchmark-summary.html", format_benchmark_html(benchmark))
     write_text(output_dir / "benchmark-summary.json", json.dumps(benchmark, indent=2))
+    write_text(output_dir / "benchmark-heatmap.svg", format_benchmark_heatmap_svg(benchmark))
 
     for scenario in benchmark["scenarios"]:
         scenario_dir = output_dir / scenario["name"]

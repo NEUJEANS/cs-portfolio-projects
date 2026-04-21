@@ -29,6 +29,57 @@
 | RR (q=2) | 14.66 | 11.38 | 5.31 | 5.52 | 2.73 | 32.12 | 0.2223 | 33 | 13.0 | 0.0 |
 | MLFQ (q=2/4/8, boost=12) | 13.68 | 10.4 | 3.69 | 4.58 | 1.66 | 30.12 | 0.2295 | 33 | 10.0 | 6.0 |
 
+## Portfolio scorecards
+### FCFS
+- headline: wins concentrated at low overhead 6/6, throughput 6/6
+- use when: best when minimizing dispatch churn matters most
+- signature scenarios: convoy-mix, interactive-bursts, aging-pressure
+- watch out: watch out for slower first-response time across the pack
+
+### SJF
+- headline: wins concentrated at turnaround 4/6, waiting 4/6
+- use when: best when total batch completion time matters most
+- signature scenarios: interactive-bursts, balanced-seed-17, convoy-spike-seed-23
+- watch out: watch out for slower first-response time across the pack
+
+### SRTF
+- headline: wins concentrated at turnaround 4/6, waiting 4/6
+- use when: best when total batch completion time matters most
+- signature scenarios: convoy-mix, aging-pressure, convoy-spike-seed-23
+- watch out: watch out for heavier context-switch overhead across the pack
+
+### PRIORITY (aging=2)
+- headline: wins concentrated at low overhead 6/6, throughput 6/6
+- use when: best when minimizing dispatch churn matters most
+- signature scenarios: convoy-mix, interactive-bursts, aging-pressure
+- watch out: watch out for a less even slowdown spread across processes
+
+### RR (q=2)
+- headline: strongest relative showing on response, fairness without outright pack wins
+- use when: best when interactive first-response speed matters most
+- signature scenarios: none yet
+- watch out: watch out for higher queueing delay across the pack
+
+### MLFQ (q=2/4/8, boost=12)
+- headline: wins concentrated at response 3/6, fairness 2/6
+- use when: best when interactive first-response speed matters most
+- signature scenarios: interactive-bursts, aging-pressure, balanced-seed-17
+- watch out: watch out for heavier context-switch overhead across the pack
+
+## Goal heatmap
+Win rates below show how often each algorithm ties or leads that headline goal across the benchmark roster.
+
+| Algorithm | Turnaround | Waiting | Response | Fairness | Throughput | Low overhead |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| FCFS | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 6/6 (100%) | 6/6 (100%) |
+| SJF | 4/6 (66.7%) | 4/6 (66.7%) | 1/6 (16.7%) | 3/6 (50%) | 6/6 (100%) | 6/6 (100%) |
+| SRTF | 4/6 (66.7%) | 4/6 (66.7%) | 3/6 (50%) | 3/6 (50%) | 2/6 (33.3%) | 2/6 (33.3%) |
+| PRIORITY (aging=2) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 6/6 (100%) | 6/6 (100%) |
+| RR (q=2) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) | 0/6 (0%) |
+| MLFQ (q=2/4/8, boost=12) | 0/6 (0%) | 0/6 (0%) | 3/6 (50%) | 2/6 (33.3%) | 0/6 (0%) | 0/6 (0%) |
+
+- screenshot artifact: `benchmark-heatmap.svg`
+
 ## Win counts
 | Algorithm | Turnaround wins | Waiting wins | Response wins | Slowdown wins | Even-slowdown wins | Throughput wins | Overhead wins | Completion wins | Total wins |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

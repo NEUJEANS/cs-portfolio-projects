@@ -10,9 +10,10 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - shows how context-switch overhead changes wall-clock metrics and scheduler efficiency
 - adds committed workload presets plus side-by-side comparison dashboards for fairness-vs-overhead tradeoffs
 - visualizes per-process waiting and slowdown spread so fairness tradeoffs are visible, not just aggregate winners
+- adds benchmark scorecards and a goal heatmap so multi-scenario results read like a portfolio case study, not just raw tables
 - shows deterministic simulation design and metric calculation
 - includes tests and machine-readable JSON output for verification
-- leaves room for stronger follow-up features like richer benchmark scorecards and custom workload-family authoring
+- leaves room for stronger follow-up features like alternate MLFQ presets and custom workload-family authoring
 
 ## Features
 - simulate **FCFS**, **SJF (non-preemptive)**, **SRTF (preemptive shortest-remaining-time-first)**, **non-preemptive Priority scheduling**, **Round Robin**, and **preemptive MLFQ**
@@ -26,6 +27,7 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - export an SVG fairness dashboard that plots per-process slowdown and waiting-time spread for each algorithm
 - use committed workload presets for convoy-effect, interactive-burst, and aging-pressure demos
 - run a benchmark family pack that mixes committed presets with deterministic generated workloads and exports a full multi-scenario artifact bundle
+- surface benchmark scorecards plus a heatmap SVG that shows which algorithms win turnaround, waiting, response, fairness, throughput, and low-overhead goals across the pack
 - export results as JSON
 - track idle CPU time explicitly in the timeline
 - accept optional per-process priority values (lower number = higher priority)
@@ -73,7 +75,7 @@ MLFQ runs place new arrivals into the highest queue, round-robin within each que
 
 The comparison flow now also surfaces fairness-specific views: a slowdown snapshot table, per-process experience breakdowns, and an optional SVG artifact that makes uneven waiting and slowdown tails easy to screenshot.
 
-`benchmark` mode goes one step wider. It runs the selected algorithms across a built-in family of preset plus deterministic generated workloads, then exports a benchmark-summary Markdown/HTML/JSON bundle and per-scenario compare artifacts. That makes it easier to show that a scheduler recommendation holds up across multiple workload stories instead of one cherry-picked preset, including how MLFQ trades lower response time against added preemption overhead.
+`benchmark` mode goes one step wider. It runs the selected algorithms across a built-in family of preset plus deterministic generated workloads, then exports a benchmark-summary Markdown/HTML/JSON bundle, a screenshot-friendly `benchmark-heatmap.svg`, and per-scenario compare artifacts. That makes it easier to show that a scheduler recommendation holds up across multiple workload stories instead of one cherry-picked preset, including concise scorecards that explain where each scheduler shines and where it gives something up.
 
 When `--context-switch-cost N` is set, the simulator inserts a `CS` slice between two different runnable processes. That cost counts against wall-clock time, lowers useful CPU utilization, and is reported separately as scheduler overhead. The current model deliberately skips idle-to-process dispatches so cross-algorithm churn is easy to compare.
 
@@ -120,7 +122,7 @@ python3 scheduler.py benchmark \
   --output-dir ../../docs/artifacts/cpu-scheduler-simulator/portfolio-batch
 ```
 
-The committed benchmark bundle now lives under `docs/artifacts/cpu-scheduler-simulator/portfolio-batch/` and includes a pack-level summary plus per-scenario compare Markdown/HTML/SVG/JSON artifacts and reproducible workload JSON snapshots.
+The committed benchmark bundle now lives under `docs/artifacts/cpu-scheduler-simulator/portfolio-batch/` and includes a pack-level summary, `benchmark-heatmap.svg`, per-scenario compare Markdown/HTML/SVG/JSON artifacts, and reproducible workload JSON snapshots.
 
 ## Test
 ```bash
@@ -128,6 +130,5 @@ python3 -m unittest -v test_scheduler.py
 ```
 
 ## Next extensions
-- richer benchmark scorecards or heatmaps for larger workload families
 - alternate MLFQ presets that model more queues or stricter boost cadence
 - arrival-pattern editors for custom workload-family authoring

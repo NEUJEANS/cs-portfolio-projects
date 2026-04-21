@@ -11,6 +11,7 @@ from scheduler import (
     Process,
     benchmark_algorithm_family,
     compare_algorithms,
+    format_benchmark_heatmap_svg,
     format_benchmark_markdown,
     format_compare_markdown,
     format_compare_svg,
@@ -396,6 +397,10 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("avg_waiting", fcfs["averages"])
         self.assertIn("avg_turnaround", fcfs["win_counts"])
         self.assertIn("score_points", fcfs)
+        self.assertIn("goal_heatmap", benchmark)
+        self.assertIn("scorecards", benchmark)
+        self.assertEqual(benchmark["goal_heatmap_columns"][0]["label"], "Turnaround")
+        self.assertTrue(any(card["label"].startswith("SRTF") for card in benchmark["scorecards"]))
 
     def test_format_benchmark_markdown_mentions_scoreboard(self):
         benchmark = benchmark_algorithm_family(
@@ -406,9 +411,25 @@ class SchedulerTests(unittest.TestCase):
         report = format_benchmark_markdown(benchmark)
         self.assertIn("# CPU Scheduler Benchmark Pack", report)
         self.assertIn("## Aggregate scoreboard", report)
+        self.assertIn("## Portfolio scorecards", report)
+        self.assertIn("## Goal heatmap", report)
         self.assertIn("## Scenario highlights", report)
         self.assertIn("Description | Source", report)
         self.assertIn("| Algorithm | Avg turnaround | Avg waiting | Avg response |", report)
+
+    def test_format_benchmark_heatmap_svg_mentions_goals(self):
+        benchmark = benchmark_algorithm_family(
+            "portfolio-batch",
+            algorithms=["fcfs", "srtf", "rr"],
+            quantum=2,
+            context_switch_cost=1,
+        )
+        svg = format_benchmark_heatmap_svg(benchmark)
+        self.assertIn("<svg", svg)
+        self.assertIn("CPU Scheduler benchmark goal heatmap", svg)
+        self.assertIn("Turnaround", svg)
+        self.assertIn("Low overhead", svg)
+        self.assertIn("SRTF", svg)
 
     def test_cli_json_output_for_srtf(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -646,6 +667,7 @@ class SchedulerTests(unittest.TestCase):
             self.assertTrue((output_dir / "benchmark-summary.md").exists())
             self.assertTrue((output_dir / "benchmark-summary.html").exists())
             self.assertTrue((output_dir / "benchmark-summary.json").exists())
+            self.assertTrue((output_dir / "benchmark-heatmap.svg").exists())
             self.assertTrue((output_dir / "interactive-bursts" / "compare.svg").exists())
             self.assertTrue((output_dir / "balanced-seed-17" / "workload.json").exists())
 

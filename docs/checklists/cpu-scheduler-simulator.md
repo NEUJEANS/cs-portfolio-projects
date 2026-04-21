@@ -120,3 +120,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, benchmark scorecards and goal heatmap
+- [x] inspect the current scheduler benchmark bundle and confirm the next weak spot is recruiter-facing storytelling after the MLFQ slice
+- [x] skip external web research because this slice extends the existing benchmark artifact architecture directly
+- [x] self-test the current benchmark flow before editing
+- [x] add a resumable slice checklist entry
+- [x] implement benchmark scorecards plus a screenshot-friendly goal heatmap SVG
+- [x] thread the new scorecard and heatmap data through benchmark Markdown, HTML, JSON, and bundle writing
+- [x] refresh the README and project checklist notes for the new benchmark story
+- [x] run tests and deterministic artifact checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
