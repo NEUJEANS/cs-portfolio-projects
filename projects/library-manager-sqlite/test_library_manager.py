@@ -11,6 +11,7 @@ from library_manager import (
     LibraryError,
     build_borrower_trend_snapshot,
     build_dashboard_snapshot,
+    build_genre_heatmap_snapshot,
     build_genre_trend_snapshot,
     build_trend_snapshot,
     main,
@@ -18,6 +19,8 @@ from library_manager import (
     render_borrower_trends_svg,
     render_dashboard_html,
     render_dashboard_markdown,
+    render_genre_heatmap_csv,
+    render_genre_heatmap_svg,
     render_genre_trends_csv,
     render_genre_trends_svg,
     render_trends_csv,
@@ -674,6 +677,118 @@ class LibraryTests(unittest.TestCase):
         stdout_breakdown = buffer.getvalue()
         self.assertIn('date,genre,active_loans,overdue_loans,checkouts_started,returns_completed', stdout_breakdown)
         self.assertIn('2026-04-03,Distributed Systems,2,0,1,0', stdout_breakdown)
+
+    def test_genre_heatmap_snapshot_and_renderers_capture_one_glance_activity(self):
+        lib, _ = self.make_library()
+        seeded_books = [
+            ('D1', 'Author', 'Distributed Systems'),
+            ('D2', 'Author', 'Distributed Systems'),
+            ('DB1', 'Author', 'Databases'),
+            ('DB2', 'Author', 'Databases'),
+            ('SEC1', 'Author', 'Security'),
+        ]
+        for title, author, genre in seeded_books:
+            lib.add_book(title, author, genre=genre)
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+        lib.checkout(2, 'Sam', loan_days=10, checkout_date=date(2026, 4, 5))
+        lib.checkout(3, 'Alex', loan_days=7, checkout_date=date(2026, 4, 3))
+        lib.return_book(3, return_date=date(2026, 4, 7))
+        lib.checkout(4, 'Priya', loan_days=14, checkout_date=date(2026, 4, 8))
+        lib.checkout(5, 'Lee', loan_days=14, checkout_date=date(2026, 4, 6))
+
+        snapshot = build_genre_heatmap_snapshot(
+            lib,
+            start_date=date(2026, 4, 1),
+            end_date=date(2026, 4, 12),
+            top_limit=2,
+            title='Genre heatmap pack',
+            generated_at='2026-04-12T09:00:00Z',
+        )
+
+        self.assertEqual(snapshot['start_date'], '2026-04-01')
+        self.assertEqual(snapshot['end_date'], '2026-04-12')
+        self.assertEqual(snapshot['days'], 12)
+        self.assertEqual([row['genre'] for row in snapshot['genres']], ['Databases', 'Distributed Systems'])
+        self.assertEqual(snapshot['summary']['selected_genres'], 2)
+        self.assertEqual(snapshot['summary']['max_active_loans'], 2)
+
+        by_day = {
+            row['date']: {entry['genre']: entry for entry in row['genres']}
+            for row in snapshot['points']
+        }
+        self.assertEqual(by_day['2026-04-06']['Distributed Systems']['active_loans'], 2)
+        self.assertAlmostEqual(by_day['2026-04-06']['Distributed Systems']['active_share'], 2 / 3, places=4)
+        self.assertEqual(by_day['2026-04-08']['Databases']['total_active_selected'], 3)
+        self.assertAlmostEqual(by_day['2026-04-08']['Databases']['active_share'], 1 / 3, places=4)
+
+        csv_output = render_genre_heatmap_csv(snapshot)
+        self.assertIn('date,genre,active_loans,active_share,total_active_selected,overdue_loans,checkouts_started,returns_completed', csv_output)
+        self.assertIn('2026-04-06,Distributed Systems,2,0.6667,3,0,0,0', csv_output)
+        self.assertNotIn('Security', csv_output)
+
+        svg_output = render_genre_heatmap_svg(snapshot)
+        self.assertIn('Genre heatmap pack', svg_output)
+        self.assertIn('Heatmap summary', svg_output)
+        self.assertIn('Genre/day activity heatmap', svg_output)
+        self.assertIn('avg share 31.9%', svg_output)
+
+    def test_cli_genre_heatmap_writes_artifacts_and_supports_stdout_mode(self):
+        lib, db = self.make_library()
+        seeded_books = [
+            ('D1', 'Author', 'Distributed Systems'),
+            ('D2', 'Author', 'Distributed Systems'),
+            ('DB1', 'Author', 'Databases'),
+        ]
+        for title, author, genre in seeded_books:
+            lib.add_book(title, author, genre=genre)
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 3))
+        lib.checkout(3, 'Priya', loan_days=10, checkout_date=date(2026, 4, 5))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        csv_path = Path(tmp.name) / 'artifacts' / 'genre_heatmap.csv'
+        svg_path = Path(tmp.name) / 'artifacts' / 'genre_heatmap.svg'
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(
+                [
+                    '--db',
+                    str(db),
+                    'genre-heatmap',
+                    '--start-date',
+                    '2026-04-01',
+                    '--end-date',
+                    '2026-04-12',
+                    '--top',
+                    '2',
+                    '--csv-out',
+                    str(csv_path),
+                    '--svg-out',
+                    str(svg_path),
+                    '--title',
+                    'CLI genre heatmap',
+                    '--generated-at',
+                    '2026-04-12T09:00:00Z',
+                ]
+            )
+        command_output = buffer.getvalue()
+        self.assertIn('genre heatmap artifacts written:', command_output)
+        self.assertTrue(csv_path.exists())
+        self.assertTrue(svg_path.exists())
+        self.assertIn('2026-04-05,Databases,1,0.3333,3,0,1,0', csv_path.read_text())
+        self.assertIn('CLI genre heatmap', svg_path.read_text())
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'genre-heatmap', '--start-date', '2026-04-01', '--end-date', '2026-04-03', '--top', '2'])
+        stdout_breakdown = buffer.getvalue()
+        self.assertIn('date,genre,active_loans,active_share,total_active_selected,overdue_loans,checkouts_started,returns_completed', stdout_breakdown)
+        self.assertIn('2026-04-03,Distributed Systems,2,1.0000,2,0,1,0', stdout_breakdown)
 
     def test_cli_dashboard_writes_artifacts_and_supports_stdout_mode(self):
         lib, db = self.make_library()

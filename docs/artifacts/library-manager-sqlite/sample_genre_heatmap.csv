@@ -1,0 +1,61 @@
+date,genre,active_loans,active_share,total_active_selected,overdue_loans,checkouts_started,returns_completed
+2026-04-01,Databases,0,0.0000,1,0,0,0
+2026-04-01,Distributed Systems,1,1.0000,1,0,1,0
+2026-04-01,Operating Systems,0,0.0000,1,0,0,0
+2026-04-01,Software Engineering,0,0.0000,1,0,0,0
+2026-04-02,Databases,1,0.5000,2,0,1,0
+2026-04-02,Distributed Systems,1,0.5000,2,0,0,0
+2026-04-02,Operating Systems,0,0.0000,2,0,0,0
+2026-04-02,Software Engineering,0,0.0000,2,0,0,0
+2026-04-03,Databases,1,0.5000,2,0,0,0
+2026-04-03,Distributed Systems,1,0.5000,2,0,0,0
+2026-04-03,Operating Systems,0,0.0000,2,0,0,0
+2026-04-03,Software Engineering,0,0.0000,2,0,0,0
+2026-04-04,Databases,1,0.3333,3,0,0,0
+2026-04-04,Distributed Systems,2,0.6667,3,0,1,0
+2026-04-04,Operating Systems,0,0.0000,3,0,0,0
+2026-04-04,Software Engineering,0,0.0000,3,0,0,0
+2026-04-05,Databases,1,0.2500,4,0,0,0
+2026-04-05,Distributed Systems,2,0.5000,4,0,0,0
+2026-04-05,Operating Systems,0,0.0000,4,0,0,0
+2026-04-05,Software Engineering,1,0.2500,4,0,1,0
+2026-04-06,Databases,0,0.0000,3,0,0,1
+2026-04-06,Distributed Systems,2,0.6667,3,0,0,0
+2026-04-06,Operating Systems,0,0.0000,3,0,0,0
+2026-04-06,Software Engineering,1,0.3333,3,0,0,0
+2026-04-07,Databases,0,0.0000,4,0,0,0
+2026-04-07,Distributed Systems,2,0.5000,4,0,0,0
+2026-04-07,Operating Systems,1,0.2500,4,0,1,0
+2026-04-07,Software Engineering,1,0.2500,4,0,0,0
+2026-04-08,Databases,0,0.0000,3,0,0,0
+2026-04-08,Distributed Systems,1,0.3333,3,0,0,1
+2026-04-08,Operating Systems,1,0.3333,3,0,0,0
+2026-04-08,Software Engineering,1,0.3333,3,0,0,0
+2026-04-09,Databases,1,0.2500,4,0,1,0
+2026-04-09,Distributed Systems,1,0.2500,4,0,0,0
+2026-04-09,Operating Systems,1,0.2500,4,0,0,0
+2026-04-09,Software Engineering,1,0.2500,4,0,0,0
+2026-04-10,Databases,1,0.2500,4,0,0,0
+2026-04-10,Distributed Systems,1,0.2500,4,0,0,0
+2026-04-10,Operating Systems,1,0.2500,4,0,0,0
+2026-04-10,Software Engineering,1,0.2500,4,0,0,0
+2026-04-11,Databases,1,0.2500,4,0,0,0
+2026-04-11,Distributed Systems,1,0.2500,4,0,0,0
+2026-04-11,Operating Systems,1,0.2500,4,0,0,0
+2026-04-11,Software Engineering,1,0.2500,4,0,0,0
+2026-04-12,Databases,1,0.2500,4,0,0,0
+2026-04-12,Distributed Systems,1,0.2500,4,0,0,0
+2026-04-12,Operating Systems,1,0.2500,4,0,0,0
+2026-04-12,Software Engineering,1,0.2500,4,0,0,0
+2026-04-13,Databases,1,0.3333,3,0,0,0
+2026-04-13,Distributed Systems,1,0.3333,3,0,0,0
+2026-04-13,Operating Systems,0,0.0000,3,0,0,1
+2026-04-13,Software Engineering,1,0.3333,3,0,0,0
+2026-04-14,Databases,1,0.3333,3,0,0,0
+2026-04-14,Distributed Systems,1,0.3333,3,0,0,0
+2026-04-14,Operating Systems,0,0.0000,3,0,0,0
+2026-04-14,Software Engineering,1,0.3333,3,0,0,0
+2026-04-15,Databases,1,0.3333,3,0,0,0
+2026-04-15,Distributed Systems,1,0.3333,3,1,0,0
+2026-04-15,Operating Systems,0,0.0000,3,0,0,0
+2026-04-15,Software Engineering,1,0.3333,3,0,0,0

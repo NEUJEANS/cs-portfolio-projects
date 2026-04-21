@@ -32,6 +32,7 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - `trends` exports daily circulation analytics as chart-friendly CSV plus an accessible SVG small-multiples report for portfolio screenshots
 - `borrower-trends` exports top-borrower daily breakdowns as CSV plus a recruiter-friendly SVG cohort dashboard
 - `genre-trends` exports top-genre daily breakdowns as CSV plus a recruiter-friendly SVG cohort dashboard
+- `genre-heatmap` exports a one-glance genre/day activity heatmap as CSV plus an accessible SVG summary for portfolio screenshots
 - dashboard snapshots respect the selected `--date`, so historical exports do not leak future checkouts or returns into earlier views
 - trend exports respect the requested date range so historical charts stay stable and repeatable in committed artifacts
 - borrower trend exports focus on the top borrower cohorts touching the selected range, so recruiter demos stay readable even as history grows
@@ -63,6 +64,11 @@ python3 library_manager.py --db library.db genre-trends --start-date 2026-04-01 
   --csv-out ../../docs/artifacts/library-manager-sqlite/sample_genre_trends.csv \
   --svg-out ../../docs/artifacts/library-manager-sqlite/sample_genre_trends.svg \
   --generated-at 2026-04-30T12:00:00Z
+python3 library_manager.py --db library.db genre-heatmap --start-date 2026-04-01 --end-date 2026-04-30 \
+  --top 4 \
+  --csv-out ../../docs/artifacts/library-manager-sqlite/sample_genre_heatmap.csv \
+  --svg-out ../../docs/artifacts/library-manager-sqlite/sample_genre_heatmap.svg \
+  --generated-at 2026-04-30T12:00:00Z
 python3 library_manager.py --db library.db dashboard --date 2026-04-30 \
   --markdown-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.md \
   --html-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.html \
@@ -79,6 +85,8 @@ python3 library_manager.py --db library.db return 1
 - sample borrower trends SVG: `docs/artifacts/library-manager-sqlite/sample_borrower_trends.svg`
 - sample genre trends CSV: `docs/artifacts/library-manager-sqlite/sample_genre_trends.csv`
 - sample genre trends SVG: `docs/artifacts/library-manager-sqlite/sample_genre_trends.svg`
+- sample genre heatmap CSV: `docs/artifacts/library-manager-sqlite/sample_genre_heatmap.csv`
+- sample genre heatmap SVG: `docs/artifacts/library-manager-sqlite/sample_genre_heatmap.svg`
 
 ## Test
 ```bash
@@ -89,4 +97,4 @@ python3 -m unittest test_library_manager.py
 - support borrower borrowing limits or policy rules
 - add import/export for seed catalogs
 - package the project as an installable CLI
-- add stacked-share or heatmap exports so the subject-level story is visible in one glance instead of separate cohort lines
+- add a stacked-share export so the subject mix can also be shown as a compact composition view alongside the new heatmap
