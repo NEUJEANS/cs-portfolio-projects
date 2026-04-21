@@ -25,8 +25,11 @@ class BenchmarkError(ValueError):
 
 FNV_OFFSET_BASIS_64 = 14695981039346656037
 FNV_PRIME_64 = 1099511628211
+BTREE_BENCHMARK_KEY_MASK = 0x7FFFFFFFFFFFFFFF
 CUCKOO_LAB_PATH = Path(__file__).resolve().parents[1] / "cuckoo-hashing-lab" / "cuckoo_hashing_lab.py"
+B_TREE_LAB_PATH = Path(__file__).resolve().parents[1] / "b-tree-index-lab" / "btree_index.py"
 _CUCKOO_HASH_TABLE_CLASS: type[Any] | None = None
+_BTREE_INDEX_CLASS: type[Any] | None = None
 
 
 @dataclass
@@ -84,6 +87,26 @@ def get_cuckoo_hash_table_class() -> type[Any]:
     spec.loader.exec_module(module)
     _CUCKOO_HASH_TABLE_CLASS = module.CuckooHashTable
     return _CUCKOO_HASH_TABLE_CLASS
+
+
+def get_btree_index_class() -> type[Any]:
+    global _BTREE_INDEX_CLASS
+    if _BTREE_INDEX_CLASS is not None:
+        return _BTREE_INDEX_CLASS
+    if not B_TREE_LAB_PATH.exists():
+        raise BenchmarkError(f"B-tree index lab not found at {B_TREE_LAB_PATH}")
+    spec = importlib.util.spec_from_file_location("extendible_hashing_lab_btree", B_TREE_LAB_PATH)
+    if spec is None or spec.loader is None:
+        raise BenchmarkError("failed to load B-tree index lab module")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    _BTREE_INDEX_CLASS = module.BTreeIndex
+    return _BTREE_INDEX_CLASS
+
+
+def benchmark_btree_key(key: str) -> int:
+    return stable_hash(f"btree-benchmark::{key}") & BTREE_BENCHMARK_KEY_MASK
 
 
 class ExtendibleHashTable:
@@ -814,6 +837,9 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
     bucket_capacity = payload.get("bucket_capacity", 2)
     cuckoo_capacity = payload.get("cuckoo_capacity", 11)
     max_displacements = payload.get("max_displacements", 16)
+    btree_minimum_degree = payload.get("btree_minimum_degree", 2)
+    btree_page_size = payload.get("btree_page_size", 512)
+    btree_value_bytes = payload.get("btree_value_bytes", 32)
     trials = payload.get("trials", 3)
     scenarios = payload.get("scenarios")
     title = payload.get("title", "Extendible hashing benchmark suite")
@@ -826,6 +852,12 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
         raise BenchmarkError("benchmark cuckoo_capacity must be an integer >= 3")
     if not isinstance(max_displacements, int) or max_displacements < 1:
         raise BenchmarkError("benchmark max_displacements must be a positive integer")
+    if not isinstance(btree_minimum_degree, int) or btree_minimum_degree < 2:
+        raise BenchmarkError("benchmark btree_minimum_degree must be an integer >= 2")
+    if not isinstance(btree_page_size, int) or btree_page_size < 1:
+        raise BenchmarkError("benchmark btree_page_size must be a positive integer")
+    if not isinstance(btree_value_bytes, int) or btree_value_bytes < 2:
+        raise BenchmarkError("benchmark btree_value_bytes must be an integer >= 2")
     if not isinstance(trials, int) or trials < 1:
         raise BenchmarkError("benchmark trials must be a positive integer")
     if not isinstance(scenarios, list) or not scenarios:
@@ -833,6 +865,7 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
 
     normalized_scenarios: list[dict[str, Any]] = []
     seen_names: set[str] = set()
+    seen_btree_keys: dict[int, str]
     for index, scenario in enumerate(scenarios, start=1):
         if not isinstance(scenario, dict):
             raise BenchmarkError(f"scenario {index} must be an object")
@@ -851,11 +884,26 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
                 "operations": scenario.get("operations"),
             }
         )
+        btree_key_map: dict[str, int] = {}
+        seen_btree_keys = {}
+        for operation in workload["operations"]:
+            key = operation["key"]
+            if key in btree_key_map:
+                continue
+            mapped_key = benchmark_btree_key(key)
+            previous_key = seen_btree_keys.get(mapped_key)
+            if previous_key is not None and previous_key != key:
+                raise BenchmarkError(
+                    f"scenario {name!r} maps benchmark keys {previous_key!r} and {key!r} to the same B-tree key {mapped_key}"
+                )
+            btree_key_map[key] = mapped_key
+            seen_btree_keys[mapped_key] = key
         normalized_scenarios.append(
             {
                 "name": name,
                 "description": description,
                 "operations": workload["operations"],
+                "btree_key_map": btree_key_map,
             }
         )
 
@@ -864,6 +912,9 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
         "bucket_capacity": bucket_capacity,
         "cuckoo_capacity": cuckoo_capacity,
         "max_displacements": max_displacements,
+        "btree_minimum_degree": btree_minimum_degree,
+        "btree_page_size": btree_page_size,
+        "btree_value_bytes": btree_value_bytes,
         "trials": trials,
         "scenarios": normalized_scenarios,
     }
@@ -891,21 +942,33 @@ def _record_operation_mix_counts(operation_mix: dict[str, int], op: str, outcome
         operation_mix["delete_misses"] += 1
 
 
+def _btree_expected_items(reference: dict[str, str], btree_key_map: dict[str, int]) -> list[dict[str, str | int]]:
+    return [
+        {"key": btree_key_map[key], "value": value}
+        for key, value in sorted(reference.items(), key=lambda item: btree_key_map[item[0]])
+    ]
+
+
 def _run_benchmark_trial(
     scenario: dict[str, Any],
     bucket_capacity: int,
     cuckoo_capacity: int,
     max_displacements: int,
+    btree_minimum_degree: int,
+    btree_page_size: int,
+    btree_value_bytes: int,
     trial: int,
 ) -> dict[str, Any]:
     extendible = ExtendibleHashTable(bucket_capacity=bucket_capacity)
     cuckoo_class = get_cuckoo_hash_table_class()
+    btree_class = get_btree_index_class()
     cuckoo = cuckoo_class(
         capacity=cuckoo_capacity,
         max_displacements=max_displacements,
         salt_a=f"extendible-benchmark-a-{scenario['name']}-{trial}",
         salt_b=f"extendible-benchmark-b-{scenario['name']}-{trial}",
     )
+    btree = btree_class(minimum_degree=btree_minimum_degree)
 
     operation_mix = {
         "puts": 0,
@@ -922,11 +985,16 @@ def _run_benchmark_trial(
     peak_global_depth = extendible.global_depth
     peak_bucket_count = len(extendible.buckets)
     peak_directory_slots = len(extendible.directory)
+    btree_stats = btree.stats()
+    peak_btree_height = btree_stats["height"]
+    peak_btree_node_count = btree_stats["nodes"]
+    btree_key_map = scenario["btree_key_map"]
 
     for operation in scenario["operations"]:
         op = operation["op"]
         key = operation["key"]
         value = operation["value"]
+        btree_key = btree_key_map[key]
 
         if op == "put":
             assert value is not None
@@ -944,11 +1012,19 @@ def _run_benchmark_trial(
                 raise BenchmarkError(
                     f"cuckoo hashing returned {cuckoo_outcome!r} for {key!r}; expected {expected_outcome!r}"
                 )
+            btree_existing = btree.search(btree_key)
+            btree.insert(btree_key, value)
+            btree_outcome = "updated" if btree_existing is not None else "inserted"
+            if btree_outcome != expected_outcome:
+                raise BenchmarkError(
+                    f"B-tree returned {btree_outcome!r} for {key!r}; expected {expected_outcome!r}"
+                )
             outcome = expected_outcome
         elif op == "get":
             expected_value = reference.get(key)
             extendible_value = extendible.get(key)
             cuckoo_value = cuckoo.get(key)
+            btree_value = btree.search(btree_key)
             if extendible_value != expected_value:
                 raise BenchmarkError(
                     f"extendible hashing lookup for {key!r} returned {extendible_value!r}; expected {expected_value!r}"
@@ -957,6 +1033,10 @@ def _run_benchmark_trial(
                 raise BenchmarkError(
                     f"cuckoo hashing lookup for {key!r} returned {cuckoo_value!r}; expected {expected_value!r}"
                 )
+            if btree_value != expected_value:
+                raise BenchmarkError(
+                    f"B-tree lookup for {key!r} returned {btree_value!r}; expected {expected_value!r}"
+                )
             outcome = f"found:{expected_value}" if expected_value is not None else "missing"
         else:
             expected_removed = key in reference
@@ -964,6 +1044,7 @@ def _run_benchmark_trial(
                 del reference[key]
             extendible_removed = extendible.delete(key)
             cuckoo_removed = cuckoo.remove(key)
+            btree_removed = btree.delete(btree_key)
             if extendible_removed != expected_removed:
                 raise BenchmarkError(
                     f"extendible hashing delete for {key!r} returned {extendible_removed}; expected {expected_removed}"
@@ -972,16 +1053,24 @@ def _run_benchmark_trial(
                 raise BenchmarkError(
                     f"cuckoo hashing delete for {key!r} returned {cuckoo_removed}; expected {expected_removed}"
                 )
+            if btree_removed != expected_removed:
+                raise BenchmarkError(
+                    f"B-tree delete for {key!r} returned {btree_removed}; expected {expected_removed}"
+                )
             outcome = "deleted" if expected_removed else "missing"
 
         _record_operation_mix_counts(operation_mix, op, outcome)
         peak_global_depth = max(peak_global_depth, extendible.global_depth)
         peak_bucket_count = max(peak_bucket_count, len(extendible.buckets))
         peak_directory_slots = max(peak_directory_slots, len(extendible.directory))
+        btree_stats = btree.stats()
+        peak_btree_height = max(peak_btree_height, btree_stats["height"])
+        peak_btree_node_count = max(peak_btree_node_count, btree_stats["nodes"])
 
     expected_items = sorted(reference.items(), key=lambda item: item[0])
     extendible_items = extendible.items()
     cuckoo_items = cuckoo.items()
+    btree_items = btree.items()
     if extendible_items != expected_items:
         raise BenchmarkError(
             f"extendible hashing final items did not match reference for scenario {scenario['name']!r} trial {trial}"
@@ -990,9 +1079,15 @@ def _run_benchmark_trial(
         raise BenchmarkError(
             f"cuckoo hashing final items did not match reference for scenario {scenario['name']!r} trial {trial}"
         )
+    if btree_items != _btree_expected_items(reference, btree_key_map):
+        raise BenchmarkError(
+            f"B-tree final items did not match reference for scenario {scenario['name']!r} trial {trial}"
+        )
 
     extendible_stats = extendible.stats()
     cuckoo_stats = cuckoo.stats()
+    btree_stats = btree.stats()
+    btree_layout = btree.page_layout(page_size=btree_page_size, value_bytes=btree_value_bytes)
     return {
         "trial": trial,
         "operation_mix": operation_mix,
@@ -1015,6 +1110,18 @@ def _run_benchmark_trial(
             "rehash_count": cuckoo_stats["rehash_count"],
             "displacement_count": cuckoo_stats["displacement_count"],
             "empty_slots": cuckoo_stats["empty_slots"],
+        },
+        "btree": {
+            "minimum_degree": btree_minimum_degree,
+            "page_size": btree_page_size,
+            "value_bytes": btree_value_bytes,
+            "final_height": btree_stats["height"],
+            "peak_height": peak_btree_height,
+            "final_node_count": btree_stats["nodes"],
+            "peak_node_count": peak_btree_node_count,
+            "root_keys": btree_stats["root_keys"],
+            "page_padding_bytes": btree_layout["padding_bytes"],
+            "paged_file_bytes": btree_layout["header_bytes"] + (btree_stats["nodes"] * btree_page_size),
         },
     }
 
@@ -1049,6 +1156,15 @@ def summarize_benchmark_trials(scenario: dict[str, Any], trial_rows: list[dict[s
             f"scenario {scenario['name']!r} produced inconsistent extendible-hashing metrics across trials"
         )
 
+    btree_signatures = {
+        json.dumps(row["btree"], sort_keys=True)
+        for row in trial_rows
+    }
+    if len(btree_signatures) != 1:
+        raise BenchmarkError(
+            f"scenario {scenario['name']!r} produced inconsistent B-tree metrics across trials"
+        )
+
     return {
         "name": scenario["name"],
         "description": scenario["description"],
@@ -1076,6 +1192,7 @@ def summarize_benchmark_trials(scenario: dict[str, Any], trial_rows: list[dict[s
                 max(row["cuckoo"]["empty_slots"] for row in trial_rows),
             ],
         },
+        "btree": dict(first_row["btree"]),
         "trial_rows": trial_rows,
     }
 
@@ -1090,6 +1207,9 @@ def run_benchmark_suite(payload: dict[str, Any]) -> dict[str, Any]:
                 bucket_capacity=suite["bucket_capacity"],
                 cuckoo_capacity=suite["cuckoo_capacity"],
                 max_displacements=suite["max_displacements"],
+                btree_minimum_degree=suite["btree_minimum_degree"],
+                btree_page_size=suite["btree_page_size"],
+                btree_value_bytes=suite["btree_value_bytes"],
                 trial=trial,
             )
             for trial in range(1, suite["trials"] + 1)
@@ -1100,6 +1220,9 @@ def run_benchmark_suite(payload: dict[str, Any]) -> dict[str, Any]:
         "bucket_capacity": suite["bucket_capacity"],
         "cuckoo_capacity": suite["cuckoo_capacity"],
         "max_displacements": suite["max_displacements"],
+        "btree_minimum_degree": suite["btree_minimum_degree"],
+        "btree_page_size": suite["btree_page_size"],
+        "btree_value_bytes": suite["btree_value_bytes"],
         "trials": suite["trials"],
         "scenario_count": len(suite["scenarios"]),
         "results": results,
@@ -1119,29 +1242,29 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
             f"- Extendible bucket capacity: `{summary['bucket_capacity']}`",
             f"- Cuckoo starting capacity: `{summary['cuckoo_capacity']}`",
             f"- Cuckoo max displacements: `{summary['max_displacements']}`",
+            f"- B-tree minimum degree: `{summary['btree_minimum_degree']}`",
+            f"- B-tree page size / value bytes: `{summary['btree_page_size']}` / `{summary['btree_value_bytes']}`",
             f"- Trials per scenario: `{summary['trials']}`",
             "",
             "## Scenario scoreboard",
-            "| Scenario | Ops | Final entries | Ext splits | Ext merges | Dir grows | Dir shrinks | Peak depth | Peak buckets | Cuckoo avg rehashes | Cuckoo avg displacements | Cuckoo capacity range |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            "| Scenario | Ops | Final entries | Ext splits | Ext merges | Peak depth | Cuckoo avg rehashes | Cuckoo avg displacements | B-tree height | B-tree nodes | B-tree paged bytes |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in summary["results"]:
         lines.append(
-            "| {name} | {ops} | {entries} | {splits} | {merges} | {dir_grows} | {dir_shrinks} | {peak_depth} | {peak_buckets} | {rehashes} | {displacements} | `{capacity_min}-{capacity_max}` |".format(
+            "| {name} | {ops} | {entries} | {splits} | {merges} | {peak_depth} | {rehashes} | {displacements} | {btree_height} | {btree_nodes} | {btree_bytes} |".format(
                 name=row["name"],
                 ops=row["operation_count"],
                 entries=row["final_entry_count"],
                 splits=row["extendible"]["split_count"],
                 merges=row["extendible"]["merge_count"],
-                dir_grows=row["extendible"]["directory_growth_count"],
-                dir_shrinks=row["extendible"]["directory_shrink_count"],
                 peak_depth=row["extendible"]["peak_global_depth"],
-                peak_buckets=row["extendible"]["peak_bucket_count"],
                 rehashes=row["cuckoo"]["average_rehash_count"],
                 displacements=row["cuckoo"]["average_displacement_count"],
-                capacity_min=row["cuckoo"]["final_capacity_range"][0],
-                capacity_max=row["cuckoo"]["final_capacity_range"][1],
+                btree_height=row["btree"]["final_height"],
+                btree_nodes=row["btree"]["final_node_count"],
+                btree_bytes=row["btree"]["paged_file_bytes"],
             )
         )
     lines.append("")
@@ -1155,15 +1278,16 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
                 f"- Operation mix: `puts={row['operation_mix']['puts']}` (`insertions={row['operation_mix']['insertions']}`, `updates={row['operation_mix']['updates']}`), `gets={row['operation_mix']['gets']}` (`hits={row['operation_mix']['get_hits']}`, `misses={row['operation_mix']['get_misses']}`), `deletes={row['operation_mix']['deletes']}` (`hits={row['operation_mix']['delete_hits']}`, `misses={row['operation_mix']['delete_misses']}`)",
                 f"- Extendible hashing finished at global depth `{row['extendible']['final_global_depth']}` with `{row['extendible']['final_bucket_count']}` buckets and load factor `{row['extendible']['load_factor']}` after `{row['extendible']['split_count']}` splits / `{row['extendible']['merge_count']}` merges and `{row['extendible']['directory_growth_count']}` directory growth(s) / `{row['extendible']['directory_shrink_count']}` directory shrink(s).",
                 f"- Cuckoo hashing averaged `{row['cuckoo']['average_rehash_count']}` rehashes and `{row['cuckoo']['average_displacement_count']}` displacements, finishing between capacities `{row['cuckoo']['final_capacity_range'][0]}` and `{row['cuckoo']['final_capacity_range'][1]}`.",
+                f"- B-tree page baseline finished at height `{row['btree']['final_height']}` across `{row['btree']['final_node_count']}` node(s); at `page_size={row['btree']['page_size']}` and `value_bytes={row['btree']['value_bytes']}` the paged snapshot would occupy `{row['btree']['paged_file_bytes']}` bytes with `{row['btree']['page_padding_bytes']}` bytes of fixed slack per page.",
                 f"- Validation: final states matched across `{row['validation']['trials']}` deterministic trial(s).",
                 "",
-                "| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity |",
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity | B-tree height | B-tree nodes | B-tree paged bytes |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for trial_row in row["trial_rows"]:
             lines.append(
-                f"| {trial_row['trial']} | {trial_row['extendible']['split_count']} | {trial_row['extendible']['merge_count']} | {trial_row['extendible']['peak_global_depth']} | {trial_row['extendible']['peak_bucket_count']} | {trial_row['extendible']['peak_directory_slots']} | {trial_row['cuckoo']['rehash_count']} | {trial_row['cuckoo']['displacement_count']} | {trial_row['cuckoo']['final_capacity']} |"
+                f"| {trial_row['trial']} | {trial_row['extendible']['split_count']} | {trial_row['extendible']['merge_count']} | {trial_row['extendible']['peak_global_depth']} | {trial_row['extendible']['peak_bucket_count']} | {trial_row['extendible']['peak_directory_slots']} | {trial_row['cuckoo']['rehash_count']} | {trial_row['cuckoo']['displacement_count']} | {trial_row['cuckoo']['final_capacity']} | {trial_row['btree']['final_height']} | {trial_row['btree']['final_node_count']} | {trial_row['btree']['paged_file_bytes']} |"
             )
         lines.append("")
 
@@ -1175,6 +1299,7 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "scenario",
                 "operation_count",
@@ -1205,6 +1330,16 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                 "cuckoo_final_capacity_max",
                 "cuckoo_empty_slots_min",
                 "cuckoo_empty_slots_max",
+                "btree_minimum_degree",
+                "btree_page_size",
+                "btree_value_bytes",
+                "btree_final_height",
+                "btree_peak_height",
+                "btree_final_node_count",
+                "btree_peak_node_count",
+                "btree_root_keys",
+                "btree_page_padding_bytes",
+                "btree_paged_file_bytes",
             ],
         )
         writer.writeheader()
@@ -1240,6 +1375,16 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "cuckoo_final_capacity_max": row["cuckoo"]["final_capacity_range"][1],
                     "cuckoo_empty_slots_min": row["cuckoo"]["empty_slot_range"][0],
                     "cuckoo_empty_slots_max": row["cuckoo"]["empty_slot_range"][1],
+                    "btree_minimum_degree": row["btree"]["minimum_degree"],
+                    "btree_page_size": row["btree"]["page_size"],
+                    "btree_value_bytes": row["btree"]["value_bytes"],
+                    "btree_final_height": row["btree"]["final_height"],
+                    "btree_peak_height": row["btree"]["peak_height"],
+                    "btree_final_node_count": row["btree"]["final_node_count"],
+                    "btree_peak_node_count": row["btree"]["peak_node_count"],
+                    "btree_root_keys": row["btree"]["root_keys"],
+                    "btree_page_padding_bytes": row["btree"]["page_padding_bytes"],
+                    "btree_paged_file_bytes": row["btree"]["paged_file_bytes"],
                 }
             )
 
@@ -1278,7 +1423,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     benchmark_parser = subparsers.add_parser(
         "benchmark",
-        help="compare extendible hashing against the repo's cuckoo hashing lab across mixed workloads",
+        help="compare extendible hashing against the repo's cuckoo hashing and B-tree labs across mixed workloads",
     )
     benchmark_parser.add_argument("--input", required=True, type=Path, help="benchmark suite JSON file")
     benchmark_parser.add_argument("--json-out", type=Path, help="optional JSON summary output")
@@ -1286,8 +1431,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--csv-out", type=Path, help="optional CSV summary output")
     benchmark_parser.add_argument(
         "--title",
-        default="Extendible hashing benchmark comparison",
-        help="report title to use for --markdown-out",
+        help="optional title override for JSON/stdout and --markdown-out",
     )
 
     visualize_parser = subparsers.add_parser(
@@ -1350,12 +1494,14 @@ def command_delete(args: argparse.Namespace) -> int:
 def command_benchmark(args: argparse.Namespace) -> int:
     suite = load_json(args.input)
     summary = run_benchmark_suite(suite)
+    if args.title:
+        summary = {**summary, "title": args.title}
     if args.json_out:
         save_json(args.json_out, summary)
     if args.markdown_out:
         args.markdown_out.parent.mkdir(parents=True, exist_ok=True)
         args.markdown_out.write_text(
-            render_benchmark_markdown_report(args.title, summary, suite_source=str(args.input)) + "\n",
+            render_benchmark_markdown_report(summary["title"], summary, suite_source=str(args.input)) + "\n",
             encoding="utf-8",
         )
     if args.csv_out:

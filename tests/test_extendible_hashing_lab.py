@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -333,10 +334,30 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                 }
             )
 
+    def test_validate_benchmark_suite_rejects_btree_key_collisions(self) -> None:
+        with mock.patch.object(MODULE, "benchmark_btree_key", side_effect=[42, 42]):
+            with self.assertRaises(BenchmarkError):
+                validate_benchmark_suite(
+                    {
+                        "scenarios": [
+                            {
+                                "name": "collision-check",
+                                "operations": [
+                                    {"op": "put", "key": "alpha", "value": "1"},
+                                    {"op": "put", "key": "beta", "value": "2"},
+                                ],
+                            }
+                        ]
+                    }
+                )
+
     def test_run_benchmark_suite_returns_comparison_metrics(self) -> None:
         summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
         self.assertEqual(summary["scenario_count"], 3)
         self.assertEqual(summary["trials"], 3)
+        self.assertEqual(summary["btree_minimum_degree"], 2)
+        self.assertEqual(summary["btree_page_size"], 512)
+        self.assertEqual(summary["btree_value_bytes"], 32)
         scenario_names = [row["name"] for row in summary["results"]]
         self.assertEqual(
             scenario_names,
@@ -350,6 +371,8 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertTrue(all(row["extendible"]["split_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["extendible"]["directory_growth_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["cuckoo"]["average_rehash_count"] >= 0 for row in summary["results"]))
+        self.assertTrue(all(row["btree"]["final_height"] >= 1 for row in summary["results"]))
+        self.assertTrue(all(row["btree"]["paged_file_bytes"] > 0 for row in summary["results"]))
 
     def test_summarize_benchmark_trials_rejects_inconsistent_extendible_metrics(self) -> None:
         scenario = {
@@ -391,6 +414,18 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     "displacement_count": 0,
                     "empty_slots": 6,
                 },
+                "btree": {
+                    "minimum_degree": 2,
+                    "page_size": 512,
+                    "value_bytes": 32,
+                    "final_height": 1,
+                    "peak_height": 1,
+                    "final_node_count": 1,
+                    "peak_node_count": 1,
+                    "root_keys": 1,
+                    "page_padding_bytes": 440,
+                    "paged_file_bytes": 541,
+                },
             },
             {
                 "trial": 2,
@@ -424,6 +459,121 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     "rehash_count": 0,
                     "displacement_count": 0,
                     "empty_slots": 6,
+                },
+                "btree": {
+                    "minimum_degree": 2,
+                    "page_size": 512,
+                    "value_bytes": 32,
+                    "final_height": 1,
+                    "peak_height": 1,
+                    "final_node_count": 1,
+                    "peak_node_count": 1,
+                    "root_keys": 1,
+                    "page_padding_bytes": 440,
+                    "paged_file_bytes": 541,
+                },
+            },
+        ]
+        with self.assertRaises(BenchmarkError):
+            summarize_benchmark_trials(scenario, trial_rows)
+
+    def test_summarize_benchmark_trials_rejects_inconsistent_btree_metrics(self) -> None:
+        scenario = {
+            "name": "nondeterministic-btree",
+            "description": "synthetic inconsistent benchmark rows",
+            "operations": [{"op": "put", "key": "alpha", "value": "1"}],
+        }
+        trial_rows = [
+            {
+                "trial": 1,
+                "operation_mix": {
+                    "puts": 1,
+                    "insertions": 1,
+                    "updates": 0,
+                    "gets": 0,
+                    "get_hits": 0,
+                    "get_misses": 0,
+                    "deletes": 0,
+                    "delete_hits": 0,
+                    "delete_misses": 0,
+                },
+                "final_entry_count": 1,
+                "extendible": {
+                    "final_global_depth": 0,
+                    "peak_global_depth": 0,
+                    "final_bucket_count": 1,
+                    "peak_bucket_count": 1,
+                    "peak_directory_slots": 1,
+                    "load_factor": 0.5,
+                    "split_count": 0,
+                    "merge_count": 0,
+                    "directory_growth_count": 0,
+                    "directory_shrink_count": 0,
+                },
+                "cuckoo": {
+                    "final_capacity": 7,
+                    "load_factor": 0.1429,
+                    "rehash_count": 0,
+                    "displacement_count": 0,
+                    "empty_slots": 6,
+                },
+                "btree": {
+                    "minimum_degree": 2,
+                    "page_size": 512,
+                    "value_bytes": 32,
+                    "final_height": 1,
+                    "peak_height": 1,
+                    "final_node_count": 1,
+                    "peak_node_count": 1,
+                    "root_keys": 1,
+                    "page_padding_bytes": 440,
+                    "paged_file_bytes": 541,
+                },
+            },
+            {
+                "trial": 2,
+                "operation_mix": {
+                    "puts": 1,
+                    "insertions": 1,
+                    "updates": 0,
+                    "gets": 0,
+                    "get_hits": 0,
+                    "get_misses": 0,
+                    "deletes": 0,
+                    "delete_hits": 0,
+                    "delete_misses": 0,
+                },
+                "final_entry_count": 1,
+                "extendible": {
+                    "final_global_depth": 0,
+                    "peak_global_depth": 0,
+                    "final_bucket_count": 1,
+                    "peak_bucket_count": 1,
+                    "peak_directory_slots": 1,
+                    "load_factor": 0.5,
+                    "split_count": 0,
+                    "merge_count": 0,
+                    "directory_growth_count": 0,
+                    "directory_shrink_count": 0,
+                },
+                "cuckoo": {
+                    "final_capacity": 7,
+                    "load_factor": 0.1429,
+                    "rehash_count": 0,
+                    "displacement_count": 0,
+                    "empty_slots": 6,
+                },
+                "btree": {
+                    "minimum_degree": 2,
+                    "page_size": 512,
+                    "value_bytes": 32,
+                    "final_height": 2,
+                    "peak_height": 2,
+                    "final_node_count": 3,
+                    "peak_node_count": 3,
+                    "root_keys": 1,
+                    "page_padding_bytes": 440,
+                    "paged_file_bytes": 1565,
                 },
             },
         ]
@@ -512,6 +662,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(updated_snapshot_path.exists())
             self.assertIsNotNone(load_snapshot(updated_snapshot_path))
 
+            benchmark_title = "Extendible hashing vs cuckoo hashing and B-tree benchmark comparison"
             benchmark_process = subprocess.run(
                 [
                     sys.executable,
@@ -525,6 +676,8 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     str(benchmark_md),
                     "--csv-out",
                     str(benchmark_csv),
+                    "--title",
+                    benchmark_title,
                 ],
                 check=True,
                 capture_output=True,
@@ -534,7 +687,17 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(benchmark_md.exists())
             self.assertTrue(benchmark_csv.exists())
             self.assertIn('"scenario_count": 3', benchmark_process.stdout)
-            self.assertIn("directory-friendly-read-heavy", benchmark_md.read_text(encoding="utf-8"))
+            self.assertIn('"btree_page_size": 512', benchmark_process.stdout)
+            self.assertIn(benchmark_title, benchmark_process.stdout)
+            benchmark_md_text = benchmark_md.read_text(encoding="utf-8")
+            self.assertIn(benchmark_title, benchmark_md_text)
+            self.assertIn("directory-friendly-read-heavy", benchmark_md_text)
+            self.assertIn("B-tree page baseline", benchmark_md_text)
+            benchmark_json_payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
+            self.assertEqual(benchmark_json_payload["title"], benchmark_title)
+            benchmark_csv_text = benchmark_csv.read_text(encoding="utf-8")
+            self.assertIn("btree_paged_file_bytes", benchmark_csv_text)
+            self.assertNotIn("\r", benchmark_csv_text)
 
             visualize_process = subprocess.run(
                 [
