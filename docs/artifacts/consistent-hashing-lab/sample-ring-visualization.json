@@ -1,0 +1,293 @@
+{
+  "displayed_key_count": 12,
+  "effective_replication_factor": 2,
+  "hidden_key_count": 12,
+  "html_output": "docs/artifacts/consistent-hashing-lab/sample-ring-visualization.html",
+  "load_report": {
+    "average_load": 12.0,
+    "distribution": {
+      "node-a": 13,
+      "node-b": 11,
+      "node-c": 13,
+      "node-d": 11
+    },
+    "effective_replication_factor": 2,
+    "imbalance_ratio": 1.0833333333333333,
+    "max_load": 13,
+    "min_load": 11,
+    "nodes": 4,
+    "replication_factor": 2,
+    "total_keys": 24,
+    "total_replica_placements": 48,
+    "virtual_nodes_per_physical": 32
+  },
+  "node_colors": {
+    "node-a": "#2563eb",
+    "node-b": "#dc2626",
+    "node-c": "#059669",
+    "node-d": "#d97706"
+  },
+  "nodes": [
+    "node-a",
+    "node-b",
+    "node-c",
+    "node-d"
+  ],
+  "replication_factor": 2,
+  "ring_points_by_node": {
+    "node-a": 32,
+    "node-b": 32,
+    "node-c": 32,
+    "node-d": 32
+  },
+  "ring_points_preview": [
+    {
+      "color": "#059669",
+      "fraction": 0.018388653604589602,
+      "physical_node": "node-c",
+      "position": 6257334573058996258717484007743493846,
+      "virtual_node": "node-c#4"
+    },
+    {
+      "color": "#d97706",
+      "fraction": 0.03171648064089034,
+      "physical_node": "node-d",
+      "position": 10792559102884287540157456049365991375,
+      "virtual_node": "node-d#5"
+    },
+    {
+      "color": "#059669",
+      "fraction": 0.03437402535986692,
+      "physical_node": "node-c",
+      "position": 11696874710055877463484910254672356531,
+      "virtual_node": "node-c#28"
+    },
+    {
+      "color": "#d97706",
+      "fraction": 0.03621969533729548,
+      "physical_node": "node-d",
+      "position": 12324923658530183482440446580426872868,
+      "virtual_node": "node-d#16"
+    },
+    {
+      "color": "#d97706",
+      "fraction": 0.03689804122714516,
+      "physical_node": "node-d",
+      "position": 12555752803519324652519695371638253096,
+      "virtual_node": "node-d#12"
+    },
+    {
+      "color": "#dc2626",
+      "fraction": 0.046041054246546316,
+      "physical_node": "node-b",
+      "position": 15666958914550105156826871740260973816,
+      "virtual_node": "node-b#7"
+    },
+    {
+      "color": "#dc2626",
+      "fraction": 0.056137130909604406,
+      "physical_node": "node-b",
+      "position": 19102475778070762217021428624641591344,
+      "virtual_node": "node-b#13"
+    },
+    {
+      "color": "#059669",
+      "fraction": 0.09301814145478327,
+      "physical_node": "node-c",
+      "position": 31652433340820315236277026270176670649,
+      "virtual_node": "node-c#14"
+    },
+    {
+      "color": "#2563eb",
+      "fraction": 0.09483258801480718,
+      "physical_node": "node-a",
+      "position": 32269857510916806552878478468974764909,
+      "virtual_node": "node-a#16"
+    },
+    {
+      "color": "#d97706",
+      "fraction": 0.10979389804935265,
+      "physical_node": "node-d",
+      "position": 37360927501709927569097865329462680998,
+      "virtual_node": "node-d#17"
+    },
+    {
+      "color": "#d97706",
+      "fraction": 0.11791298607360381,
+      "physical_node": "node-d",
+      "position": 40123709991841562745057528556709237684,
+      "virtual_node": "node-d#7"
+    },
+    {
+      "color": "#dc2626",
+      "fraction": 0.1192936306186179,
+      "physical_node": "node-b",
+      "position": 40593518985495435723174267248024117569,
+      "virtual_node": "node-b#5"
+    }
+  ],
+  "ring_points_preview_truncated": true,
+  "sample_assignments": [
+    {
+      "key": "key-0",
+      "owner_colors": [
+        "#d97706",
+        "#059669"
+      ],
+      "owners": [
+        "node-d",
+        "node-c"
+      ],
+      "primary_owner": "node-d",
+      "token": "k1"
+    },
+    {
+      "key": "key-1",
+      "owner_colors": [
+        "#059669",
+        "#d97706"
+      ],
+      "owners": [
+        "node-c",
+        "node-d"
+      ],
+      "primary_owner": "node-c",
+      "token": "k2"
+    },
+    {
+      "key": "key-2",
+      "owner_colors": [
+        "#059669",
+        "#2563eb"
+      ],
+      "owners": [
+        "node-c",
+        "node-a"
+      ],
+      "primary_owner": "node-c",
+      "token": "k3"
+    },
+    {
+      "key": "key-3",
+      "owner_colors": [
+        "#d97706",
+        "#059669"
+      ],
+      "owners": [
+        "node-d",
+        "node-c"
+      ],
+      "primary_owner": "node-d",
+      "token": "k4"
+    },
+    {
+      "key": "key-4",
+      "owner_colors": [
+        "#2563eb",
+        "#059669"
+      ],
+      "owners": [
+        "node-a",
+        "node-c"
+      ],
+      "primary_owner": "node-a",
+      "token": "k5"
+    },
+    {
+      "key": "key-5",
+      "owner_colors": [
+        "#059669",
+        "#d97706"
+      ],
+      "owners": [
+        "node-c",
+        "node-d"
+      ],
+      "primary_owner": "node-c",
+      "token": "k6"
+    },
+    {
+      "key": "key-6",
+      "owner_colors": [
+        "#dc2626",
+        "#2563eb"
+      ],
+      "owners": [
+        "node-b",
+        "node-a"
+      ],
+      "primary_owner": "node-b",
+      "token": "k7"
+    },
+    {
+      "key": "key-7",
+      "owner_colors": [
+        "#2563eb",
+        "#dc2626"
+      ],
+      "owners": [
+        "node-a",
+        "node-b"
+      ],
+      "primary_owner": "node-a",
+      "token": "k8"
+    },
+    {
+      "key": "key-8",
+      "owner_colors": [
+        "#dc2626",
+        "#2563eb"
+      ],
+      "owners": [
+        "node-b",
+        "node-a"
+      ],
+      "primary_owner": "node-b",
+      "token": "k9"
+    },
+    {
+      "key": "key-9",
+      "owner_colors": [
+        "#2563eb",
+        "#d97706"
+      ],
+      "owners": [
+        "node-a",
+        "node-d"
+      ],
+      "primary_owner": "node-a",
+      "token": "k10"
+    },
+    {
+      "key": "key-10",
+      "owner_colors": [
+        "#2563eb",
+        "#059669"
+      ],
+      "owners": [
+        "node-a",
+        "node-c"
+      ],
+      "primary_owner": "node-a",
+      "token": "k11"
+    },
+    {
+      "key": "key-11",
+      "owner_colors": [
+        "#059669",
+        "#d97706"
+      ],
+      "owners": [
+        "node-c",
+        "node-d"
+      ],
+      "primary_owner": "node-c",
+      "token": "k12"
+    }
+  ],
+  "svg_output": "docs/artifacts/consistent-hashing-lab/sample-ring-visualization.svg",
+  "title": "Consistent hashing ring with replica placement",
+  "total_keys": 24,
+  "virtual_nodes_per_physical": 32,
+  "virtual_point_count": 128
+}

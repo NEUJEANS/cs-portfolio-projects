@@ -17,6 +17,7 @@ A distributed-systems portfolio project that simulates a consistent hashing ring
 - node add/remove remap simulation with movement ratio and replica-placement change output
 - virtual-node benchmark mode that compares imbalance and optional remap behavior across multiple ring sizes
 - chart-ready CSV export and recruiter-friendly Markdown export for benchmark series
+- self-contained SVG and HTML ring visualizations with sample key ownership overlays
 
 ## Usage
 
@@ -102,6 +103,20 @@ python3 consistent_hashing.py benchmark \
   --markdown-out docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.md
 ```
 
+Render a portfolio-ready ring snapshot with sample key ownership and load bars:
+
+```bash
+python3 consistent_hashing.py visualize \
+  --nodes node-a node-b node-c node-d \
+  --key-count 24 \
+  --displayed-key-count 12 \
+  --virtual-nodes 32 \
+  --replication-factor 2 \
+  --title "Consistent hashing ring with replica placement" \
+  --svg-out docs/artifacts/consistent-hashing-lab/sample-ring-visualization.svg \
+  --html-out docs/artifacts/consistent-hashing-lab/sample-ring-visualization.html
+```
+
 ## Notes
 - Replica selection always returns distinct physical nodes.
 - If `--replication-factor` is larger than the number of physical nodes, the report exposes the capped `effective_replication_factor`.
@@ -109,11 +124,16 @@ python3 consistent_hashing.py benchmark \
 - `benchmark` accepts either `--add-node` or `--remove-node` when you want movement metrics, but not both in the same run.
 - `--csv-out` flattens the benchmark series into spreadsheet-friendly rows, including the tested topology change and the best imbalance point.
 - `--markdown-out` renders the same deterministic series as a concise benchmark report with a summary table and takeaways.
+- `visualize` keeps stdout as a concise JSON summary while `--svg-out` and `--html-out` write screenshot-friendly artifacts.
+- `--displayed-key-count` limits how many keys are drawn on the ring so the diagram stays readable even when the load report covers more keys.
 
 ## Sample committed artifacts
 - `docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.json`
 - `docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.csv`
 - `docs/artifacts/consistent-hashing-lab/sample-virtual-node-benchmark.md`
+- `docs/artifacts/consistent-hashing-lab/sample-ring-visualization.json`
+- `docs/artifacts/consistent-hashing-lab/sample-ring-visualization.svg`
+- `docs/artifacts/consistent-hashing-lab/sample-ring-visualization.html`
 
 ## Test
 
@@ -122,5 +142,5 @@ python3 -m unittest projects/consistent-hashing-lab/test_consistent_hashing.py
 ```
 
 ## Future improvements
-- render the ring visually for before/after topology screenshots
 - simulate rack/zone-aware replica placement constraints
+- add PNG capture or multi-topology galleries so the ring snapshots are even easier to drop into slides

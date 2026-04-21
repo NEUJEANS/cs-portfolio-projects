@@ -60,3 +60,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 visualization export slice
+- [x] capture brief visualization-export research note
+- [x] capture short visualization self-test
+- [x] extend checklist and README scope for ring-visualization support
+- [x] add a `visualize` command that renders consistent-hash ring SVG and HTML artifacts
+- [x] overlay sample key ownership and load-distribution summaries on the visualization output
+- [x] save reproducible sample visualization artifacts under `docs/artifacts/consistent-hashing-lab/`
+- [x] add unit tests for visualization helpers and CLI output paths
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

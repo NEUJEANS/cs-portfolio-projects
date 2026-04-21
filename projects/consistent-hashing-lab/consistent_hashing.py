@@ -4,11 +4,26 @@ import argparse
 import bisect
 import csv
 import hashlib
+import html
 import json
+import math
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
+
+
+HASH_SPACE = 2**128
+NODE_PALETTE = (
+    "#2563eb",
+    "#dc2626",
+    "#059669",
+    "#d97706",
+    "#7c3aed",
+    "#db2777",
+    "#0891b2",
+    "#65a30d",
+)
 
 
 def stable_hash(value: str) -> int:
@@ -64,6 +79,9 @@ class ConsistentHashRing:
         self.nodes.remove(node)
         self._ring = [point for point in self._ring if point.physical_node != node]
         self._positions = [point.position for point in self._ring]
+
+    def ring_points(self) -> list[RingPoint]:
+        return list(self._ring)
 
     def effective_replication_factor(self, replication_factor: int) -> int:
         if replication_factor <= 0:
@@ -257,6 +275,339 @@ def _format_float(value: float) -> str:
     return f"{value:.4f}".rstrip("0").rstrip(".")
 
 
+def _pluralize(count: int, singular: str, plural: str | None = None) -> str:
+    if count == 1:
+        return singular
+    return plural or f"{singular}s"
+
+
+def node_color_map(nodes: Sequence[str]) -> dict[str, str]:
+    return {node: NODE_PALETTE[index % len(NODE_PALETTE)] for index, node in enumerate(nodes)}
+
+
+def build_visualization_payload(
+    nodes: Sequence[str],
+    keys: Sequence[str],
+    virtual_nodes: int,
+    replication_factor: int = 1,
+    displayed_key_count: int = 12,
+    title: str = "Consistent Hash Ring Visualization",
+) -> dict[str, object]:
+    key_list = list(keys)
+    if not key_list:
+        raise ValueError("visualization requires at least one key")
+
+    ring = ConsistentHashRing(nodes, virtual_nodes=virtual_nodes)
+    colors = node_color_map(ring.nodes)
+    display_count = min(displayed_key_count, len(key_list))
+    display_keys = key_list[:display_count]
+    assignments = ring.assign_keys(display_keys, replication_factor=replication_factor)
+    load_report = ring.load_report(key_list, replication_factor=replication_factor)
+
+    sample_assignments: list[dict[str, object]] = []
+    for index, key in enumerate(display_keys, start=1):
+        owners = assignments[key]
+        if isinstance(owners, str):
+            owner_list = [owners]
+        else:
+            owner_list = list(owners)
+        sample_assignments.append(
+            {
+                "token": f"k{index}",
+                "key": key,
+                "owners": owner_list,
+                "primary_owner": owner_list[0],
+                "owner_colors": [colors[owner] for owner in owner_list],
+            }
+        )
+
+    ring_points = [
+        {
+            "physical_node": point.physical_node,
+            "virtual_node": point.virtual_node,
+            "position": point.position,
+            "fraction": point.position / HASH_SPACE,
+            "color": colors[point.physical_node],
+        }
+        for point in ring.ring_points()
+    ]
+
+    return {
+        "title": title,
+        "nodes": list(ring.nodes),
+        "node_colors": colors,
+        "virtual_nodes_per_physical": virtual_nodes,
+        "virtual_point_count": len(ring_points),
+        "replication_factor": replication_factor,
+        "effective_replication_factor": ring.effective_replication_factor(replication_factor),
+        "total_keys": len(key_list),
+        "displayed_key_count": display_count,
+        "hidden_key_count": len(key_list) - display_count,
+        "load_report": load_report,
+        "sample_assignments": sample_assignments,
+        "ring_points": ring_points,
+    }
+
+
+def _hash_fraction(position: int) -> float:
+    return position / HASH_SPACE
+
+
+def _ring_angle(position: int) -> float:
+    return math.tau * _hash_fraction(position) - (math.pi / 2)
+
+
+def _polar_to_cartesian(center_x: float, center_y: float, radius: float, angle: float) -> tuple[float, float]:
+    return (center_x + math.cos(angle) * radius, center_y + math.sin(angle) * radius)
+
+
+def summarize_visualization_payload(payload: dict[str, object], preview_points: int = 12) -> dict[str, object]:
+    summary = dict(payload)
+    ring_points = list(payload["ring_points"])
+    counts: Counter[str] = Counter(point["physical_node"] for point in ring_points)
+    summary["ring_points_preview"] = ring_points[:preview_points]
+    summary["ring_points_preview_truncated"] = len(ring_points) > preview_points
+    summary["ring_points_by_node"] = {node: counts.get(node, 0) for node in payload["nodes"]}
+    summary.pop("ring_points", None)
+    return summary
+
+
+def visualization_hidden_key_summary(payload: dict[str, object]) -> str:
+    hidden = int(payload["hidden_key_count"])
+    displayed = int(payload["displayed_key_count"])
+    if hidden == 0:
+        return f"All {displayed} {_pluralize(displayed, 'key')} are displayed on the ring."
+    return f"Showing {displayed} key markers on the ring; {hidden} more keys still count toward the load report."
+
+
+def visualization_replication_summary(payload: dict[str, object]) -> str:
+    requested = int(payload["replication_factor"])
+    effective = int(payload["effective_replication_factor"])
+    if requested == effective:
+        return f"replication factor {effective}"
+    return f"replication capped at {effective} of requested {requested}"
+
+
+def _distribution_percentage(value: int, total: int) -> str:
+    if total <= 0:
+        return "0%"
+    return f"{(value / total) * 100:.1f}%"
+
+
+def render_visualization_svg(payload: dict[str, object]) -> str:
+    width = 1280
+    height = 820
+    center_x = 340
+    center_y = 430
+    outer_radius = 245
+    key_radius = 188
+    virtual_point_count = int(payload["virtual_point_count"])
+    if virtual_point_count <= 96:
+        point_radius = 4
+    elif virtual_point_count <= 256:
+        point_radius = 3
+    else:
+        point_radius = 2
+    title = html.escape(str(payload["title"]))
+    load_report = payload["load_report"]
+    distribution = load_report["distribution"]
+    max_distribution = max(distribution.values(), default=1) or 1
+    total_placements = int(load_report["total_replica_placements"])
+    hidden_key_summary = html.escape(visualization_hidden_key_summary(payload))
+    replication_summary = html.escape(visualization_replication_summary(payload))
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        f"<title id=\"title\">{title}</title>",
+        f"<desc id=\"desc\">{title} showing consistent-hash virtual points, replica-aware sample assignments, and node load distribution.</desc>",
+        '<rect width="100%" height="100%" fill="#f8fafc"/>',
+        f'<text x="56" y="68" font-size="30" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#0f172a">{title}</text>',
+        '<text x="56" y="100" font-size="15" font-family="Inter, Arial, sans-serif" fill="#475569">Virtual points appear on the ring perimeter. Sample key tokens inside the ring show which physical node owns each placement.</text>',
+        f'<circle cx="{center_x}" cy="{center_y}" r="{outer_radius}" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>',
+        f'<circle cx="{center_x}" cy="{center_y}" r="{key_radius}" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>',
+        f'<circle cx="{center_x}" cy="{center_y}" r="116" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>',
+        f'<text x="{center_x}" y="{center_y - 18}" text-anchor="middle" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#0f172a">{payload["virtual_point_count"]} virtual points</text>',
+        f'<text x="{center_x}" y="{center_y + 12}" text-anchor="middle" font-size="16" font-family="Inter, Arial, sans-serif" fill="#334155">{payload["nodes"] and len(payload["nodes"])} physical nodes</text>',
+        f'<text x="{center_x}" y="{center_y + 36}" text-anchor="middle" font-size="16" font-family="Inter, Arial, sans-serif" fill="#334155">{replication_summary}</text>',
+    ]
+
+    for ring_point in payload["ring_points"]:
+        angle = _ring_angle(int(ring_point["position"]))
+        x, y = _polar_to_cartesian(center_x, center_y, outer_radius, angle)
+        lines.append(
+            f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{point_radius}" fill="{ring_point["color"]}" opacity="0.9">'
+            f"<title>{html.escape(str(ring_point['virtual_node']))} on {html.escape(str(ring_point['physical_node']))}</title></circle>"
+        )
+
+    for assignment in payload["sample_assignments"]:
+        angle = _ring_angle(stable_hash(str(assignment["key"])))
+        x, y = _polar_to_cartesian(center_x, center_y, key_radius, angle)
+        lines.append(
+            f'<circle cx="{x:.2f}" cy="{y:.2f}" r="16" fill="{assignment["owner_colors"][0]}" stroke="#ffffff" stroke-width="3">'
+            f"<title>{html.escape(str(assignment['key']))} → {html.escape(', '.join(assignment['owners']))}</title></circle>"
+        )
+        lines.append(
+            f'<text x="{x:.2f}" y="{y + 5:.2f}" text-anchor="middle" font-size="11" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#ffffff">{html.escape(str(assignment["token"]))}</text>'
+        )
+
+    lines.extend(
+        [
+            '<rect x="660" y="128" width="566" height="204" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="2"/>',
+            '<text x="688" y="164" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#0f172a">Load distribution</text>',
+            f'<text x="688" y="192" font-size="15" font-family="Inter, Arial, sans-serif" fill="#475569">{payload["total_keys"]} total keys, {load_report["total_replica_placements"]} placements, imbalance ratio {html.escape(_format_float(float(load_report["imbalance_ratio"])))}</text>',
+        ]
+    )
+
+    bar_left = 690
+    bar_width = 360
+    for index, node in enumerate(payload["nodes"]):
+        value = distribution[node]
+        width_ratio = value / max_distribution if max_distribution else 0.0
+        percentage = _distribution_percentage(value, total_placements)
+        y = 226 + (index * 38)
+        bar_fill = payload["node_colors"][node]
+        lines.append(
+            f'<text x="688" y="{y}" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="600" fill="#1e293b">{html.escape(str(node))}</text>'
+        )
+        lines.append(
+            f'<rect x="{bar_left}" y="{y + 10}" width="{bar_width}" height="14" rx="7" fill="#e2e8f0"/>'
+        )
+        lines.append(
+            f'<rect x="{bar_left}" y="{y + 10}" width="{bar_width * width_ratio:.2f}" height="14" rx="7" fill="{bar_fill}"/>'
+        )
+        lines.append(
+            f'<text x="{bar_left + bar_width + 18}" y="{y + 22}" font-size="13" font-family="Inter, Arial, sans-serif" fill="#334155">{value} placements ({percentage})</text>'
+        )
+
+    panel_top = 360
+    panel_height = 390
+    lines.extend(
+        [
+            f'<rect x="660" y="{panel_top}" width="566" height="{panel_height}" rx="20" fill="#ffffff" stroke="#dbeafe" stroke-width="2"/>',
+            f'<text x="688" y="{panel_top + 36}" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#0f172a">Sample assignments</text>',
+            f'<text x="688" y="{panel_top + 64}" font-size="15" font-family="Inter, Arial, sans-serif" fill="#475569">{hidden_key_summary}</text>',
+            f'<text x="688" y="{panel_top + 100}" font-size="13" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#334155">Token</text>',
+            f'<text x="760" y="{panel_top + 100}" font-size="13" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#334155">Key</text>',
+            f'<text x="1020" y="{panel_top + 100}" font-size="13" font-family="Inter, Arial, sans-serif" font-weight="700" fill="#334155">Owners</text>',
+        ]
+    )
+
+    row_y = panel_top + 136
+    row_gap = 24
+    for assignment in payload["sample_assignments"]:
+        owners_text = ", ".join(str(owner) for owner in assignment["owners"])
+        lines.append(
+            f'<text x="688" y="{row_y}" font-size="13" font-family="Inter, Arial, sans-serif" font-weight="700" fill="{assignment["owner_colors"][0]}">{html.escape(str(assignment["token"]))}</text>'
+        )
+        lines.append(
+            f'<text x="760" y="{row_y}" font-size="13" font-family="Inter, Arial, sans-serif" fill="#1e293b">{html.escape(str(assignment["key"]))}</text>'
+        )
+        lines.append(
+            f'<text x="1020" y="{row_y}" font-size="13" font-family="Inter, Arial, sans-serif" fill="#1e293b">{html.escape(owners_text)}</text>'
+        )
+        row_y += row_gap
+
+    if payload["hidden_key_count"]:
+        lines.append(
+            f'<text x="688" y="{panel_top + panel_height - 24}" font-size="13" font-family="Inter, Arial, sans-serif" fill="#64748b">Hidden keys are omitted from the ring markers to keep the diagram readable, but all keys remain in the load metrics.</text>'
+        )
+
+    lines.append("</svg>")
+    return "\n".join(lines) + "\n"
+
+
+def render_visualization_html(payload: dict[str, object]) -> str:
+    svg = render_visualization_svg(payload)
+    rows = []
+    for assignment in payload["sample_assignments"]:
+        owners_html = "<br/>".join(html.escape(str(owner)) for owner in assignment["owners"])
+        rows.append(
+            "<tr>"
+            f"<td><strong style=\"color:{assignment['owner_colors'][0]}\">{html.escape(str(assignment['token']))}</strong></td>"
+            f"<td><code>{html.escape(str(assignment['key']))}</code></td>"
+            f"<td>{owners_html}</td>"
+            "</tr>"
+        )
+    load_report = payload["load_report"]
+    hidden_key_summary = visualization_hidden_key_summary(payload)
+    cards = [
+        ("Physical nodes", str(len(payload["nodes"]))),
+        ("Virtual nodes per physical", str(payload["virtual_nodes_per_physical"])),
+        ("Total keys", str(payload["total_keys"])),
+        ("Effective replication", f"{payload['effective_replication_factor']} / {payload['replication_factor']}"),
+        ("Imbalance ratio", _format_float(float(load_report["imbalance_ratio"]))),
+    ]
+    card_html = "".join(
+        f'<div class="card"><span class="label">{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>'
+        for label, value in cards
+    )
+    distribution_items = "".join(
+        f"<li><span class=\"swatch\" style=\"background:{payload['node_colors'][node]}\"></span><strong>{html.escape(str(node))}</strong><span>{load_report['distribution'][node]} placements ({_distribution_percentage(load_report['distribution'][node], load_report['total_replica_placements'])})</span></li>"
+        for node in payload["nodes"]
+    )
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>{html.escape(str(payload['title']))}</title>
+  <style>
+    :root {{ color-scheme: light; }}
+    body {{ margin: 0; font-family: Inter, Arial, sans-serif; background: #e2e8f0; color: #0f172a; }}
+    main {{ max-width: 1320px; margin: 0 auto; padding: 28px; }}
+    h1 {{ margin: 0 0 10px; font-size: 34px; }}
+    p {{ color: #334155; line-height: 1.6; }}
+    .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0 24px; }}
+    .card {{ background: white; border-radius: 18px; padding: 16px 18px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }}
+    .card .label {{ display: block; color: #64748b; font-size: 13px; margin-bottom: 6px; }}
+    .visual {{ background: white; border-radius: 24px; padding: 12px; box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12); overflow: auto; }}
+    .layout {{ display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; margin-top: 24px; }}
+    .panel {{ background: white; border-radius: 24px; padding: 22px; box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12); }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
+    th, td {{ text-align: left; padding: 10px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; font-size: 14px; }}
+    ul {{ list-style: none; padding: 0; margin: 14px 0 0; }}
+    li {{ display: flex; align-items: center; gap: 10px; padding: 8px 0; color: #334155; }}
+    .swatch {{ width: 12px; height: 12px; border-radius: 999px; display: inline-block; }}
+    code {{ background: #eff6ff; border-radius: 8px; padding: 2px 6px; }}
+    @media (max-width: 1100px) {{ .layout {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{html.escape(str(payload['title']))}</h1>
+    <p>Portfolio-ready snapshot of a deterministic consistent-hashing ring. The outer ring shows virtual-node placement, the inner tokens show sample keys, and the side panels keep the load story readable without opening the JSON output.</p>
+    <section class=\"cards\">{card_html}</section>
+    <section class=\"visual\">{svg}</section>
+    <section class=\"layout\">
+      <article class=\"panel\">
+        <h2>Sample assignments</h2>
+        <p>{html.escape(hidden_key_summary)}</p>
+        <table>
+          <thead><tr><th>Token</th><th>Key</th><th>Owners</th></tr></thead>
+          <tbody>{''.join(rows)}</tbody>
+        </table>
+      </article>
+      <article class=\"panel\">
+        <h2>Node placement summary</h2>
+        <p>Total replica placements: <strong>{load_report['total_replica_placements']}</strong>. The legend below matches the ring colors and load bars in the SVG.</p>
+        <ul>{distribution_items}</ul>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def save_visualization_svg(payload: dict[str, object], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_visualization_svg(payload), encoding="utf-8")
+
+
+def save_visualization_html(payload: dict[str, object], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_visualization_html(payload), encoding="utf-8")
+
+
 def benchmark_series_rows(payload: dict[str, object]) -> list[dict[str, object]]:
     topology_change = payload.get("topology_change")
     topology_action = ""
@@ -422,12 +773,29 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_change.add_argument("--add-node")
     benchmark_change.add_argument("--remove-node")
 
+    visualize = subparsers.add_parser(
+        "visualize",
+        help="render a portfolio-ready consistent-hash ring visualization",
+    )
+    visualize.add_argument("--nodes", nargs="+", required=True)
+    key_source = visualize.add_mutually_exclusive_group(required=True)
+    key_source.add_argument("--keys", nargs="+")
+    key_source.add_argument("--key-count", type=positive_int)
+    visualize.add_argument("--key-prefix", default="key")
+    visualize.add_argument("--displayed-key-count", type=positive_int, default=12)
+    visualize.add_argument("--virtual-nodes", type=positive_int, default=128)
+    visualize.add_argument("--replication-factor", type=positive_int, default=1)
+    visualize.add_argument("--title", default="Consistent Hash Ring Visualization")
+    visualize.add_argument("--svg-out")
+    visualize.add_argument("--html-out")
+
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    payload_for_stdout: dict[str, object] | None = None
 
     if args.command == "assign":
         ring = ConsistentHashRing(args.nodes, virtual_nodes=args.virtual_nodes)
@@ -447,6 +815,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             remove=args.remove_node,
             replication_factor=args.replication_factor,
         )
+    elif args.command == "visualize":
+        keys = args.keys if args.keys else generate_keys(args.key_count, args.key_prefix)
+        payload = build_visualization_payload(
+            args.nodes,
+            keys,
+            virtual_nodes=args.virtual_nodes,
+            replication_factor=args.replication_factor,
+            displayed_key_count=args.displayed_key_count,
+            title=args.title,
+        )
+        if args.svg_out:
+            svg_output_path = Path(args.svg_out)
+            save_visualization_svg(payload, svg_output_path)
+            payload["svg_output"] = str(svg_output_path)
+        if args.html_out:
+            html_output_path = Path(args.html_out)
+            save_visualization_html(payload, html_output_path)
+            payload["html_output"] = str(html_output_path)
+        payload_for_stdout = summarize_visualization_payload(payload)
     else:
         payload = benchmark_virtual_nodes(
             args.nodes,
@@ -465,8 +852,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             markdown_output_path = Path(args.markdown_out)
             save_benchmark_series_markdown(payload, markdown_output_path)
             payload["markdown_output"] = str(markdown_output_path)
+    if payload_for_stdout is None:
+        payload_for_stdout = payload
 
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    print(json.dumps(payload_for_stdout, indent=2, sort_keys=True))
     return 0
 
 

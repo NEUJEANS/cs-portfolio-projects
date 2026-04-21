@@ -12,8 +12,11 @@ from consistent_hashing import (
     ConsistentHashRing,
     benchmark_series_rows,
     benchmark_virtual_nodes,
+    build_visualization_payload,
     generate_keys,
     render_benchmark_series_markdown,
+    render_visualization_html,
+    render_visualization_svg,
     simulate_remap,
 )
 
@@ -133,6 +136,52 @@ class ConsistentHashRingTests(unittest.TestCase):
         self.assertIn("## Takeaways", markdown)
         self.assertIn(str(payload["best_imbalance_virtual_nodes"]), markdown)
 
+    def test_build_visualization_payload_caps_displayed_keys_and_replication(self):
+        payload = build_visualization_payload(
+            ["node-a", "node-b", "node-c"],
+            generate_keys(18),
+            virtual_nodes=16,
+            replication_factor=5,
+            displayed_key_count=6,
+            title="Replica snapshot",
+        )
+        self.assertEqual(payload["title"], "Replica snapshot")
+        self.assertEqual(payload["displayed_key_count"], 6)
+        self.assertEqual(payload["hidden_key_count"], 12)
+        self.assertEqual(payload["effective_replication_factor"], 3)
+        self.assertEqual(len(payload["sample_assignments"]), 6)
+        self.assertEqual(len(payload["ring_points"]), 48)
+        self.assertEqual(payload["sample_assignments"][0]["token"], "k1")
+
+    def test_render_visualization_svg_includes_title_and_tokens(self):
+        payload = build_visualization_payload(
+            ["node-a", "node-b", "node-c", "node-d"],
+            generate_keys(12, prefix="account"),
+            virtual_nodes=8,
+            replication_factor=2,
+            displayed_key_count=8,
+            title="Consistent Hash Ring Snapshot",
+        )
+        svg = render_visualization_svg(payload)
+        self.assertIn("<svg", svg)
+        self.assertIn("Consistent Hash Ring Snapshot", svg)
+        self.assertIn("Load distribution", svg)
+        self.assertIn(">k1<", svg)
+        self.assertIn("Sample assignments", svg)
+
+    def test_render_visualization_html_includes_assignment_table(self):
+        payload = build_visualization_payload(
+            ["node-a", "node-b", "node-c"],
+            generate_keys(10),
+            virtual_nodes=8,
+            displayed_key_count=5,
+        )
+        html_report = render_visualization_html(payload)
+        self.assertIn("<!DOCTYPE html>", html_report)
+        self.assertIn("Sample assignments", html_report)
+        self.assertIn("Node placement summary", html_report)
+        self.assertIn("<table>", html_report)
+
     def test_benchmark_deduplicates_virtual_node_counts(self):
         payload = benchmark_virtual_nodes(
             ["node-a", "node-b", "node-c"],
@@ -248,6 +297,55 @@ class ConsistentHashRingTests(unittest.TestCase):
             markdown = markdown_path.read_text(encoding="utf-8")
             self.assertIn("# Consistent Hashing Virtual-Node Benchmark Report", markdown)
             self.assertIn("Topology change: add `node-d`", markdown)
+
+    def test_cli_visualize_can_write_svg_and_html_exports(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            svg_path = tmp_path / "ring.svg"
+            html_path = tmp_path / "ring.html"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "visualize",
+                    "--nodes",
+                    "node-a",
+                    "node-b",
+                    "node-c",
+                    "node-d",
+                    "--key-count",
+                    "16",
+                    "--displayed-key-count",
+                    "8",
+                    "--virtual-nodes",
+                    "16",
+                    "--replication-factor",
+                    "2",
+                    "--title",
+                    "Portfolio ring snapshot",
+                    "--svg-out",
+                    str(svg_path),
+                    "--html-out",
+                    str(html_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertEqual(payload["html_output"], str(html_path))
+            self.assertEqual(payload["displayed_key_count"], 8)
+            self.assertIn("ring_points_preview", payload)
+            self.assertNotIn("ring_points", payload)
+            self.assertTrue(svg_path.exists())
+            self.assertTrue(html_path.exists())
+            svg_text = svg_path.read_text(encoding="utf-8")
+            html_text = html_path.read_text(encoding="utf-8")
+            self.assertIn("Portfolio ring snapshot", svg_text)
+            self.assertIn(">k1<", svg_text)
+            self.assertIn("Sample assignments", html_text)
+            self.assertIn("Node placement summary", html_text)
 
     def test_cli_rejects_conflicting_benchmark_topology_changes(self):
         result = subprocess.run(
