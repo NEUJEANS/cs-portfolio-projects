@@ -23,6 +23,7 @@ A practical operating-systems portfolio project that simulates classic CPU sched
 - compare multiple algorithms on one workload or preset and export Markdown, HTML, and JSON dashboards
 - export an SVG fairness dashboard that plots per-process slowdown and waiting-time spread for each algorithm
 - use committed workload presets for convoy-effect, interactive-burst, and aging-pressure demos
+- run a benchmark family pack that mixes committed presets with deterministic generated workloads and exports a full multi-scenario artifact bundle
 - export results as JSON
 - track idle CPU time explicitly in the timeline
 - accept optional per-process priority values (lower number = higher priority)
@@ -52,6 +53,7 @@ python3 scheduler.py rr workload.json --quantum 2 --context-switch-cost 1
 python3 scheduler.py srtf workload.json --json
 python3 scheduler.py list-presets
 python3 scheduler.py compare --preset interactive-bursts --quantum 2 --aging-interval 2 --context-switch-cost 1
+python3 scheduler.py benchmark --benchmark-family portfolio-batch --quantum 2 --aging-interval 2 --context-switch-cost 1
 ```
 
 Committed demo workloads for the project live under `artifacts/cpu-scheduler-simulator/`, including `context-switch-sample.json`, `priority-aging-sample.json`, and the preset catalog in `artifacts/cpu-scheduler-simulator/presets/`.
@@ -65,6 +67,8 @@ Priority workloads can include an optional `priority` field. Lower numbers win, 
 `compare` mode runs a shared workload through multiple algorithms and highlights who wins on average turnaround, average waiting, response time, worst-case waiting, CPU utilization, throughput, scheduler overhead, and total completion time. It can print Markdown to stdout or write `--markdown-out`, `--html-out`, `--svg-out`, and `--json-out` artifacts for portfolio screenshots and repo docs.
 
 The comparison flow now also surfaces fairness-specific views: a slowdown snapshot table, per-process experience breakdowns, and an optional SVG artifact that makes uneven waiting and slowdown tails easy to screenshot.
+
+`benchmark` mode goes one step wider. It runs the selected algorithms across a built-in family of preset plus deterministic generated workloads, then exports a benchmark-summary Markdown/HTML/JSON bundle and per-scenario compare artifacts. That makes it easier to show that a scheduler recommendation holds up across multiple workload stories instead of one cherry-picked preset.
 
 When `--context-switch-cost N` is set, the simulator inserts a `CS` slice between two different runnable processes. That cost counts against wall-clock time, lowers useful CPU utilization, and is reported separately as scheduler overhead. The current model deliberately skips idle-to-process dispatches so cross-algorithm churn is easy to compare.
 
@@ -98,7 +102,16 @@ python3 scheduler.py compare \
   --html-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.html \
   --svg-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare-fairness.svg \
   --json-out ../../docs/artifacts/cpu-scheduler-simulator/interactive-bursts-compare.json
+
+python3 scheduler.py benchmark \
+  --benchmark-family portfolio-batch \
+  --quantum 2 \
+  --aging-interval 2 \
+  --context-switch-cost 1 \
+  --output-dir ../../docs/artifacts/cpu-scheduler-simulator/portfolio-batch
 ```
+
+The committed benchmark bundle now lives under `docs/artifacts/cpu-scheduler-simulator/portfolio-batch/` and includes a pack-level summary plus per-scenario compare Markdown/HTML/SVG/JSON artifacts and reproducible workload JSON snapshots.
 
 ## Test
 ```bash
@@ -106,7 +119,6 @@ python3 -m unittest -v test_scheduler.py
 ```
 
 ## Next extensions
-- random workload generation and chart export
 - preemptive multi-level feedback queue comparisons
-- richer fairness scoring or slowdown visualizations for larger workload families
-- arrival-pattern editors for custom preset authoring
+- richer benchmark scorecards or heatmaps for larger workload families
+- arrival-pattern editors for custom workload-family authoring

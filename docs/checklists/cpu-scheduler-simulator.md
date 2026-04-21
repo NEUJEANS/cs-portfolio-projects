@@ -88,3 +88,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, benchmark family pack
+- [x] inspect the current scheduler project and confirm the next weak spot is multi-scenario benchmarking after the single-workload fairness dashboard
+- [x] skip external web research because this slice extends the current scheduler comparison/export architecture directly
+- [x] self-test the current preset compare flow before editing
+- [x] add a resumable slice checklist entry
+- [x] implement deterministic generated workload families and benchmark-pack aggregation mode
+- [x] export a committed benchmark bundle with pack-level summaries plus per-scenario compare artifacts
+- [x] update the README and project checklist notes for the new benchmark flow
+- [x] run tests and deterministic artifact checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

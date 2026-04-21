@@ -9,11 +9,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from scheduler import (
     Process,
+    benchmark_algorithm_family,
     compare_algorithms,
+    format_benchmark_markdown,
     format_compare_markdown,
     format_compare_svg,
     format_preset_catalog,
     format_report,
+    generate_family_processes,
     load_processes,
     resolve_workload_source,
     simulate,
@@ -296,6 +299,43 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("interactive-bursts", catalog)
         self.assertIn("aging-pressure", catalog)
 
+    def test_generate_family_processes_is_deterministic(self):
+        workload_a = generate_family_processes("balanced", seed=17, process_count=6)
+        workload_b = generate_family_processes("balanced", seed=17, process_count=6)
+        self.assertEqual(workload_a, workload_b)
+        self.assertEqual(len(workload_a), 6)
+
+    def test_benchmark_algorithm_family_collects_scenarios_and_wins(self):
+        benchmark = benchmark_algorithm_family(
+            "portfolio-batch",
+            algorithms=["fcfs", "srtf", "rr"],
+            quantum=2,
+            context_switch_cost=1,
+        )
+        self.assertEqual(benchmark["mode"], "benchmark")
+        self.assertEqual(benchmark["family"], "portfolio-batch")
+        self.assertEqual(benchmark["scenario_count"], 6)
+        self.assertEqual([entry["algorithm"] for entry in benchmark["algorithms"]], ["fcfs", "srtf", "rr"])
+        self.assertTrue(all("comparison" in scenario for scenario in benchmark["scenarios"]))
+        self.assertTrue(all(scenario["process_count"] >= 5 for scenario in benchmark["scenarios"]))
+        fcfs = next(entry for entry in benchmark["algorithms"] if entry["algorithm"] == "fcfs")
+        self.assertIn("avg_waiting", fcfs["averages"])
+        self.assertIn("avg_turnaround", fcfs["win_counts"])
+        self.assertIn("score_points", fcfs)
+
+    def test_format_benchmark_markdown_mentions_scoreboard(self):
+        benchmark = benchmark_algorithm_family(
+            "portfolio-batch",
+            algorithms=["fcfs", "sjf"],
+            quantum=2,
+        )
+        report = format_benchmark_markdown(benchmark)
+        self.assertIn("# CPU Scheduler Benchmark Pack", report)
+        self.assertIn("## Aggregate scoreboard", report)
+        self.assertIn("## Scenario highlights", report)
+        self.assertIn("Description | Source", report)
+        self.assertIn("| Algorithm | Avg turnaround | Avg waiting | Avg response |", report)
+
     def test_cli_json_output_for_srtf(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workload.json"
@@ -444,6 +484,64 @@ class SchedulerTests(unittest.TestCase):
             self.assertIn("<table>", html_out.read_text())
             self.assertIn("fairness dashboard", svg_out.read_text())
             self.assertEqual(json.loads(json_out.read_text())["mode"], "compare")
+
+    def test_cli_benchmark_json_output_for_family(self):
+        completed = subprocess.run(
+            [
+                "python3",
+                "scheduler.py",
+                "benchmark",
+                "--benchmark-family",
+                "portfolio-batch",
+                "--algorithms",
+                "fcfs",
+                "rr",
+                "--quantum",
+                "2",
+                "--context-switch-cost",
+                "1",
+                "--json",
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "benchmark")
+        self.assertEqual(payload["family"], "portfolio-batch")
+        self.assertEqual(len(payload["scenarios"]), 6)
+        self.assertEqual([entry["algorithm"] for entry in payload["algorithms"]], ["fcfs", "rr"])
+
+    def test_cli_benchmark_writes_bundle_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "benchmark-bundle"
+            subprocess.run(
+                [
+                    "python3",
+                    "scheduler.py",
+                    "benchmark",
+                    "--benchmark-family",
+                    "portfolio-batch",
+                    "--output-dir",
+                    str(output_dir),
+                    "--quantum",
+                    "2",
+                    "--aging-interval",
+                    "2",
+                    "--context-switch-cost",
+                    "1",
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertTrue((output_dir / "benchmark-summary.md").exists())
+            self.assertTrue((output_dir / "benchmark-summary.html").exists())
+            self.assertTrue((output_dir / "benchmark-summary.json").exists())
+            self.assertTrue((output_dir / "interactive-bursts" / "compare.svg").exists())
+            self.assertTrue((output_dir / "balanced-seed-17" / "workload.json").exists())
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import json
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
+from random import Random
 from statistics import pstdev
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -35,7 +36,7 @@ class TimelineSlice:
 
 SUPPORTED_ALGORITHMS = {"fcfs", "priority", "sjf", "srtf", "rr"}
 ALGORITHM_ORDER = ["fcfs", "sjf", "srtf", "priority", "rr"]
-SUPPORTED_COMMANDS = SUPPORTED_ALGORITHMS | {"compare", "list-presets"}
+SUPPORTED_COMMANDS = SUPPORTED_ALGORITHMS | {"benchmark", "compare", "list-presets"}
 IDLE_PID = "IDLE"
 CONTEXT_SWITCH_PID = "CS"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +54,61 @@ WORKLOAD_PRESETS = {
         "path": PRESET_DIR / "aging-pressure.json",
         "description": "high-priority arrivals keep showing up while a low-priority batch job waits, stressing priority aging",
     },
+}
+
+BENCHMARK_FAMILIES = {
+    "portfolio-batch": {
+        "description": "classic preset stories plus deterministic generated workload families for broader scheduler comparisons",
+        "scenarios": [
+            {
+                "kind": "preset",
+                "preset": "convoy-mix",
+            },
+            {
+                "kind": "preset",
+                "preset": "interactive-bursts",
+            },
+            {
+                "kind": "preset",
+                "preset": "aging-pressure",
+            },
+            {
+                "kind": "generated",
+                "name": "balanced-seed-17",
+                "profile": "balanced",
+                "seed": 17,
+                "process_count": 6,
+                "description": "balanced arrivals and bursts for a neutral mixed workload baseline",
+            },
+            {
+                "kind": "generated",
+                "name": "convoy-spike-seed-23",
+                "profile": "convoy-spike",
+                "seed": 23,
+                "process_count": 6,
+                "description": "one heavy batch job lands beside short arrivals to stress convoy risk and dispatch overhead",
+            },
+            {
+                "kind": "generated",
+                "name": "latency-burst-seed-31",
+                "profile": "latency-burst",
+                "seed": 31,
+                "process_count": 7,
+                "description": "many short interactive jobs with one medium batch tail, emphasizing response-time and fairness tails",
+            },
+        ],
+    }
+}
+
+BENCHMARK_WIN_LABELS = {
+    "avg_turnaround": "turnaround wins",
+    "avg_waiting": "waiting wins",
+    "avg_response": "response wins",
+    "avg_slowdown": "slowdown wins",
+    "slowdown_stddev": "even-slowdown wins",
+    "throughput": "throughput wins",
+    "scheduler_overhead_pct": "overhead wins",
+    "total_time": "completion wins",
 }
 
 
@@ -96,6 +152,127 @@ def format_preset_catalog() -> str:
             f"- {preset_name}: {preset['description']} ({repo_relative(preset['path'])})"
         )
     return "\n".join(lines)
+
+
+def serialize_processes(processes: Iterable[Process]) -> List[Dict[str, int | str]]:
+    return [
+        {
+            "pid": proc.pid,
+            "arrival": proc.arrival,
+            "burst": proc.burst,
+            "priority": proc.priority,
+        }
+        for proc in normalize_processes(processes)
+    ]
+
+
+def generate_family_processes(profile: str, seed: int, process_count: int) -> List[Process]:
+    if process_count <= 0:
+        raise ValueError("process_count must be > 0")
+
+    rng = Random(seed)
+    processes: List[Process] = []
+
+    if profile == "balanced":
+        for index in range(process_count):
+            processes.append(
+                Process(
+                    pid=f"P{index + 1}",
+                    arrival=rng.randint(0, process_count + 2),
+                    burst=rng.randint(2, 7),
+                    priority=rng.randint(0, 4),
+                )
+            )
+    elif profile == "convoy-spike":
+        processes.append(
+            Process(
+                pid="P1",
+                arrival=0,
+                burst=rng.randint(10, 14),
+                priority=rng.randint(4, 6),
+            )
+        )
+        for index in range(1, process_count):
+            processes.append(
+                Process(
+                    pid=f"P{index + 1}",
+                    arrival=rng.randint(0, 6),
+                    burst=rng.randint(1, 4),
+                    priority=rng.randint(0, 3),
+                )
+            )
+    elif profile == "latency-burst":
+        for index in range(process_count - 1):
+            processes.append(
+                Process(
+                    pid=f"P{index + 1}",
+                    arrival=rng.randint(0, process_count + 1),
+                    burst=rng.randint(1, 3),
+                    priority=rng.randint(0, 2),
+                )
+            )
+        processes.append(
+            Process(
+                pid=f"P{process_count}",
+                arrival=rng.randint(0, 3),
+                burst=rng.randint(6, 9),
+                priority=rng.randint(2, 5),
+            )
+        )
+    else:
+        raise ValueError(f"unsupported benchmark profile: {profile}")
+
+    return normalize_processes(processes)
+
+
+def resolve_benchmark_family(family_name: str) -> Dict:
+    family = BENCHMARK_FAMILIES[family_name]
+    scenarios = []
+    for spec in family["scenarios"]:
+        if spec["kind"] == "preset":
+            processes, workload_label, preset_name, workload_source = resolve_workload_source(
+                None,
+                spec["preset"],
+            )
+            scenarios.append(
+                {
+                    "name": workload_label,
+                    "description": WORKLOAD_PRESETS[preset_name]["description"],
+                    "kind": "preset",
+                    "preset": preset_name,
+                    "workload_source": workload_source,
+                    "workload": serialize_processes(processes),
+                    "processes": processes,
+                }
+            )
+            continue
+
+        processes = generate_family_processes(
+            spec["profile"],
+            seed=spec["seed"],
+            process_count=spec["process_count"],
+        )
+        scenarios.append(
+            {
+                "name": spec["name"],
+                "description": spec["description"],
+                "kind": "generated",
+                "generator": {
+                    "profile": spec["profile"],
+                    "seed": spec["seed"],
+                    "process_count": spec["process_count"],
+                },
+                "workload_source": f"generated/{spec['profile']}/seed-{spec['seed']}",
+                "workload": serialize_processes(processes),
+                "processes": processes,
+            }
+        )
+
+    return {
+        "name": family_name,
+        "description": family["description"],
+        "scenarios": scenarios,
+    }
 
 
 def load_processes(path: Path) -> List[Process]:
@@ -621,6 +798,126 @@ def compare_algorithms(
     }
 
 
+def benchmark_algorithm_family(
+    family_name: str,
+    algorithms: Optional[Sequence[str]] = None,
+    quantum: int = 2,
+    aging_interval: int = 0,
+    context_switch_cost: int = 0,
+) -> Dict:
+    family = resolve_benchmark_family(family_name)
+    selected_algorithms = ordered_algorithms(algorithms or ALGORITHM_ORDER)
+    if not selected_algorithms:
+        raise ValueError("at least one algorithm is required for benchmark mode")
+
+    aggregate = {
+        algorithm: {
+            "algorithm": algorithm,
+            "label": format_algorithm_label(algorithm, quantum=quantum, aging_interval=aging_interval),
+            "scenario_count": 0,
+            "totals": {
+                "avg_turnaround": 0.0,
+                "avg_waiting": 0.0,
+                "avg_response": 0.0,
+                "avg_slowdown": 0.0,
+                "slowdown_stddev": 0.0,
+                "cpu_utilization": 0.0,
+                "throughput": 0.0,
+                "scheduler_overhead_pct": 0.0,
+                "total_time": 0.0,
+            },
+            "max_waiting_seen": 0,
+            "max_slowdown_seen": 0.0,
+            "win_counts": {metric: 0 for metric in BENCHMARK_WIN_LABELS},
+            "total_wins": 0,
+            "score_points": 0.0,
+        }
+        for algorithm in selected_algorithms
+    }
+
+    scenarios = []
+    for scenario in family["scenarios"]:
+        comparison = compare_algorithms(
+            scenario["processes"],
+            algorithms=selected_algorithms,
+            quantum=quantum,
+            aging_interval=aging_interval,
+            context_switch_cost=context_switch_cost,
+            workload_label=scenario["name"],
+            workload_source=scenario["workload_source"],
+            preset=scenario.get("preset"),
+        )
+        scenarios.append(
+            {
+                "name": scenario["name"],
+                "description": scenario["description"],
+                "kind": scenario["kind"],
+                "preset": scenario.get("preset"),
+                "generator": scenario.get("generator"),
+                "workload_source": scenario["workload_source"],
+                "process_count": len(scenario["workload"]),
+                "workload": scenario["workload"],
+                "comparison": comparison,
+            }
+        )
+
+        for entry in comparison["algorithms"]:
+            aggregate_entry = aggregate[entry["algorithm"]]
+            aggregate_entry["scenario_count"] += 1
+            summary = entry["summary"]
+            for metric in aggregate_entry["totals"]:
+                aggregate_entry["totals"][metric] += summary[metric]
+            aggregate_entry["max_waiting_seen"] = max(
+                aggregate_entry["max_waiting_seen"],
+                summary["max_waiting"],
+            )
+            aggregate_entry["max_slowdown_seen"] = max(
+                aggregate_entry["max_slowdown_seen"],
+                summary["max_slowdown"],
+            )
+
+        for metric in BENCHMARK_WIN_LABELS:
+            winners = comparison["winners"][metric]
+            point_value = 1 / len(winners)
+            for winner in winners:
+                aggregate[winner]["win_counts"][metric] += 1
+                aggregate[winner]["total_wins"] += 1
+                aggregate[winner]["score_points"] += point_value
+
+    aggregate_rows = []
+    for algorithm in selected_algorithms:
+        entry = aggregate[algorithm]
+        scenario_count = entry["scenario_count"]
+        aggregate_rows.append(
+            {
+                "algorithm": algorithm,
+                "label": entry["label"],
+                "scenario_count": scenario_count,
+                "averages": {
+                    metric: round(total / scenario_count, 4 if metric == "throughput" else 2)
+                    for metric, total in entry["totals"].items()
+                },
+                "max_waiting_seen": entry["max_waiting_seen"],
+                "max_slowdown_seen": round(entry["max_slowdown_seen"], 2),
+                "win_counts": entry["win_counts"],
+                "total_wins": entry["total_wins"],
+                "score_points": round(entry["score_points"], 2),
+            }
+        )
+
+    return {
+        "mode": "benchmark",
+        "family": family["name"],
+        "family_description": family["description"],
+        "scenario_count": len(scenarios),
+        "algorithms": aggregate_rows,
+        "scenarios": scenarios,
+        "quantum": quantum,
+        "aging_interval": aging_interval,
+        "context_switch_cost": context_switch_cost,
+    }
+
+
 def format_report(
     result: Dict,
     algorithm: str,
@@ -1075,6 +1372,245 @@ def format_compare_svg(comparison: Dict) -> str:
 """
 
 
+def format_benchmark_markdown(benchmark: Dict) -> str:
+    lines = [f"# CPU Scheduler Benchmark Pack — {benchmark['family']}", ""]
+    lines.extend(
+        [
+            f"- family: `{benchmark['family']}` — {benchmark['family_description']}",
+            f"- scenarios: {benchmark['scenario_count']}",
+            f"- algorithms: {', '.join(entry['label'] for entry in benchmark['algorithms'])}",
+            f"- round-robin quantum: {benchmark['quantum']}",
+            f"- priority aging interval: {benchmark['aging_interval']}",
+            f"- context-switch cost: {benchmark['context_switch_cost']}",
+            "",
+            "## Scenario roster",
+            "| Scenario | Kind | Processes | Description | Source |",
+            "| --- | --- | ---: | --- | --- |",
+        ]
+    )
+    for scenario in benchmark["scenarios"]:
+        lines.append(
+            f"| {scenario['name']} | {scenario['kind']} | {scenario['process_count']} | {scenario['description']} | {scenario['workload_source']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Aggregate scoreboard",
+            "| Algorithm | Avg turnaround | Avg waiting | Avg response | Avg slowdown | Slowdown stddev | Avg overhead % | Avg throughput | Max wait seen | Max slowdown seen | Score points |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for entry in benchmark["algorithms"]:
+        summary = entry["averages"]
+        lines.append(
+            f"| {entry['label']} | {summary['avg_turnaround']} | {summary['avg_waiting']} | {summary['avg_response']} | {summary['avg_slowdown']} | {summary['slowdown_stddev']} | {summary['scheduler_overhead_pct']} | {summary['throughput']} | {entry['max_waiting_seen']} | {entry['max_slowdown_seen']} | {entry['score_points']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Win counts",
+            "| Algorithm | Turnaround wins | Waiting wins | Response wins | Slowdown wins | Even-slowdown wins | Throughput wins | Overhead wins | Completion wins | Total wins |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for entry in benchmark["algorithms"]:
+        wins = entry["win_counts"]
+        lines.append(
+            f"| {entry['label']} | {wins['avg_turnaround']} | {wins['avg_waiting']} | {wins['avg_response']} | {wins['avg_slowdown']} | {wins['slowdown_stddev']} | {wins['throughput']} | {wins['scheduler_overhead_pct']} | {wins['total_time']} | {entry['total_wins']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Scenario highlights",
+            "| Scenario | Best response | Best waiting | Best fairness | Best throughput |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for scenario in benchmark["scenarios"]:
+        comparison = scenario["comparison"]
+
+        def labels_for(metric: str) -> str:
+            return ", ".join(
+                format_algorithm_label(name, benchmark["quantum"], benchmark["aging_interval"])
+                for name in comparison["winners"][metric]
+            )
+
+        lines.append(
+            f"| {scenario['name']} | {labels_for('avg_response')} | {labels_for('avg_waiting')} | {labels_for('slowdown_stddev')} | {labels_for('throughput')} |"
+        )
+
+    return "\n".join(lines)
+
+
+def format_benchmark_html(benchmark: Dict) -> str:
+    roster_rows = []
+    for scenario in benchmark["scenarios"]:
+        roster_rows.append(
+            "<tr>"
+            f"<td>{html.escape(scenario['name'])}</td>"
+            f"<td>{html.escape(scenario['kind'])}</td>"
+            f"<td>{scenario['process_count']}</td>"
+            f"<td>{html.escape(scenario['description'])}</td>"
+            f"<td><code>{html.escape(scenario['workload_source'])}</code></td>"
+            "</tr>"
+        )
+
+    scoreboard_rows = []
+    for entry in benchmark["algorithms"]:
+        summary = entry["averages"]
+        scoreboard_rows.append(
+            "<tr>"
+            f"<td>{html.escape(entry['label'])}</td>"
+            f"<td>{summary['avg_turnaround']}</td>"
+            f"<td>{summary['avg_waiting']}</td>"
+            f"<td>{summary['avg_response']}</td>"
+            f"<td>{summary['avg_slowdown']}</td>"
+            f"<td>{summary['slowdown_stddev']}</td>"
+            f"<td>{summary['scheduler_overhead_pct']}</td>"
+            f"<td>{summary['throughput']}</td>"
+            f"<td>{entry['max_waiting_seen']}</td>"
+            f"<td>{entry['max_slowdown_seen']}</td>"
+            f"<td>{entry['score_points']}</td>"
+            "</tr>"
+        )
+
+    win_rows = []
+    for entry in benchmark["algorithms"]:
+        wins = entry["win_counts"]
+        win_rows.append(
+            "<tr>"
+            f"<td>{html.escape(entry['label'])}</td>"
+            f"<td>{wins['avg_turnaround']}</td>"
+            f"<td>{wins['avg_waiting']}</td>"
+            f"<td>{wins['avg_response']}</td>"
+            f"<td>{wins['avg_slowdown']}</td>"
+            f"<td>{wins['slowdown_stddev']}</td>"
+            f"<td>{wins['throughput']}</td>"
+            f"<td>{wins['scheduler_overhead_pct']}</td>"
+            f"<td>{wins['total_time']}</td>"
+            f"<td>{entry['total_wins']}</td>"
+            "</tr>"
+        )
+
+    highlight_rows = []
+    for scenario in benchmark["scenarios"]:
+        comparison = scenario["comparison"]
+
+        def labels_for(metric: str) -> str:
+            return ", ".join(
+                format_algorithm_label(name, benchmark["quantum"], benchmark["aging_interval"])
+                for name in comparison["winners"][metric]
+            )
+
+        highlight_rows.append(
+            "<tr>"
+            f"<td>{html.escape(scenario['name'])}</td>"
+            f"<td>{html.escape(labels_for('avg_response'))}</td>"
+            f"<td>{html.escape(labels_for('avg_waiting'))}</td>"
+            f"<td>{html.escape(labels_for('slowdown_stddev'))}</td>"
+            f"<td>{html.escape(labels_for('throughput'))}</td>"
+            "</tr>"
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>CPU Scheduler Benchmark Pack — {html.escape(benchmark['family'])}</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+    }}
+    body {{
+      margin: 2rem auto;
+      max-width: 1180px;
+      padding: 0 1.25rem 3rem;
+    }}
+    .cards {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0 1.75rem;
+    }}
+    .card {{
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      border-radius: 14px;
+      padding: 1rem;
+      background: color-mix(in srgb, Canvas 92%, currentColor 3%);
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }}
+    th, td {{
+      border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      padding: 0.65rem 0.55rem;
+      text-align: right;
+      vertical-align: top;
+    }}
+    th:first-child, td:first-child {{ text-align: left; }}
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+  </style>
+</head>
+<body>
+  <h1>CPU Scheduler Benchmark Pack — {html.escape(benchmark['family'])}</h1>
+  <div class=\"cards\">
+    <div class=\"card\"><h3>Family</h3><p>{html.escape(benchmark['family_description'])}</p></div>
+    <div class=\"card\"><h3>Scenarios</h3><p>{benchmark['scenario_count']}</p></div>
+    <div class=\"card\"><h3>Algorithms</h3><p>{html.escape(', '.join(entry['label'] for entry in benchmark['algorithms']))}</p></div>
+    <div class=\"card\"><h3>Run settings</h3><p>q={benchmark['quantum']}, aging={benchmark['aging_interval']}, switch cost={benchmark['context_switch_cost']}</p></div>
+  </div>
+
+  <h2>Scenario roster</h2>
+  <table>
+    <thead><tr><th>Scenario</th><th>Kind</th><th>Processes</th><th>Description</th><th>Source</th></tr></thead>
+    <tbody>{''.join(roster_rows)}</tbody>
+  </table>
+
+  <h2>Aggregate scoreboard</h2>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Avg turnaround</th><th>Avg waiting</th><th>Avg response</th><th>Avg slowdown</th><th>Slowdown stddev</th><th>Avg overhead %</th><th>Avg throughput</th><th>Max wait seen</th><th>Max slowdown seen</th><th>Score points</th></tr></thead>
+    <tbody>{''.join(scoreboard_rows)}</tbody>
+  </table>
+
+  <h2>Win counts</h2>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Turnaround wins</th><th>Waiting wins</th><th>Response wins</th><th>Slowdown wins</th><th>Even-slowdown wins</th><th>Throughput wins</th><th>Overhead wins</th><th>Completion wins</th><th>Total wins</th></tr></thead>
+    <tbody>{''.join(win_rows)}</tbody>
+  </table>
+
+  <h2>Scenario highlights</h2>
+  <table>
+    <thead><tr><th>Scenario</th><th>Best response</th><th>Best waiting</th><th>Best fairness</th><th>Best throughput</th></tr></thead>
+    <tbody>{''.join(highlight_rows)}</tbody>
+  </table>
+</body>
+</html>
+"""
+
+
+def write_benchmark_bundle(output_dir: Path, benchmark: Dict) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_text(output_dir / "benchmark-summary.md", format_benchmark_markdown(benchmark))
+    write_text(output_dir / "benchmark-summary.html", format_benchmark_html(benchmark))
+    write_text(output_dir / "benchmark-summary.json", json.dumps(benchmark, indent=2))
+
+    for scenario in benchmark["scenarios"]:
+        scenario_dir = output_dir / scenario["name"]
+        scenario_dir.mkdir(parents=True, exist_ok=True)
+        write_text(scenario_dir / "workload.json", json.dumps(scenario["workload"], indent=2))
+        write_text(scenario_dir / "compare.md", format_compare_markdown(scenario["comparison"]))
+        write_text(scenario_dir / "compare.html", format_compare_html(scenario["comparison"]))
+        write_text(scenario_dir / "compare.svg", format_compare_svg(scenario["comparison"]))
+        write_text(scenario_dir / "compare.json", json.dumps(scenario["comparison"], indent=2))
+
+
 def write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
@@ -1082,14 +1618,14 @@ def write_text(path: Path, content: str) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Simulate classic CPU scheduling algorithms, list preset workloads, or compare algorithm tradeoffs"
+        description="Simulate classic CPU scheduling algorithms, compare tradeoffs, or run benchmark packs across multiple workloads"
     )
     parser.add_argument("command", choices=sorted(SUPPORTED_COMMANDS))
     parser.add_argument(
         "workload",
         nargs="?",
         type=Path,
-        help="JSON file with process definitions (omit when using --preset or list-presets)",
+        help="JSON file with process definitions (omit when using --preset, benchmark, or list-presets)",
     )
     parser.add_argument(
         "--preset",
@@ -1114,12 +1650,23 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         choices=ALGORITHM_ORDER,
         default=ALGORITHM_ORDER,
-        help="subset of algorithms to include in compare mode",
+        help="subset of algorithms to include in compare or benchmark mode",
+    )
+    parser.add_argument(
+        "--benchmark-family",
+        choices=sorted(BENCHMARK_FAMILIES),
+        default="portfolio-batch",
+        help="built-in workload family to use in benchmark mode",
     )
     parser.add_argument("--markdown-out", type=Path, help="write a Markdown report to this path")
     parser.add_argument("--html-out", type=Path, help="write an HTML dashboard to this path")
     parser.add_argument("--svg-out", type=Path, help="write an SVG fairness dashboard to this path")
     parser.add_argument("--json-out", type=Path, help="write JSON output to this path")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="write a full benchmark artifact bundle to this directory (benchmark mode only)",
+    )
     parser.add_argument("--json", action="store_true", help="print raw JSON result to stdout")
     return parser
 
@@ -1129,7 +1676,36 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "list-presets":
+        if any([args.workload, args.preset, args.markdown_out, args.html_out, args.svg_out, args.json_out, args.output_dir]):
+            parser.error("list-presets does not accept workload or output arguments")
         print(format_preset_catalog())
+        return 0
+
+    if args.command == "benchmark":
+        if args.workload is not None or args.preset:
+            parser.error("benchmark mode uses --benchmark-family and does not accept a workload path or --preset")
+        if args.svg_out:
+            parser.error("--svg-out is not supported in benchmark mode, use --output-dir for per-scenario SVG artifacts")
+
+        benchmark = benchmark_algorithm_family(
+            args.benchmark_family,
+            algorithms=args.algorithms,
+            quantum=args.quantum,
+            aging_interval=args.aging_interval,
+            context_switch_cost=args.context_switch_cost,
+        )
+        if args.output_dir:
+            write_benchmark_bundle(args.output_dir, benchmark)
+        if args.markdown_out:
+            write_text(args.markdown_out, format_benchmark_markdown(benchmark))
+        if args.html_out:
+            write_text(args.html_out, format_benchmark_html(benchmark))
+        if args.json_out:
+            write_text(args.json_out, json.dumps(benchmark, indent=2))
+        if args.json:
+            print(json.dumps(benchmark, indent=2))
+        elif not any([args.output_dir, args.markdown_out, args.html_out, args.json_out]):
+            print(format_benchmark_markdown(benchmark))
         return 0
 
     try:
@@ -1141,6 +1717,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error(str(exc))
 
     if args.command == "compare":
+        if args.output_dir:
+            parser.error("--output-dir is only supported with benchmark mode")
         comparison = compare_algorithms(
             processes,
             algorithms=args.algorithms,
@@ -1165,8 +1743,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(format_compare_markdown(comparison))
         return 0
 
-    if args.html_out or args.svg_out:
-        parser.error("--html-out and --svg-out are only supported with compare mode")
+    if args.html_out or args.svg_out or args.output_dir:
+        parser.error("--html-out, --svg-out, and --output-dir are only supported with compare or benchmark mode")
 
     result = simulate(
         processes,
