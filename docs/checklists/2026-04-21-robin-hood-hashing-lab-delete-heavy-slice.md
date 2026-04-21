@@ -11,5 +11,5 @@
 - [x] regenerate the committed benchmark artifact bundle
 - [x] run targeted tests, smoke checks, determinism checks, and `git diff --check`
 - [x] run secret scan before push
-- [ ] commit, push, and append the wrap-up
+- [x] commit, push, and append the wrap-up
 - [ ] next: add unsuccessful-lookup benchmark workloads/histograms so misses become part of the interview story
