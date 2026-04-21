@@ -9,7 +9,7 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - models real state transitions instead of simple CRUD only
 - keeps an auditable borrower and loan-history trail instead of only the current checked-out row state
 - now includes ranked SQLite FTS5 search with prefix and phrase-query support
-- exposes history and circulation analytics that are easy to demo in interviews
+- exposes history, circulation analytics, and recruiter-friendly dashboard exports that are easy to demo in interviews
 - keeps the stack lightweight and easy to run locally
 
 ## Stack
@@ -26,8 +26,10 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - borrower records are normalized into their own table so repeat borrowers can be summarized cleanly
 - `history` shows active, overdue, or returned circulation records with lateness context
 - `stats` summarizes total loans, overdue activity, return-time averages, and top borrowers
+- `dashboard` exports Markdown and HTML circulation snapshots with accessible tables, status pills, and machine-readable timestamps
+- dashboard snapshots respect the selected `--date`, so historical exports do not leak future checkouts or returns into earlier views
 - migration path for older databases plus automatic backfill of the search index and any still-active legacy checkouts
-- automated tests for core workflows, migration safety, and CLI behavior
+- automated tests for core workflows, migration safety, dashboard rendering, and CLI behavior
 
 ## Usage
 ```bash
@@ -39,8 +41,16 @@ python3 library_manager.py --db library.db list --query '"distributed systems"' 
 python3 library_manager.py --db library.db overdue --date 2026-04-30
 python3 library_manager.py --db library.db history --status overdue --date 2026-04-30
 python3 library_manager.py --db library.db stats --date 2026-04-30 --top 5
+python3 library_manager.py --db library.db dashboard --date 2026-04-30 \
+  --markdown-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.md \
+  --html-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.html \
+  --generated-at 2026-04-30T12:00:00Z
 python3 library_manager.py --db library.db return 1
 ```
+
+## Portfolio artifacts
+- sample Markdown snapshot: `docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.md`
+- sample HTML snapshot: `docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.html`
 
 ## Test
 ```bash
@@ -51,4 +61,4 @@ python3 -m unittest test_library_manager.py
 - support borrower borrowing limits or policy rules
 - add import/export for seed catalogs
 - package the project as an installable CLI
-- add small HTML report exports for circulation trends and overdue snapshots
+- add chart-friendly CSV or SVG exports for circulation trends over time

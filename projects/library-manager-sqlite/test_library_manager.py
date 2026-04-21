@@ -6,7 +6,14 @@ from contextlib import redirect_stdout
 from datetime import date
 from pathlib import Path
 
-from library_manager import Library, LibraryError, main
+from library_manager import (
+    Library,
+    LibraryError,
+    build_dashboard_snapshot,
+    main,
+    render_dashboard_html,
+    render_dashboard_markdown,
+)
 
 
 class LibraryTests(unittest.TestCase):
@@ -103,7 +110,10 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(overdue[0]['lateness_days'], 7)
 
         active = lib.loan_history(status='active', reference_date=date(2026, 4, 15))
-        self.assertEqual([row['title'] for row in active], ['Refactoring'])
+        self.assertEqual(
+            [row['title'] for row in active],
+            ['Designing Data-Intensive Applications', 'Refactoring'],
+        )
 
         borrower_history = lib.loan_history(borrower='alex', reference_date=date(2026, 4, 21))
         self.assertEqual([row['title'] for row in borrower_history], ['Designing Data-Intensive Applications', 'Clean Code'])
@@ -235,6 +245,143 @@ class LibraryTests(unittest.TestCase):
         overdue_output = buffer.getvalue()
         self.assertIn('checked out to Alex', overdue_output)
         self.assertNotIn('Refactoring', overdue_output)
+
+
+    def test_recent_activity_orders_returns_by_return_date(self):
+        lib, _ = self.make_library()
+        lib.add_book('Clean Code', 'Robert C. Martin')
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+
+        lib.checkout(1, 'Alex', loan_days=14, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=7, checkout_date=date(2026, 4, 20))
+        lib.return_book(1, return_date=date(2026, 4, 25))
+
+        activity = lib.recent_activity(reference_date=date(2026, 4, 25), limit=2)
+
+        self.assertEqual(
+            [(row['activity_kind'], row['book_id']) for row in activity],
+            [('return', 1), ('checkout', 2)],
+        )
+        self.assertEqual(activity[0]['activity_at'], '2026-04-25')
+        self.assertEqual(activity[0]['loan_status'], 'returned')
+
+    def test_dashboard_snapshot_and_renderers_include_portfolio_sections(self):
+        lib, _ = self.make_library()
+        lib.add_book('Systems | Practice', 'Alice <Bob>')
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 10))
+        lib.checkout(2, 'Sam', loan_days=21, checkout_date=date(2026, 4, 20))
+        lib.checkout(3, 'Alex', loan_days=7, checkout_date=date(2026, 4, 5))
+        lib.return_book(3, return_date=date(2026, 4, 24))
+
+        snapshot = build_dashboard_snapshot(
+            lib,
+            reference_date=date(2026, 4, 25),
+            top_limit=3,
+            current_limit=5,
+            recent_limit=5,
+            title='Portfolio dashboard',
+            generated_at='2026-04-25T12:00:00Z',
+        )
+
+        self.assertEqual(snapshot['summary']['active_loans'], 2)
+        self.assertEqual(snapshot['summary']['overdue_loans'], 1)
+        self.assertEqual(snapshot['current_total'], 2)
+        self.assertEqual(snapshot['recent_activity'][0]['activity_kind'], 'return')
+        self.assertEqual(snapshot['generated_at'], '2026-04-25T12:00:00Z')
+
+        markdown = render_dashboard_markdown(snapshot)
+        self.assertIn('# Portfolio dashboard', markdown)
+        self.assertIn('## Current circulation', markdown)
+        self.assertIn('Systems \\| Practice', markdown)
+        self.assertIn('2026-04-25T12:00:00Z', markdown)
+        self.assertIn('overdue by 8d', markdown)
+        self.assertIn('## Top borrowers', markdown)
+
+        html = render_dashboard_html(snapshot)
+        self.assertIn('<caption>Books currently checked out at the snapshot date</caption>', html)
+        self.assertIn('Portfolio dashboard', html)
+        self.assertIn('2026-04-25T12:00:00Z', html)
+        self.assertIn('Alice &lt;Bob&gt;', html)
+        self.assertIn('status-overdue', html)
+
+    def test_dashboard_snapshot_respects_reference_date_for_future_returns(self):
+        lib, _ = self.make_library()
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.checkout(1, 'Alex', loan_days=14, checkout_date=date(2026, 4, 10))
+        lib.checkout(2, 'Sam', loan_days=7, checkout_date=date(2026, 4, 26))
+        lib.return_book(1, return_date=date(2026, 4, 30))
+
+        snapshot = build_dashboard_snapshot(
+            lib,
+            reference_date=date(2026, 4, 25),
+            recent_limit=5,
+            generated_at='2026-04-25T12:00:00Z',
+        )
+
+        self.assertEqual(snapshot['summary']['total_loans'], 1)
+        self.assertEqual(snapshot['summary']['active_loans'], 1)
+        self.assertEqual(snapshot['summary']['completed_loans'], 0)
+        self.assertEqual(snapshot['summary']['overdue_loans'], 1)
+        self.assertEqual([row['book_id'] for row in snapshot['current_loans']], [1])
+        self.assertEqual(snapshot['current_loans'][0]['loan_status'], 'overdue')
+        self.assertEqual(
+            [(row['activity_kind'], row['book_id']) for row in snapshot['recent_activity']],
+            [('checkout', 1)],
+        )
+        history = lib.loan_history(status='all', reference_date=date(2026, 4, 25))
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]['loan_status'], 'overdue')
+
+    def test_cli_dashboard_writes_artifacts_and_supports_stdout_mode(self):
+        lib, db = self.make_library()
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 10))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 15))
+        lib.return_book(2, return_date=date(2026, 4, 20))
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        markdown_path = Path(tmp.name) / 'artifacts' / 'dashboard.md'
+        html_path = Path(tmp.name) / 'artifacts' / 'dashboard.html'
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(
+                [
+                    '--db',
+                    str(db),
+                    'dashboard',
+                    '--date',
+                    '2026-04-25',
+                    '--markdown-out',
+                    str(markdown_path),
+                    '--html-out',
+                    str(html_path),
+                    '--title',
+                    'CLI dashboard',
+                    '--generated-at',
+                    '2026-04-25T12:00:00Z',
+                ]
+            )
+        command_output = buffer.getvalue()
+        self.assertIn('dashboard written:', command_output)
+        self.assertTrue(markdown_path.exists())
+        self.assertTrue(html_path.exists())
+        self.assertIn('CLI dashboard', markdown_path.read_text())
+        self.assertIn('2026-04-25T12:00:00Z', markdown_path.read_text())
+        self.assertIn('Latest checkouts and returns', html_path.read_text())
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'dashboard', '--date', '2026-04-25'])
+        stdout_dashboard = buffer.getvalue()
+        self.assertIn('## Recent activity', stdout_dashboard)
+        self.assertIn('Distributed Systems', stdout_dashboard)
 
 
 if __name__ == '__main__':

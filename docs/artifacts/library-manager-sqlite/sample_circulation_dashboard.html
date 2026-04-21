@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Library circulation dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d6deeb;
+      --shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+      --blue: #1d4ed8;
+      --blue-soft: #dbeafe;
+      --amber: #b45309;
+      --amber-soft: #fef3c7;
+      --green: #166534;
+      --green-soft: #dcfce7;
+      --slate-soft: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 240px);
+      color: var(--text);
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 40px 20px 56px;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 { margin: 0 0 10px; font-size: 2.2rem; }
+    .hero p { margin: 0; color: var(--muted); line-height: 1.55; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+    .metric-card {
+      background: #f8fbff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      min-height: 104px;
+    }
+    .metric-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 10px;
+    }
+    .metric-value {
+      display: block;
+      font-size: 1.8rem;
+      line-height: 1.1;
+    }
+    .metric-subtitle {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+    .attention {
+      margin-top: 20px;
+      border-radius: 18px;
+      padding: 14px 16px;
+      border: 1px solid transparent;
+      font-weight: 600;
+    }
+    .attention-warning {
+      background: var(--amber-soft);
+      border-color: #f5d58a;
+      color: #92400e;
+    }
+    .attention-ok {
+      background: var(--green-soft);
+      border-color: #9adeb6;
+      color: var(--green);
+    }
+    .panel {
+      margin-top: 24px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+    .panel h2 { margin: 0 0 6px; font-size: 1.35rem; }
+    .section-note { margin: 0 0 16px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    caption { text-align: left; font-weight: 700; margin-bottom: 10px; }
+    th, td { padding: 12px 10px; border-top: 1px solid #e5ecf6; vertical-align: top; text-align: left; }
+    th { color: var(--muted); font-size: 0.88rem; letter-spacing: 0.01em; }
+    tbody tr:hover { background: #f8fbff; }
+    .muted { color: var(--muted); font-size: 0.92rem; margin-top: 4px; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .status-active { background: var(--blue-soft); color: var(--blue); border-color: #bfd7ff; }
+    .status-overdue { background: var(--amber-soft); color: #92400e; border-color: #f5d58a; }
+    .status-returned { background: var(--green-soft); color: var(--green); border-color: #9adeb6; }
+    .status-checkout { background: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }
+    .status-neutral { background: var(--slate-soft); color: #334155; border-color: #cbd5e1; }
+    .empty-state { color: var(--muted); font-style: italic; }
+    @media (max-width: 800px) {
+      main { padding: 24px 12px 40px; }
+      .hero, .panel { padding: 18px; border-radius: 18px; }
+      th, td { padding: 10px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Library circulation dashboard</h1>
+      <p>Static circulation snapshot for the SQLite-backed library CLI. Use it as a recruiter-friendly artifact that highlights current checkouts, recent activity, and borrower-level trends without opening the database manually.</p>
+      <div class="meta">
+        <span><strong>Snapshot date:</strong> <time datetime="2026-04-25">2026-04-25</time></span>
+        <span><strong>Generated at:</strong> <time datetime="2026-04-25T12:00:00Z">2026-04-25T12:00:00Z</time></span>
+      </div>
+      <div class="metric-grid"><article class="metric-card"><span class="metric-label">Books</span><strong class="metric-value">3</strong></article><article class="metric-card"><span class="metric-label">Borrowers</span><strong class="metric-value">2</strong></article><article class="metric-card"><span class="metric-label">Current loans</span><strong class="metric-value">2</strong></article><article class="metric-card"><span class="metric-label">Overdue loans</span><strong class="metric-value">1</strong></article><article class="metric-card"><span class="metric-label">Returned loans</span><strong class="metric-value">1</strong></article><article class="metric-card"><span class="metric-label">Late returns</span><strong class="metric-value">0</strong></article><article class="metric-card"><span class="metric-label">Avg configured loan</span><strong class="metric-value">14.0d</strong></article><article class="metric-card"><span class="metric-label">Avg actual return</span><strong class="metric-value">8.0d</strong></article></div>
+      <section class="attention attention-warning"><strong>Attention:</strong> 1 overdue loan(s) need follow-up in this snapshot.</section>
+    </section>
+
+    <section class="panel">
+      <h2>Current circulation</h2>
+      
+      <table>
+        <caption>Books currently checked out at the snapshot date</caption>
+        <thead>
+          <tr>
+            <th scope="col">Status</th>
+            <th scope="col">Book</th>
+            <th scope="col">Borrower</th>
+            <th scope="col">Checked out</th>
+            <th scope="col">Due</th>
+            <th scope="col">Loan days</th>
+          </tr>
+        </thead>
+        <tbody><tr><td><span class="status-pill status-overdue">overdue by 8d</span></td><td><strong>#1</strong> Distributed Systems<div class="muted">Andrew S. Tanenbaum </div></td><td>Alex</td><td>2026-04-10</td><td>2026-04-17</td><td>7d</td></tr><tr><td><span class="status-pill status-active">active</span></td><td><strong>#3</strong> Database Internals<div class="muted">Alex Petrov </div></td><td>Alex</td><td>2026-04-18</td><td>2026-05-09</td><td>21d</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Recent activity</h2>
+      <table>
+        <caption>Latest checkouts and returns</caption>
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Event</th>
+            <th scope="col">Book</th>
+            <th scope="col">Borrower</th>
+            <th scope="col">Outcome</th>
+          </tr>
+        </thead>
+        <tbody><tr><td>2026-04-20</td><td><span class="status-pill status-returned">return</span></td><td><strong>#2</strong> Refactoring<div class="muted">Martin Fowler </div></td><td>Sam</td><td>returned on time</td></tr><tr><td>2026-04-18</td><td><span class="status-pill status-checkout">checkout</span></td><td><strong>#3</strong> Database Internals<div class="muted">Alex Petrov </div></td><td>Alex</td><td>active</td></tr><tr><td>2026-04-10</td><td><span class="status-pill status-checkout">checkout</span></td><td><strong>#1</strong> Distributed Systems<div class="muted">Andrew S. Tanenbaum </div></td><td>Alex</td><td>overdue by 8d</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Top borrowers</h2>
+      <table>
+        <caption>Borrower-level circulation summary</caption>
+        <thead>
+          <tr>
+            <th scope="col">Borrower</th>
+            <th scope="col">Loans</th>
+            <th scope="col">Current</th>
+            <th scope="col">Overdue</th>
+            <th scope="col">Last checkout</th>
+          </tr>
+        </thead>
+        <tbody><tr><td>Alex</td><td>2</td><td>2</td><td>1</td><td>2026-04-18</td></tr><tr><td>Sam</td><td>1</td><td>0</td><td>0</td><td>2026-04-12</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
+

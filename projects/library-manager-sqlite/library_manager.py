@@ -1,7 +1,8 @@
 import argparse
 import re
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timezone, timedelta
+from html import escape
 from pathlib import Path
 
 
@@ -347,23 +348,23 @@ class Library:
             'l.returned_at, '
             'l.loan_days, '
             'CASE '
-            'WHEN l.returned_at IS NOT NULL THEN "returned" '
+            'WHEN l.returned_at IS NOT NULL AND l.returned_at <= ? THEN "returned" '
             'WHEN l.due_date < ? THEN "overdue" '
             'ELSE "active" '
             'END AS loan_status, '
             'CASE '
-            'WHEN l.returned_at IS NOT NULL AND l.returned_at > l.due_date '
+            'WHEN l.returned_at IS NOT NULL AND l.returned_at <= ? AND l.returned_at > l.due_date '
             'THEN CAST(julianday(l.returned_at) - julianday(l.due_date) AS INTEGER) '
-            'WHEN l.returned_at IS NULL AND l.due_date < ? '
+            'WHEN (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date < ? '
             'THEN CAST(julianday(?) - julianday(l.due_date) AS INTEGER) '
             'ELSE 0 '
             'END AS lateness_days '
             'FROM loans AS l '
             'JOIN books AS b ON b.id = l.book_id '
             'JOIN borrowers AS br ON br.id = l.borrower_id '
-            'WHERE 1 = 1'
+            'WHERE l.checked_out_at <= ?'
         )
-        params = [reference_iso, reference_iso, reference_iso]
+        params = [reference_iso, reference_iso, reference_iso, reference_iso, reference_iso, reference_iso, reference_iso]
 
         if book_id is not None:
             sql += ' AND b.id = ?'
@@ -372,13 +373,14 @@ class Library:
             sql += ' AND lower(br.name) LIKE ?'
             params.append(f'%{borrower.lower()}%')
         if status == 'active':
-            sql += ' AND l.returned_at IS NULL AND l.due_date >= ?'
-            params.append(reference_iso)
+            sql += ' AND (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date >= ?'
+            params.extend([reference_iso, reference_iso])
         elif status == 'overdue':
-            sql += ' AND l.returned_at IS NULL AND l.due_date < ?'
-            params.append(reference_iso)
+            sql += ' AND (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date < ?'
+            params.extend([reference_iso, reference_iso])
         elif status == 'returned':
-            sql += ' AND l.returned_at IS NOT NULL'
+            sql += ' AND l.returned_at IS NOT NULL AND l.returned_at <= ?'
+            params.append(reference_iso)
 
         sql += ' ORDER BY l.checked_out_at DESC, l.id DESC'
         if limit is not None:
@@ -400,14 +402,23 @@ class Library:
                     '(SELECT COUNT(*) FROM books) AS total_books, '
                     '(SELECT COUNT(*) FROM borrowers) AS total_borrowers, '
                     'COUNT(*) AS total_loans, '
-                    'COALESCE(SUM(CASE WHEN returned_at IS NULL THEN 1 ELSE 0 END), 0) AS active_loans, '
-                    'COALESCE(SUM(CASE WHEN returned_at IS NULL AND due_date < ? THEN 1 ELSE 0 END), 0) AS overdue_loans, '
-                    'COALESCE(SUM(CASE WHEN returned_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS completed_loans, '
+                    'COALESCE(SUM(CASE WHEN returned_at IS NULL OR returned_at > ? THEN 1 ELSE 0 END), 0) AS active_loans, '
+                    'COALESCE(SUM(CASE WHEN (returned_at IS NULL OR returned_at > ?) AND due_date < ? THEN 1 ELSE 0 END), 0) AS overdue_loans, '
+                    'COALESCE(SUM(CASE WHEN returned_at IS NOT NULL AND returned_at <= ? THEN 1 ELSE 0 END), 0) AS completed_loans, '
                     'ROUND(AVG(CAST(loan_days AS REAL)), 2) AS average_configured_loan_days, '
-                    'ROUND(AVG(CASE WHEN returned_at IS NOT NULL THEN julianday(returned_at) - julianday(checked_out_at) END), 2) AS average_return_days, '
-                    'COALESCE(SUM(CASE WHEN returned_at IS NOT NULL AND returned_at > due_date THEN 1 ELSE 0 END), 0) AS late_returns '
-                    'FROM loans',
-                    (reference_iso,),
+                    'ROUND(AVG(CASE WHEN returned_at IS NOT NULL AND returned_at <= ? THEN julianday(returned_at) - julianday(checked_out_at) END), 2) AS average_return_days, '
+                    'COALESCE(SUM(CASE WHEN returned_at IS NOT NULL AND returned_at <= ? AND returned_at > due_date THEN 1 ELSE 0 END), 0) AS late_returns '
+                    'FROM loans '
+                    'WHERE checked_out_at <= ?',
+                    (
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                        reference_iso,
+                    ),
                 ).fetchone()
             )
             top_borrowers = [
@@ -416,19 +427,108 @@ class Library:
                     'SELECT '
                     'br.name AS borrower, '
                     'COUNT(*) AS total_loans, '
-                    'SUM(CASE WHEN l.returned_at IS NULL THEN 1 ELSE 0 END) AS active_loans, '
-                    'SUM(CASE WHEN l.returned_at IS NULL AND l.due_date < ? THEN 1 ELSE 0 END) AS overdue_loans, '
+                    'SUM(CASE WHEN l.returned_at IS NULL OR l.returned_at > ? THEN 1 ELSE 0 END) AS active_loans, '
+                    'SUM(CASE WHEN (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date < ? THEN 1 ELSE 0 END) AS overdue_loans, '
                     'MAX(l.checked_out_at) AS last_checkout_at '
                     'FROM loans AS l '
                     'JOIN borrowers AS br ON br.id = l.borrower_id '
+                    'WHERE l.checked_out_at <= ? '
                     'GROUP BY br.id, br.name '
                     'ORDER BY total_loans DESC, active_loans DESC, br.name COLLATE NOCASE '
                     'LIMIT ?',
-                    (reference_iso, top_limit),
+                    (reference_iso, reference_iso, reference_iso, reference_iso, top_limit),
                 )
             ]
         summary['top_borrowers'] = top_borrowers
         return summary
+
+    def current_circulation(self, reference_date=None, limit=None):
+        if limit is not None and limit <= 0:
+            raise LibraryError('limit must be positive when provided')
+
+        reference_iso = (reference_date or date.today()).isoformat()
+        sql = (
+            'SELECT '
+            'l.id AS loan_id, '
+            'b.id AS book_id, '
+            'b.title, '
+            'b.author, '
+            'br.name AS borrower, '
+            'l.checked_out_at, '
+            'l.due_date, '
+            'l.returned_at, '
+            'l.loan_days, '
+            'CASE WHEN l.due_date < ? THEN "overdue" ELSE "active" END AS loan_status, '
+            'CASE '
+            'WHEN l.due_date < ? THEN CAST(julianday(?) - julianday(l.due_date) AS INTEGER) '
+            'ELSE 0 '
+            'END AS lateness_days '
+            'FROM loans AS l '
+            'JOIN books AS b ON b.id = l.book_id '
+            'JOIN borrowers AS br ON br.id = l.borrower_id '
+            'WHERE l.checked_out_at <= ? AND (l.returned_at IS NULL OR l.returned_at > ?) '
+            'ORDER BY l.due_date, l.checked_out_at DESC, l.id DESC'
+        )
+        params = [reference_iso, reference_iso, reference_iso, reference_iso, reference_iso]
+        if limit is not None:
+            sql += ' LIMIT ?'
+            params.append(limit)
+
+        with self._connect() as conn:
+            return [dict(r) for r in conn.execute(sql, params)]
+
+    def recent_activity(self, reference_date=None, limit=5):
+        if limit <= 0:
+            raise LibraryError('limit must be positive')
+
+        reference_iso = (reference_date or date.today()).isoformat()
+        sql = (
+            'SELECT '
+            'l.id AS loan_id, '
+            'b.id AS book_id, '
+            'b.title, '
+            'b.author, '
+            'br.name AS borrower, '
+            'l.checked_out_at, '
+            'l.due_date, '
+            'l.returned_at, '
+            'l.loan_days, '
+            'CASE '
+            'WHEN l.returned_at IS NOT NULL AND l.returned_at <= ? THEN "returned" '
+            'WHEN l.due_date < ? THEN "overdue" '
+            'ELSE "active" '
+            'END AS loan_status, '
+            'CASE '
+            'WHEN l.returned_at IS NOT NULL AND l.returned_at <= ? AND l.returned_at > l.due_date '
+            'THEN CAST(julianday(l.returned_at) - julianday(l.due_date) AS INTEGER) '
+            'WHEN (l.returned_at IS NULL OR l.returned_at > ?) AND l.due_date < ? '
+            'THEN CAST(julianday(?) - julianday(l.due_date) AS INTEGER) '
+            'ELSE 0 '
+            'END AS lateness_days, '
+            'CASE WHEN l.returned_at IS NOT NULL AND l.returned_at <= ? THEN l.returned_at ELSE l.checked_out_at END AS activity_at, '
+            'CASE WHEN l.returned_at IS NOT NULL AND l.returned_at <= ? THEN "return" ELSE "checkout" END AS activity_kind '
+            'FROM loans AS l '
+            'JOIN books AS b ON b.id = l.book_id '
+            'JOIN borrowers AS br ON br.id = l.borrower_id '
+            'WHERE l.checked_out_at <= ? '
+            'ORDER BY activity_at DESC, l.id DESC '
+            'LIMIT ?'
+        )
+        params = [
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            reference_iso,
+            limit,
+        ]
+
+        with self._connect() as conn:
+            return [dict(r) for r in conn.execute(sql, params)]
 
 
 
@@ -442,22 +542,23 @@ def format_book(row):
 
 
 
-def format_loan(row):
+def describe_loan_status(row):
     if row['loan_status'] == 'returned':
-        status = 'returned'
         if row['lateness_days'] > 0:
-            status += f" late by {row['lateness_days']}d"
-        else:
-            status += ' on time'
-    elif row['loan_status'] == 'overdue':
-        status = f"overdue by {row['lateness_days']}d"
-    else:
-        status = 'active'
+            return f"returned late by {row['lateness_days']}d"
+        return 'returned on time'
+    if row['loan_status'] == 'overdue':
+        return f"overdue by {row['lateness_days']}d"
+    return 'active'
+
+
+
+def format_loan(row):
     returned_at = row['returned_at'] or '-'
     return (
         f"loan #{row['loan_id']} | book #{row['book_id']} {row['title']} - {row['author']} | "
         f"borrower: {row['borrower']} | out {row['checked_out_at']} | due {row['due_date']} | "
-        f"returned {returned_at} [{status}]"
+        f"returned {returned_at} [{describe_loan_status(row)}]"
     )
 
 
@@ -498,6 +599,468 @@ def format_stats(stats):
 
 
 
+def _utc_timestamp_iso():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+
+
+
+def _markdown_cell(value):
+    return str(value).replace('|', '\\|').replace('\n', ' ')
+
+
+
+def _render_markdown_table(headers, rows):
+    table = [
+        '| ' + ' | '.join(headers) + ' |',
+        '| ' + ' | '.join('---' for _ in headers) + ' |',
+    ]
+    for row in rows:
+        table.append('| ' + ' | '.join(_markdown_cell(cell) for cell in row) + ' |')
+    return '\n'.join(table)
+
+
+
+def _write_text_output(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding='utf-8')
+
+
+
+def build_dashboard_snapshot(
+    library,
+    reference_date=None,
+    top_limit=5,
+    current_limit=8,
+    recent_limit=8,
+    title='Library circulation dashboard',
+    generated_at=None,
+):
+    if current_limit <= 0:
+        raise LibraryError('current_limit must be positive')
+    if recent_limit <= 0:
+        raise LibraryError('recent_limit must be positive')
+
+    reference_day = reference_date or date.today()
+    summary = library.circulation_stats(reference_date=reference_day, top_limit=top_limit)
+    current_loans = library.current_circulation(reference_date=reference_day, limit=current_limit)
+    recent_activity = library.recent_activity(reference_date=reference_day, limit=recent_limit)
+    return {
+        'title': title.strip() or 'Library circulation dashboard',
+        'reference_date': reference_day.isoformat(),
+        'generated_at': generated_at or _utc_timestamp_iso(),
+        'summary': summary,
+        'current_loans': current_loans,
+        'current_total': summary['active_loans'],
+        'recent_activity': recent_activity,
+        'limits': {
+            'top_borrowers': top_limit,
+            'current_loans': current_limit,
+            'recent_activity': recent_limit,
+        },
+    }
+
+
+
+def render_dashboard_markdown(snapshot):
+    summary = snapshot['summary']
+    lines = [
+        f"# {snapshot['title']}",
+        '',
+        f"- Snapshot date: {snapshot['reference_date']}",
+        f"- Generated at: {snapshot['generated_at']}",
+        '',
+        '## Summary',
+        '',
+        f"- Books: {summary['total_books']}",
+        f"- Borrowers: {summary['total_borrowers']}",
+        f"- Current loans: {summary['active_loans']}",
+        f"- Overdue loans: {summary['overdue_loans']}",
+        f"- Returned loans: {summary['completed_loans']}",
+        f"- Late returns: {summary['late_returns']}",
+        f"- Average configured loan: {_format_days_metric(summary['average_configured_loan_days'])}",
+        f"- Average actual return: {_format_days_metric(summary['average_return_days'])}",
+    ]
+    if summary['overdue_loans']:
+        lines.append(f"- Attention: {summary['overdue_loans']} overdue loan(s) need follow-up.")
+
+    lines.extend(['', '## Current circulation', ''])
+    if snapshot['current_loans']:
+        if len(snapshot['current_loans']) < snapshot['current_total']:
+            lines.append(
+                f"Showing {len(snapshot['current_loans'])} of {snapshot['current_total']} currently checked-out books."
+            )
+            lines.append('')
+        lines.append(
+            _render_markdown_table(
+                ['Status', 'Book', 'Borrower', 'Checked out', 'Due', 'Loan days'],
+                [
+                    [
+                        describe_loan_status(row),
+                        f"#{row['book_id']} {row['title']} — {row['author']}",
+                        row['borrower'],
+                        row['checked_out_at'],
+                        row['due_date'],
+                        row['loan_days'],
+                    ]
+                    for row in snapshot['current_loans']
+                ],
+            )
+        )
+    else:
+        lines.append('_No books are currently checked out._')
+
+    lines.extend(['', '## Recent activity', ''])
+    if snapshot['recent_activity']:
+        lines.append(
+            _render_markdown_table(
+                ['Date', 'Event', 'Book', 'Borrower', 'Outcome'],
+                [
+                    [
+                        row['activity_at'],
+                        row['activity_kind'],
+                        f"#{row['book_id']} {row['title']} — {row['author']}",
+                        row['borrower'],
+                        describe_loan_status(row),
+                    ]
+                    for row in snapshot['recent_activity']
+                ],
+            )
+        )
+    else:
+        lines.append('_No loan activity yet._')
+
+    lines.extend(['', '## Top borrowers', ''])
+    if summary['top_borrowers']:
+        lines.append(
+            _render_markdown_table(
+                ['Borrower', 'Loans', 'Current', 'Overdue', 'Last checkout'],
+                [
+                    [
+                        row['borrower'],
+                        row['total_loans'],
+                        row['active_loans'],
+                        row['overdue_loans'],
+                        row['last_checkout_at'],
+                    ]
+                    for row in summary['top_borrowers']
+                ],
+            )
+        )
+    else:
+        lines.append('_No borrower history yet._')
+
+    return '\n'.join(lines).rstrip()
+
+
+
+def _render_metric_card(label, value, subtitle=None):
+    subtitle_html = f'<div class="metric-subtitle">{escape(subtitle)}</div>' if subtitle else ''
+    return (
+        '<article class="metric-card">'
+        f'<span class="metric-label">{escape(label)}</span>'
+        f'<strong class="metric-value">{escape(str(value))}</strong>'
+        f'{subtitle_html}'
+        '</article>'
+    )
+
+
+
+def _status_badge_class(status):
+    return {
+        'active': 'status-active',
+        'overdue': 'status-overdue',
+        'returned': 'status-returned',
+        'checkout': 'status-checkout',
+        'return': 'status-returned',
+    }.get(status, 'status-neutral')
+
+
+
+def render_dashboard_html(snapshot):
+    summary = snapshot['summary']
+    current_note = ''
+    if snapshot['current_loans'] and len(snapshot['current_loans']) < snapshot['current_total']:
+        current_note = (
+            f'<p class="section-note">Showing {len(snapshot["current_loans"])} of '
+            f'{snapshot["current_total"]} currently checked-out books.</p>'
+        )
+
+    current_rows = ''.join(
+        (
+            '<tr>'
+            f'<td><span class="status-pill {_status_badge_class(row["loan_status"])}">{escape(describe_loan_status(row))}</span></td>'
+            f'<td><strong>#{row["book_id"]}</strong> {escape(row["title"])}<div class="muted">{escape(row["author"])} </div></td>'
+            f'<td>{escape(row["borrower"])}</td>'
+            f'<td>{escape(row["checked_out_at"])}</td>'
+            f'<td>{escape(row["due_date"])}</td>'
+            f'<td>{escape(str(row["loan_days"]))}d</td>'
+            '</tr>'
+        )
+        for row in snapshot['current_loans']
+    )
+    if not current_rows:
+        current_rows = '<tr><td colspan="6" class="empty-state">No books are currently checked out.</td></tr>'
+
+    activity_rows = ''.join(
+        (
+            '<tr>'
+            f'<td>{escape(row["activity_at"])}</td>'
+            f'<td><span class="status-pill {_status_badge_class(row["activity_kind"])}">{escape(row["activity_kind"])}</span></td>'
+            f'<td><strong>#{row["book_id"]}</strong> {escape(row["title"])}<div class="muted">{escape(row["author"])} </div></td>'
+            f'<td>{escape(row["borrower"])}</td>'
+            f'<td>{escape(describe_loan_status(row))}</td>'
+            '</tr>'
+        )
+        for row in snapshot['recent_activity']
+    )
+    if not activity_rows:
+        activity_rows = '<tr><td colspan="5" class="empty-state">No loan activity yet.</td></tr>'
+
+    borrower_rows = ''.join(
+        (
+            '<tr>'
+            f'<td>{escape(row["borrower"])}</td>'
+            f'<td>{row["total_loans"]}</td>'
+            f'<td>{row["active_loans"]}</td>'
+            f'<td>{row["overdue_loans"]}</td>'
+            f'<td>{escape(row["last_checkout_at"] or "-")}</td>'
+            '</tr>'
+        )
+        for row in summary['top_borrowers']
+    )
+    if not borrower_rows:
+        borrower_rows = '<tr><td colspan="5" class="empty-state">No borrower history yet.</td></tr>'
+
+    attention_html = (
+        '<section class="attention attention-warning">'
+        f'<strong>Attention:</strong> {summary["overdue_loans"]} overdue loan(s) need follow-up in this snapshot.'
+        '</section>'
+        if summary['overdue_loans']
+        else '<section class="attention attention-ok"><strong>Snapshot status:</strong> No overdue loans right now.</section>'
+    )
+
+    metric_cards = ''.join(
+        [
+            _render_metric_card('Books', summary['total_books']),
+            _render_metric_card('Borrowers', summary['total_borrowers']),
+            _render_metric_card('Current loans', summary['active_loans']),
+            _render_metric_card('Overdue loans', summary['overdue_loans']),
+            _render_metric_card('Returned loans', summary['completed_loans']),
+            _render_metric_card('Late returns', summary['late_returns']),
+            _render_metric_card('Avg configured loan', _format_days_metric(summary['average_configured_loan_days'])),
+            _render_metric_card('Avg actual return', _format_days_metric(summary['average_return_days'])),
+        ]
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(snapshot['title'])}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d6deeb;
+      --shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+      --blue: #1d4ed8;
+      --blue-soft: #dbeafe;
+      --amber: #b45309;
+      --amber-soft: #fef3c7;
+      --green: #166534;
+      --green-soft: #dcfce7;
+      --slate-soft: #e5e7eb;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 240px);
+      color: var(--text);
+    }}
+    main {{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 40px 20px 56px;
+    }}
+    .hero {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }}
+    .hero h1 {{ margin: 0 0 10px; font-size: 2.2rem; }}
+    .hero p {{ margin: 0; color: var(--muted); line-height: 1.55; }}
+    .meta {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }}
+    .metric-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }}
+    .metric-card {{
+      background: #f8fbff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      min-height: 104px;
+    }}
+    .metric-label {{
+      display: block;
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 10px;
+    }}
+    .metric-value {{
+      display: block;
+      font-size: 1.8rem;
+      line-height: 1.1;
+    }}
+    .metric-subtitle {{
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }}
+    .attention {{
+      margin-top: 20px;
+      border-radius: 18px;
+      padding: 14px 16px;
+      border: 1px solid transparent;
+      font-weight: 600;
+    }}
+    .attention-warning {{
+      background: var(--amber-soft);
+      border-color: #f5d58a;
+      color: #92400e;
+    }}
+    .attention-ok {{
+      background: var(--green-soft);
+      border-color: #9adeb6;
+      color: var(--green);
+    }}
+    .panel {{
+      margin-top: 24px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }}
+    .panel h2 {{ margin: 0 0 6px; font-size: 1.35rem; }}
+    .section-note {{ margin: 0 0 16px; color: var(--muted); }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 14px; }}
+    caption {{ text-align: left; font-weight: 700; margin-bottom: 10px; }}
+    th, td {{ padding: 12px 10px; border-top: 1px solid #e5ecf6; vertical-align: top; text-align: left; }}
+    th {{ color: var(--muted); font-size: 0.88rem; letter-spacing: 0.01em; }}
+    tbody tr:hover {{ background: #f8fbff; }}
+    .muted {{ color: var(--muted); font-size: 0.92rem; margin-top: 4px; }}
+    .status-pill {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }}
+    .status-active {{ background: var(--blue-soft); color: var(--blue); border-color: #bfd7ff; }}
+    .status-overdue {{ background: var(--amber-soft); color: #92400e; border-color: #f5d58a; }}
+    .status-returned {{ background: var(--green-soft); color: var(--green); border-color: #9adeb6; }}
+    .status-checkout {{ background: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }}
+    .status-neutral {{ background: var(--slate-soft); color: #334155; border-color: #cbd5e1; }}
+    .empty-state {{ color: var(--muted); font-style: italic; }}
+    @media (max-width: 800px) {{
+      main {{ padding: 24px 12px 40px; }}
+      .hero, .panel {{ padding: 18px; border-radius: 18px; }}
+      th, td {{ padding: 10px 8px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>{escape(snapshot['title'])}</h1>
+      <p>Static circulation snapshot for the SQLite-backed library CLI. Use it as a recruiter-friendly artifact that highlights current checkouts, recent activity, and borrower-level trends without opening the database manually.</p>
+      <div class="meta">
+        <span><strong>Snapshot date:</strong> <time datetime="{escape(snapshot['reference_date'])}">{escape(snapshot['reference_date'])}</time></span>
+        <span><strong>Generated at:</strong> <time datetime="{escape(snapshot['generated_at'])}">{escape(snapshot['generated_at'])}</time></span>
+      </div>
+      <div class="metric-grid">{metric_cards}</div>
+      {attention_html}
+    </section>
+
+    <section class="panel">
+      <h2>Current circulation</h2>
+      {current_note}
+      <table>
+        <caption>Books currently checked out at the snapshot date</caption>
+        <thead>
+          <tr>
+            <th scope="col">Status</th>
+            <th scope="col">Book</th>
+            <th scope="col">Borrower</th>
+            <th scope="col">Checked out</th>
+            <th scope="col">Due</th>
+            <th scope="col">Loan days</th>
+          </tr>
+        </thead>
+        <tbody>{current_rows}</tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Recent activity</h2>
+      <table>
+        <caption>Latest checkouts and returns</caption>
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Event</th>
+            <th scope="col">Book</th>
+            <th scope="col">Borrower</th>
+            <th scope="col">Outcome</th>
+          </tr>
+        </thead>
+        <tbody>{activity_rows}</tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Top borrowers</h2>
+      <table>
+        <caption>Borrower-level circulation summary</caption>
+        <thead>
+          <tr>
+            <th scope="col">Borrower</th>
+            <th scope="col">Loans</th>
+            <th scope="col">Current</th>
+            <th scope="col">Overdue</th>
+            <th scope="col">Last checkout</th>
+          </tr>
+        </thead>
+        <tbody>{borrower_rows}</tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+
 def parse_optional_date(value, label):
     if not value:
         return None
@@ -505,6 +1068,18 @@ def parse_optional_date(value, label):
         return date.fromisoformat(value)
     except ValueError as exc:
         raise LibraryError(f'{label} must use YYYY-MM-DD format') from exc
+
+
+
+def parse_optional_timestamp(value, label):
+    if not value:
+        return None
+    normalized = value.replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise LibraryError(f'{label} must use an ISO-8601 timestamp') from exc
+    return parsed.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
 
 
@@ -543,6 +1118,16 @@ def main(argv=None):
     stats_parser = sub.add_parser('stats', help='Show circulation analytics')
     stats_parser.add_argument('--date', dest='reference_date')
     stats_parser.add_argument('--top', type=int, default=5)
+
+    dashboard_parser = sub.add_parser('dashboard', help='Export a recruiter-friendly circulation snapshot')
+    dashboard_parser.add_argument('--date', dest='reference_date')
+    dashboard_parser.add_argument('--top', type=int, default=5)
+    dashboard_parser.add_argument('--current-limit', type=int, default=8)
+    dashboard_parser.add_argument('--recent-limit', type=int, default=8)
+    dashboard_parser.add_argument('--markdown-out', type=Path)
+    dashboard_parser.add_argument('--html-out', type=Path)
+    dashboard_parser.add_argument('--title', default='Library circulation dashboard')
+    dashboard_parser.add_argument('--generated-at')
 
     args = parser.parse_args(argv)
     library = Library(args.db)
@@ -587,6 +1172,30 @@ def main(argv=None):
             ref = parse_optional_date(args.reference_date, 'reference date')
             stats = library.circulation_stats(reference_date=ref, top_limit=args.top)
             print(format_stats(stats))
+        elif args.cmd == 'dashboard':
+            ref = parse_optional_date(args.reference_date, 'reference date')
+            generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
+            snapshot = build_dashboard_snapshot(
+                library,
+                reference_date=ref,
+                top_limit=args.top,
+                current_limit=args.current_limit,
+                recent_limit=args.recent_limit,
+                title=args.title,
+                generated_at=generated_at,
+            )
+            markdown = render_dashboard_markdown(snapshot)
+            written = []
+            if args.markdown_out:
+                _write_text_output(args.markdown_out, markdown + '\n')
+                written.append(str(args.markdown_out))
+            if args.html_out:
+                _write_text_output(args.html_out, render_dashboard_html(snapshot) + '\n')
+                written.append(str(args.html_out))
+            if written:
+                print('dashboard written: ' + ', '.join(written))
+            else:
+                print(markdown)
     except LibraryError as exc:
         raise SystemExit(str(exc))
 
