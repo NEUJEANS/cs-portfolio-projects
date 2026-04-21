@@ -11,6 +11,6 @@
 - [x] review pass 1
 - [x] review pass 2
 - [x] review pass 3
-- [ ] run secret scan
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan
+- [x] commit, push, and add wrap-up
 - [ ] next: add a preemptive MLFQ algorithm and run it through the benchmark pack
