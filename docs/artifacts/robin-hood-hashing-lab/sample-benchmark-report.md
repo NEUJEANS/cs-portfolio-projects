@@ -1,6 +1,6 @@
 # Robin Hood hashing benchmark comparison with delete-heavy workloads
 
-Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with resident probe-distance plus unsuccessful-lookup histograms that make both dispersion and miss cost visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final hit/miss lookup + histogram pass, so post-removal clustering is visible too.
+Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both dispersion and tail cost visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final hit/miss lookup + histogram pass, so post-removal clustering is visible too.
 
 - Capacity: 127
 - Trials per workload/load factor: 5
@@ -21,6 +21,42 @@ Deterministic benchmark report comparing Robin Hood hashing against a linear-pro
 | Delete-heavy (30.0% removals) | 0.5 | 0.3543 | 45 | Tie | 0 | Robin Hood hashing | 0.3155 | Robin Hood hashing | 0.0864 | Robin Hood hashing | 0.0527 |
 | Delete-heavy (30.0% removals) | 0.7 | 0.4882 | 62 | Tie | 0 | Robin Hood hashing | 0.8259 | Robin Hood hashing | 0.3074 | Linear probing | -0.1037 |
 | Delete-heavy (30.0% removals) | 0.85 | 0.5984 | 76 | Tie | 0 | Robin Hood hashing | 1.2079 | Robin Hood hashing | 0.5856 | Robin Hood hashing | 0.7125 |
+
+## Lookup percentile callouts
+
+These side-by-side lookup summaries make hit and miss tails readable without scanning the full histograms.
+
+| Workload | Requested load factor | Remaining load factor | Strategy | Successful lookups avg / p50 / p95 / max | Unsuccessful lookups avg / p50 / p95 / max |
+| --- | ---: | ---: | --- | --- | --- |
+| Fill-only | 0.25 | 0.252 | Robin Hood hashing | 1.1938 / 1 / 2 / 3 | 1.325 / 1 / 3 / 3 |
+| Fill-only | 0.25 | 0.252 | Linear probing | 1.1938 / 1 / 2 / 4 | 1.4062 / 1 / 3 / 5 |
+| Fill-only | 0.5 | 0.5039 | Robin Hood hashing | 1.5469 / 1 / 3 / 5 | 1.7906 / 2 / 3 / 5 |
+| Fill-only | 0.5 | 0.5039 | Linear probing | 1.5469 / 1 / 3 / 10 | 2.5625 / 2 / 8 / 12 |
+| Fill-only | 0.7 | 0.7008 | Robin Hood hashing | 1.9326 / 2 / 4 / 6 | 2.3596 / 2 / 5 / 7 |
+| Fill-only | 0.7 | 0.7008 | Linear probing | 1.9326 / 1 / 6 / 18 | 4.8045 / 3 / 16 / 24 |
+| Fill-only | 0.85 | 0.8504 | Robin Hood hashing | 3.3148 / 3 / 8 / 12 | 3.7167 / 3 / 9 / 13 |
+| Fill-only | 0.85 | 0.8504 | Linear probing | 3.3148 / 1 / 13 / 69 | 14.037 / 7 / 50 / 73 |
+| Delete-heavy (30.0% removals) | 0.25 | 0.1732 | Robin Hood hashing | 1.1273 / 1 / 2 / 2 | 1.1545 / 1 / 2 / 3 |
+| Delete-heavy (30.0% removals) | 0.25 | 0.1732 | Linear probing | 1.1273 / 1 / 2 / 3 | 1.2455 / 1 / 2 / 3 |
+| Delete-heavy (30.0% removals) | 0.5 | 0.3543 | Robin Hood hashing | 1.2622 / 1 / 2 / 4 | 1.4089 / 1 / 3 / 4 |
+| Delete-heavy (30.0% removals) | 0.5 | 0.3543 | Linear probing | 1.2622 / 1 / 3 / 4 | 1.7244 / 1 / 4 / 8 |
+| Delete-heavy (30.0% removals) | 0.7 | 0.4882 | Robin Hood hashing | 1.4097 / 1 / 3 / 4 | 1.6806 / 1 / 4 / 5 |
+| Delete-heavy (30.0% removals) | 0.7 | 0.4882 | Linear probing | 1.4097 / 1 / 3 / 8 | 2.5065 / 1 / 8 / 16 |
+| Delete-heavy (30.0% removals) | 0.85 | 0.5984 | Robin Hood hashing | 1.6395 / 1 / 3 / 6 | 1.9842 / 2 / 4 / 6 |
+| Delete-heavy (30.0% removals) | 0.85 | 0.5984 | Linear probing | 1.6395 / 1 / 4 / 14 | 3.1921 / 2 / 11 / 20 |
+
+Positive p95 deltas mean Robin Hood hashing had the shorter lookup tail than linear probing for that slice.
+
+| Workload | Requested load factor | Lower hit p95 | Hit p95 delta vs linear | Lower miss p95 | Miss p95 delta vs linear |
+| --- | ---: | --- | ---: | --- | ---: |
+| Fill-only | 0.25 | Tie | 0 | Tie | 0 |
+| Fill-only | 0.5 | Tie | 0 | Robin Hood hashing | 5 |
+| Fill-only | 0.7 | Robin Hood hashing | 2 | Robin Hood hashing | 11 |
+| Fill-only | 0.85 | Robin Hood hashing | 5 | Robin Hood hashing | 41 |
+| Delete-heavy (30.0% removals) | 0.25 | Tie | 0 | Tie | 0 |
+| Delete-heavy (30.0% removals) | 0.5 | Robin Hood hashing | 1 | Robin Hood hashing | 1 |
+| Delete-heavy (30.0% removals) | 0.7 | Tie | 0 | Robin Hood hashing | 4 |
+| Delete-heavy (30.0% removals) | 0.85 | Robin Hood hashing | 1 | Robin Hood hashing | 7 |
 
 ## Aggregate metrics
 

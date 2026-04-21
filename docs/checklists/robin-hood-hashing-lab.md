@@ -12,3 +12,4 @@
 - [x] add delete-heavy benchmark workloads so the compare dashboard covers post-removal behavior too
 - [x] add unsuccessful-lookup benchmark histograms so misses become part of the interview story
 - [x] add a compact PNG export path for the benchmark dashboard so portfolio screenshots can be regenerated automatically
+- [x] add side-by-side lookup percentile callouts so hit and miss tails are readable without scanning every histogram row

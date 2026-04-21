@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import random
 import shutil
 import statistics
@@ -67,6 +68,7 @@ class BenchmarkRow:
     max_cluster_length: int
     swap_count: int
     probe_distance_histogram: dict[int, int]
+    successful_lookup_probe_histogram: dict[int, int]
     unsuccessful_lookup_probe_histogram: dict[int, int]
 
     def to_dict(self, capacity: int) -> dict[str, Any]:
@@ -91,6 +93,9 @@ class BenchmarkRow:
             "swap_count": self.swap_count,
             "probe_distance_histogram": {
                 str(distance): count for distance, count in sorted(self.probe_distance_histogram.items())
+            },
+            "successful_lookup_probe_histogram": {
+                str(probes): count for probes, count in sorted(self.successful_lookup_probe_histogram.items())
             },
             "unsuccessful_lookup_probe_histogram": {
                 str(probes): count for probes, count in sorted(self.unsuccessful_lookup_probe_histogram.items())
@@ -745,6 +750,7 @@ def run_benchmark(
                             max_cluster_length=max(stats["cluster_lengths"], default=0),
                             swap_count=swap_total,
                             probe_distance_histogram=stats["probe_distance_histogram"],
+                            successful_lookup_probe_histogram=_probe_count_histogram(lookup_probe_counts),
                             unsuccessful_lookup_probe_histogram=_probe_count_histogram(unsuccessful_lookup_probe_counts),
                         )
                     )
@@ -781,6 +787,7 @@ def save_benchmark(rows: list[BenchmarkRow], output_path: Path, *, capacity: int
                 "max_cluster_length",
                 "swap_count",
                 "probe_distance_histogram",
+                "successful_lookup_probe_histogram",
                 "unsuccessful_lookup_probe_histogram",
             ],
             lineterminator="\n",
@@ -791,6 +798,7 @@ def save_benchmark(rows: list[BenchmarkRow], output_path: Path, *, capacity: int
                 {
                     **row,
                     "probe_distance_histogram": json.dumps(row["probe_distance_histogram"]),
+                    "successful_lookup_probe_histogram": json.dumps(row["successful_lookup_probe_histogram"]),
                     "unsuccessful_lookup_probe_histogram": json.dumps(row["unsuccessful_lookup_probe_histogram"]),
                 }
             )
@@ -820,13 +828,40 @@ def _distribution_rows(histogram: dict[int, int], *, key_name: str) -> list[dict
     ]
 
 
-def _histogram_stats(histogram: dict[int, int]) -> tuple[float, float]:
+def _histogram_percentile(histogram: dict[int, int], percentile: int) -> int:
     total = sum(histogram.values())
     if total <= 0:
-        return 0.0, 0.0
+        return 0
+    target_rank = max(1, math.ceil((percentile / 100) * total))
+    seen = 0
+    for bucket_value, count in sorted(histogram.items()):
+        seen += count
+        if seen >= target_rank:
+            return bucket_value
+    return max(histogram, default=0)
+
+
+def _histogram_summary(histogram: dict[int, int]) -> dict[str, int | float]:
+    total = sum(histogram.values())
+    if total <= 0:
+        return {
+            "count": 0,
+            "average": 0.0,
+            "stddev": 0.0,
+            "max": 0,
+            "p50": 0,
+            "p95": 0,
+        }
     mean = sum(distance * count for distance, count in histogram.items()) / total
     variance = sum(((distance - mean) ** 2) * count for distance, count in histogram.items()) / total
-    return round(mean, 4), round(variance**0.5, 4)
+    return {
+        "count": total,
+        "average": round(mean, 4),
+        "stddev": round(variance**0.5, 4),
+        "max": max(histogram, default=0),
+        "p50": _histogram_percentile(histogram, 50),
+        "p95": _histogram_percentile(histogram, 95),
+    }
 
 
 def summarize_benchmark(
@@ -852,13 +887,15 @@ def summarize_benchmark(
                 if not bucket:
                     continue
                 merged_histogram = _merge_histogram_counts(row.probe_distance_histogram for row in bucket)
+                merged_successful_lookup_histogram = _merge_histogram_counts(
+                    row.successful_lookup_probe_histogram for row in bucket
+                )
                 merged_unsuccessful_lookup_histogram = _merge_histogram_counts(
                     row.unsuccessful_lookup_probe_histogram for row in bucket
                 )
-                average_probe_distance, probe_distance_stddev = _histogram_stats(merged_histogram)
-                average_unsuccessful_lookup_probes, unsuccessful_lookup_probe_stddev = _histogram_stats(
-                    merged_unsuccessful_lookup_histogram
-                )
+                probe_distance_summary = _histogram_summary(merged_histogram)
+                successful_lookup_summary = _histogram_summary(merged_successful_lookup_histogram)
+                unsuccessful_lookup_summary = _histogram_summary(merged_unsuccessful_lookup_histogram)
                 results.append(
                     {
                         "workload": workload,
@@ -873,17 +910,25 @@ def summarize_benchmark(
                         "effective_load_factor": round(_mean([row.effective_load_factor for row in bucket]), 4),
                         "average_insert_probes": round(_mean([row.average_insert_probes for row in bucket]), 4),
                         "average_delete_probes": round(_mean([row.average_delete_probes for row in bucket]), 4),
-                        "average_successful_lookup_probes": round(
-                            _mean([row.average_successful_lookup_probes for row in bucket]), 4
-                        ),
-                        "average_unsuccessful_lookup_probes": average_unsuccessful_lookup_probes,
-                        "unsuccessful_lookup_probe_stddev": unsuccessful_lookup_probe_stddev,
-                        "average_probe_distance": average_probe_distance,
-                        "probe_distance_stddev": probe_distance_stddev,
-                        "max_probe_distance": max(row.max_probe_distance for row in bucket),
+                        "average_successful_lookup_probes": successful_lookup_summary["average"],
+                        "successful_lookup_probe_stddev": successful_lookup_summary["stddev"],
+                        "successful_lookup_p50_probes": successful_lookup_summary["p50"],
+                        "successful_lookup_p95_probes": successful_lookup_summary["p95"],
+                        "max_successful_lookup_probes": successful_lookup_summary["max"],
+                        "average_unsuccessful_lookup_probes": unsuccessful_lookup_summary["average"],
+                        "unsuccessful_lookup_probe_stddev": unsuccessful_lookup_summary["stddev"],
+                        "unsuccessful_lookup_p50_probes": unsuccessful_lookup_summary["p50"],
+                        "unsuccessful_lookup_p95_probes": unsuccessful_lookup_summary["p95"],
+                        "max_unsuccessful_lookup_probes": unsuccessful_lookup_summary["max"],
+                        "average_probe_distance": probe_distance_summary["average"],
+                        "probe_distance_stddev": probe_distance_summary["stddev"],
+                        "max_probe_distance": probe_distance_summary["max"],
                         "max_cluster_length": max(row.max_cluster_length for row in bucket),
                         "average_swap_count": round(_mean([row.swap_count for row in bucket]), 4),
                         "probe_distance_histogram": _distribution_rows(merged_histogram, key_name="distance"),
+                        "successful_lookup_probe_histogram": _distribution_rows(
+                            merged_successful_lookup_histogram, key_name="probes"
+                        ),
                         "unsuccessful_lookup_probe_histogram": _distribution_rows(
                             merged_unsuccessful_lookup_histogram, key_name="probes"
                         ),
@@ -923,6 +968,8 @@ def summarize_benchmark(
                 miss_delta = round(
                     linear["average_unsuccessful_lookup_probes"] - robin["average_unsuccessful_lookup_probes"], 4
                 )
+                hit_p95_delta = linear["successful_lookup_p95_probes"] - robin["successful_lookup_p95_probes"]
+                miss_p95_delta = linear["unsuccessful_lookup_p95_probes"] - robin["unsuccessful_lookup_p95_probes"]
                 if abs(miss_delta) < 1e-9:
                     miss_winner = "Tie"
                 elif robin["average_unsuccessful_lookup_probes"] < linear["average_unsuccessful_lookup_probes"]:
@@ -946,6 +993,20 @@ def summarize_benchmark(
                 else:
                     delete_winner = linear["strategy_label"]
 
+                if hit_p95_delta == 0:
+                    hit_tail_winner = "Tie"
+                elif robin["successful_lookup_p95_probes"] < linear["successful_lookup_p95_probes"]:
+                    hit_tail_winner = robin["strategy_label"]
+                else:
+                    hit_tail_winner = linear["strategy_label"]
+
+                if miss_p95_delta == 0:
+                    miss_tail_winner = "Tie"
+                elif robin["unsuccessful_lookup_p95_probes"] < linear["unsuccessful_lookup_p95_probes"]:
+                    miss_tail_winner = robin["strategy_label"]
+                else:
+                    miss_tail_winner = linear["strategy_label"]
+
                 comparisons.append(
                     {
                         "workload": workload,
@@ -957,10 +1018,14 @@ def summarize_benchmark(
                         "deleted_entry_count": robin["deleted_entry_count"],
                         "lookup_delta_vs_linear": lookup_delta,
                         "miss_delta_vs_linear": miss_delta,
+                        "hit_p95_delta_vs_linear": hit_p95_delta,
+                        "miss_p95_delta_vs_linear": miss_p95_delta,
                         "probe_stddev_delta_vs_linear": dispersion_delta,
                         "delete_delta_vs_linear": delete_delta if robin["deleted_entry_count"] else None,
                         "lookup_winner": lookup_winner,
                         "miss_winner": miss_winner,
+                        "hit_tail_winner": hit_tail_winner,
+                        "miss_tail_winner": miss_tail_winner,
                         "dispersion_winner": dispersion_winner,
                         "delete_winner": delete_winner,
                     }
@@ -1037,17 +1102,17 @@ def _benchmark_intro(summary: dict[str, Any]) -> str:
         )
     if len(labels) == 1:
         return (
-            f"Deterministic benchmark report for {labels[0]}, with resident probe-distance plus unsuccessful-lookup histograms that make both spread and miss cost visible at a glance."
+            f"Deterministic benchmark report for {labels[0]}, with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both spread and tail cost visible at a glance."
             f"{delete_note}"
         )
     if summary["strategies"] == ["robin-hood", "linear-probing"]:
         return (
             "Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, "
-            "with resident probe-distance plus unsuccessful-lookup histograms that make both dispersion and miss cost visible at a glance."
+            "with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both dispersion and tail cost visible at a glance."
             f"{delete_note}"
         )
     return (
-        f"Deterministic benchmark report comparing {' vs '.join(labels)}, with resident probe-distance plus unsuccessful-lookup histograms that make both dispersion and miss cost visible at a glance."
+        f"Deterministic benchmark report comparing {' vs '.join(labels)}, with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both dispersion and tail cost visible at a glance."
         f"{delete_note}"
     )
 
@@ -1095,6 +1160,73 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
                         _format_number(row["probe_stddev_delta_vs_linear"]),
                         row["delete_winner"],
                         "—" if row["delete_delta_vs_linear"] is None else _format_number(row["delete_delta_vs_linear"]),
+                    ]
+                )
+                + " |"
+        )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Lookup percentile callouts",
+            "",
+            "These side-by-side lookup summaries make hit and miss tails readable without scanning the full histograms.",
+            "",
+            "| Workload | Requested load factor | Remaining load factor | Strategy | Successful lookups avg / p50 / p95 / max | Unsuccessful lookups avg / p50 / p95 / max |",
+            "| --- | ---: | ---: | --- | --- | --- |",
+        ]
+    )
+    for row in summary["results"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row["workload_label"],
+                    _format_number(row["load_factor"]),
+                    _format_number(row["effective_load_factor"]),
+                    row["strategy_label"],
+                    " / ".join(
+                        [
+                            _format_number(row["average_successful_lookup_probes"]),
+                            str(row["successful_lookup_p50_probes"]),
+                            str(row["successful_lookup_p95_probes"]),
+                            str(row["max_successful_lookup_probes"]),
+                        ]
+                    ),
+                    " / ".join(
+                        [
+                            _format_number(row["average_unsuccessful_lookup_probes"]),
+                            str(row["unsuccessful_lookup_p50_probes"]),
+                            str(row["unsuccessful_lookup_p95_probes"]),
+                            str(row["max_unsuccessful_lookup_probes"]),
+                        ]
+                    ),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+
+    if summary["comparisons"]:
+        lines.extend(
+            [
+                "Positive p95 deltas mean Robin Hood hashing had the shorter lookup tail than linear probing for that slice.",
+                "",
+                "| Workload | Requested load factor | Lower hit p95 | Hit p95 delta vs linear | Lower miss p95 | Miss p95 delta vs linear |",
+                "| --- | ---: | --- | ---: | --- | ---: |",
+            ]
+        )
+        for row in summary["comparisons"]:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        row["workload_label"],
+                        _format_number(row["load_factor"]),
+                        row["hit_tail_winner"],
+                        _format_number(row["hit_p95_delta_vs_linear"]),
+                        row["miss_tail_winner"],
+                        _format_number(row["miss_p95_delta_vs_linear"]),
                     ]
                 )
                 + " |"
@@ -1341,11 +1473,12 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
   <h2>{escape(row['workload_label'])} · start {escape(_format_number(row['load_factor']))} · {escape(row['strategy_label'])}</h2>
   <p>{row['entry_count']} starting entries across {row['trial_count']} deterministic trial(s); {row['remaining_entry_count']} remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>{escape(_format_number(row['average_successful_lookup_probes']))}</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>{escape(_format_number(row['average_unsuccessful_lookup_probes']))}</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>{escape(_format_number(row['average_successful_lookup_probes']))} / {row['successful_lookup_p50_probes']} / {row['successful_lookup_p95_probes']} / {row['max_successful_lookup_probes']}</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>{escape(_format_number(row['average_unsuccessful_lookup_probes']))} / {row['unsuccessful_lookup_p50_probes']} / {row['unsuccessful_lookup_p95_probes']} / {row['max_unsuccessful_lookup_probes']}</strong></li>
     <li>Avg delete probes: <strong>{escape(_format_number(row['average_delete_probes']))}</strong></li>
     <li>Avg probe distance: <strong>{escape(_format_number(row['average_probe_distance']))}</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>{escape(_format_number(row['unsuccessful_lookup_probe_stddev']))}</strong></li>
+    <li>Successful lookup probe stddev: <strong>{escape(_format_number(row['successful_lookup_probe_stddev']))}</strong></li>
     <li>Probe-distance stddev: <strong>{escape(_format_number(row['probe_distance_stddev']))}</strong></li>
     <li>Max probe distance: <strong>{row['max_probe_distance']}</strong></li>
     <li>Max cluster length: <strong>{row['max_cluster_length']}</strong></li>
@@ -1354,6 +1487,52 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 </article>'''
         for row in results
     )
+
+    lookup_percentile_rows_html = "".join(
+        f'''<tr>
+  <th scope="row">{escape(row['workload_label'])}</th>
+  <td>{escape(_format_number(row['load_factor']))}</td>
+  <td>{escape(_format_number(row['effective_load_factor']))}</td>
+  <td>{escape(row['strategy_label'])}</td>
+  <td>{escape(_format_number(row['average_successful_lookup_probes']))} / {row['successful_lookup_p50_probes']} / {row['successful_lookup_p95_probes']} / {row['max_successful_lookup_probes']}</td>
+  <td>{escape(_format_number(row['average_unsuccessful_lookup_probes']))} / {row['unsuccessful_lookup_p50_probes']} / {row['unsuccessful_lookup_p95_probes']} / {row['max_unsuccessful_lookup_probes']}</td>
+</tr>'''
+        for row in results
+    )
+
+    lookup_tail_rows_html = "".join(
+        f'''<tr>
+  <th scope="row">{escape(row['workload_label'])}</th>
+  <td>{escape(_format_number(row['load_factor']))}</td>
+  <td>{escape(row['hit_tail_winner'])}</td>
+  <td>{escape(_format_number(row['hit_p95_delta_vs_linear']))}</td>
+  <td>{escape(row['miss_tail_winner'])}</td>
+  <td>{escape(_format_number(row['miss_p95_delta_vs_linear']))}</td>
+</tr>'''
+        for row in comparisons
+    )
+
+    lookup_tail_panel_html = ""
+    if comparisons:
+        lookup_tail_panel_html = f'''<section class="panel">
+      <h2>Lookup tail winners</h2>
+      <table>
+        <caption>Lower p95 winners against the linear-probing baseline for both hit and miss lookups. Positive deltas mean linear probing had the longer p95 tail.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Lower hit p95</th>
+            <th scope="col">Hit p95 delta vs linear</th>
+            <th scope="col">Lower miss p95</th>
+            <th scope="col">Miss p95 delta vs linear</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lookup_tail_rows_html}
+        </tbody>
+      </table>
+    </section>'''
 
     histogram_sections: list[str] = []
     for workload in summary["workloads"]:
@@ -1582,6 +1761,27 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     </section>
     <p>Requested load factors are rounded to whole entry counts, so the effective fill level can differ slightly from the requested target.</p>
     {comparison_table_html}
+    <section class="panel">
+      <h2>Lookup percentile callouts</h2>
+      <p>These side-by-side lookup summaries make hit and miss tails readable without scanning the full histograms.</p>
+      <table>
+        <caption>Average / p50 / p95 / max lookup probes for successful and unsuccessful searches.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Remaining load factor</th>
+            <th scope="col">Strategy</th>
+            <th scope="col">Successful lookup avg / p50 / p95 / max</th>
+            <th scope="col">Unsuccessful lookup avg / p50 / p95 / max</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lookup_percentile_rows_html}
+        </tbody>
+      </table>
+    </section>
+    {lookup_tail_panel_html}
     <section class="panel">
       <h2>Aggregate metrics</h2>
       <table>

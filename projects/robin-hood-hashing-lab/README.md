@@ -16,7 +16,8 @@ A portfolio-friendly Python project that implements a Robin Hood hash table with
 - benchmark mode for comparing Robin Hood hashing against a linear-probing baseline across load factors and workload shapes
 - optional fill-only and delete-heavy workloads so post-removal clustering/backward-shift behavior is visible in the exported metrics
 - benchmark output now includes unsuccessful-lookup probe metrics plus failed-search histograms, so misses are part of the same interview story as successful lookups and resident probe distances
-- optional Markdown, self-contained HTML, and slide-ready PNG benchmark artifacts with probe-distance and unsuccessful-lookup histograms for portfolio-ready writeups
+- benchmark reports now surface side-by-side successful vs unsuccessful lookup avg/p50/p95/max callouts, so hit and miss tails are readable without scanning every histogram row
+- optional Markdown, self-contained HTML, and slide-ready PNG benchmark artifacts with probe-distance histograms plus lookup percentile callouts for portfolio-ready writeups
 - committed sample artifacts under `docs/artifacts/robin-hood-hashing-lab/`
 - regression tests covering swaps, deletions, snapshots, CLI flows, and comparison/report generation
 
@@ -65,7 +66,7 @@ python3 robin_hood_hashing_lab.py export \
   --output artifacts/robin-hood-table.csv
 ```
 
-Benchmark Robin Hood hashing against a linear-probing baseline and emit screenshot-friendly artifacts, including both fill-only and delete-heavy workload passes plus resident probe-distance and unsuccessful-lookup histograms in the Markdown/HTML reports:
+Benchmark Robin Hood hashing against a linear-probing baseline and emit screenshot-friendly artifacts, including both fill-only and delete-heavy workload passes plus resident probe-distance histograms and side-by-side hit/miss lookup percentile callouts in the Markdown/HTML reports:
 
 ```bash
 python3 robin_hood_hashing_lab.py benchmark \
@@ -103,4 +104,3 @@ python3 -m unittest tests.test_robin_hood_hashing_lab -v
 
 ## Future improvements
 - support string and integer key generators for more workload shapes
-- add side-by-side lookup percentile callouts so the report can compare hit and miss tails without reading the full histograms

@@ -54,7 +54,7 @@
   <main>
     <section class="hero">
       <h1>Robin Hood hashing benchmark comparison with delete-heavy workloads</h1>
-      <p>Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with resident probe-distance plus unsuccessful-lookup histograms that make both dispersion and miss cost visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final hit/miss lookup + histogram pass, so post-removal clustering is visible too.</p>
+      <p>Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with resident probe-distance histograms plus hit/miss lookup percentile callouts that make both dispersion and tail cost visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final hit/miss lookup + histogram pass, so post-removal clustering is visible too.</p>
     </section>
     <section class="grid summary-grid">
       <article class="summary-card">
@@ -209,6 +209,213 @@
     </tbody>
   </table>
 </section>
+    <section class="panel">
+      <h2>Lookup percentile callouts</h2>
+      <p>These side-by-side lookup summaries make hit and miss tails readable without scanning the full histograms.</p>
+      <table>
+        <caption>Average / p50 / p95 / max lookup probes for successful and unsuccessful searches.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Remaining load factor</th>
+            <th scope="col">Strategy</th>
+            <th scope="col">Successful lookup avg / p50 / p95 / max</th>
+            <th scope="col">Unsuccessful lookup avg / p50 / p95 / max</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+  <th scope="row">Fill-only</th>
+  <td>0.25</td>
+  <td>0.252</td>
+  <td>Robin Hood hashing</td>
+  <td>1.1938 / 1 / 2 / 3</td>
+  <td>1.325 / 1 / 3 / 3</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.25</td>
+  <td>0.252</td>
+  <td>Linear probing</td>
+  <td>1.1938 / 1 / 2 / 4</td>
+  <td>1.4062 / 1 / 3 / 5</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.5</td>
+  <td>0.5039</td>
+  <td>Robin Hood hashing</td>
+  <td>1.5469 / 1 / 3 / 5</td>
+  <td>1.7906 / 2 / 3 / 5</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.5</td>
+  <td>0.5039</td>
+  <td>Linear probing</td>
+  <td>1.5469 / 1 / 3 / 10</td>
+  <td>2.5625 / 2 / 8 / 12</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.7</td>
+  <td>0.7008</td>
+  <td>Robin Hood hashing</td>
+  <td>1.9326 / 2 / 4 / 6</td>
+  <td>2.3596 / 2 / 5 / 7</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.7</td>
+  <td>0.7008</td>
+  <td>Linear probing</td>
+  <td>1.9326 / 1 / 6 / 18</td>
+  <td>4.8045 / 3 / 16 / 24</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.85</td>
+  <td>0.8504</td>
+  <td>Robin Hood hashing</td>
+  <td>3.3148 / 3 / 8 / 12</td>
+  <td>3.7167 / 3 / 9 / 13</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.85</td>
+  <td>0.8504</td>
+  <td>Linear probing</td>
+  <td>3.3148 / 1 / 13 / 69</td>
+  <td>14.037 / 7 / 50 / 73</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.25</td>
+  <td>0.1732</td>
+  <td>Robin Hood hashing</td>
+  <td>1.1273 / 1 / 2 / 2</td>
+  <td>1.1545 / 1 / 2 / 3</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.25</td>
+  <td>0.1732</td>
+  <td>Linear probing</td>
+  <td>1.1273 / 1 / 2 / 3</td>
+  <td>1.2455 / 1 / 2 / 3</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.5</td>
+  <td>0.3543</td>
+  <td>Robin Hood hashing</td>
+  <td>1.2622 / 1 / 2 / 4</td>
+  <td>1.4089 / 1 / 3 / 4</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.5</td>
+  <td>0.3543</td>
+  <td>Linear probing</td>
+  <td>1.2622 / 1 / 3 / 4</td>
+  <td>1.7244 / 1 / 4 / 8</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.7</td>
+  <td>0.4882</td>
+  <td>Robin Hood hashing</td>
+  <td>1.4097 / 1 / 3 / 4</td>
+  <td>1.6806 / 1 / 4 / 5</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.7</td>
+  <td>0.4882</td>
+  <td>Linear probing</td>
+  <td>1.4097 / 1 / 3 / 8</td>
+  <td>2.5065 / 1 / 8 / 16</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.85</td>
+  <td>0.5984</td>
+  <td>Robin Hood hashing</td>
+  <td>1.6395 / 1 / 3 / 6</td>
+  <td>1.9842 / 2 / 4 / 6</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.85</td>
+  <td>0.5984</td>
+  <td>Linear probing</td>
+  <td>1.6395 / 1 / 4 / 14</td>
+  <td>3.1921 / 2 / 11 / 20</td>
+</tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <h2>Lookup tail winners</h2>
+      <table>
+        <caption>Lower p95 winners against the linear-probing baseline for both hit and miss lookups. Positive deltas mean linear probing had the longer p95 tail.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Lower hit p95</th>
+            <th scope="col">Hit p95 delta vs linear</th>
+            <th scope="col">Lower miss p95</th>
+            <th scope="col">Miss p95 delta vs linear</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+  <th scope="row">Fill-only</th>
+  <td>0.25</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Tie</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.5</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>5</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.7</td>
+  <td>Robin Hood hashing</td>
+  <td>2</td>
+  <td>Robin Hood hashing</td>
+  <td>11</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.85</td>
+  <td>Robin Hood hashing</td>
+  <td>5</td>
+  <td>Robin Hood hashing</td>
+  <td>41</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.25</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Tie</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.5</td>
+  <td>Robin Hood hashing</td>
+  <td>1</td>
+  <td>Robin Hood hashing</td>
+  <td>1</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.7</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>4</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.85</td>
+  <td>Robin Hood hashing</td>
+  <td>1</td>
+  <td>Robin Hood hashing</td>
+  <td>7</td>
+</tr>
+        </tbody>
+      </table>
+    </section>
     <section class="panel">
       <h2>Aggregate metrics</h2>
       <table>
@@ -3471,11 +3678,12 @@
   <h2>Fill-only · start 0.25 · Robin Hood hashing</h2>
   <p>32 starting entries across 5 deterministic trial(s); 32 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.1938</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.325</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.1938 / 1 / 2 / 3</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.325 / 1 / 3 / 3</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.1938</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.5761</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.4257</strong></li>
     <li>Probe-distance stddev: <strong>0.4257</strong></li>
     <li>Max probe distance: <strong>2</strong></li>
     <li>Max cluster length: <strong>5</strong></li>
@@ -3485,11 +3693,12 @@
   <h2>Fill-only · start 0.25 · Linear probing</h2>
   <p>32 starting entries across 5 deterministic trial(s); 32 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.1938</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.4062</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.1938 / 1 / 2 / 4</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.4062 / 1 / 3 / 5</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.1938</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.8085</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.5184</strong></li>
     <li>Probe-distance stddev: <strong>0.5184</strong></li>
     <li>Max probe distance: <strong>3</strong></li>
     <li>Max cluster length: <strong>5</strong></li>
@@ -3499,11 +3708,12 @@
   <h2>Fill-only · start 0.5 · Robin Hood hashing</h2>
   <p>64 starting entries across 5 deterministic trial(s); 64 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.5469</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.7906</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.5469 / 1 / 3 / 5</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.7906 / 2 / 3 / 5</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.5469</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.9134</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.8202</strong></li>
     <li>Probe-distance stddev: <strong>0.8202</strong></li>
     <li>Max probe distance: <strong>4</strong></li>
     <li>Max cluster length: <strong>11</strong></li>
@@ -3513,11 +3723,12 @@
   <h2>Fill-only · start 0.5 · Linear probing</h2>
   <p>64 starting entries across 5 deterministic trial(s); 64 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.5469</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>2.5625</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.5469 / 1 / 3 / 10</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>2.5625 / 2 / 8 / 12</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.5469</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>2.3775</strong></li>
+    <li>Successful lookup probe stddev: <strong>1.1556</strong></li>
     <li>Probe-distance stddev: <strong>1.1556</strong></li>
     <li>Max probe distance: <strong>9</strong></li>
     <li>Max cluster length: <strong>11</strong></li>
@@ -3527,11 +3738,12 @@
   <h2>Fill-only · start 0.7 · Robin Hood hashing</h2>
   <p>89 starting entries across 5 deterministic trial(s); 89 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.9326</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>2.3596</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.9326 / 2 / 4 / 6</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>2.3596 / 2 / 5 / 7</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.9326</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>1.3445</strong></li>
+    <li>Successful lookup probe stddev: <strong>1.1475</strong></li>
     <li>Probe-distance stddev: <strong>1.1475</strong></li>
     <li>Max probe distance: <strong>5</strong></li>
     <li>Max cluster length: <strong>24</strong></li>
@@ -3541,11 +3753,12 @@
   <h2>Fill-only · start 0.7 · Linear probing</h2>
   <p>89 starting entries across 5 deterministic trial(s); 89 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.9326</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>4.8045</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.9326 / 1 / 6 / 18</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>4.8045 / 3 / 16 / 24</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.9326</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>4.8962</strong></li>
+    <li>Successful lookup probe stddev: <strong>2.2255</strong></li>
     <li>Probe-distance stddev: <strong>2.2255</strong></li>
     <li>Max probe distance: <strong>17</strong></li>
     <li>Max cluster length: <strong>24</strong></li>
@@ -3555,11 +3768,12 @@
   <h2>Fill-only · start 0.85 · Robin Hood hashing</h2>
   <p>108 starting entries across 5 deterministic trial(s); 108 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>3.3148</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>3.7167</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>3.3148 / 3 / 8 / 12</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>3.7167 / 3 / 9 / 13</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>2.3148</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>2.3873</strong></li>
+    <li>Successful lookup probe stddev: <strong>2.3176</strong></li>
     <li>Probe-distance stddev: <strong>2.3176</strong></li>
     <li>Max probe distance: <strong>11</strong></li>
     <li>Max cluster length: <strong>72</strong></li>
@@ -3569,11 +3783,12 @@
   <h2>Fill-only · start 0.85 · Linear probing</h2>
   <p>108 starting entries across 5 deterministic trial(s); 108 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>3.3148</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>14.037</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>3.3148 / 1 / 13 / 69</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>14.037 / 7 / 50 / 73</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>2.3148</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>16.2011</strong></li>
+    <li>Successful lookup probe stddev: <strong>6.628</strong></li>
     <li>Probe-distance stddev: <strong>6.628</strong></li>
     <li>Max probe distance: <strong>68</strong></li>
     <li>Max cluster length: <strong>72</strong></li>
@@ -3583,11 +3798,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.25 · Robin Hood hashing</h2>
   <p>32 starting entries across 5 deterministic trial(s); 22 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.1273</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.1545</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.1273 / 1 / 2 / 2</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.1545 / 1 / 2 / 3</strong></li>
     <li>Avg delete probes: <strong>1.16</strong></li>
     <li>Avg probe distance: <strong>0.1273</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.4087</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.3333</strong></li>
     <li>Probe-distance stddev: <strong>0.3333</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>4</strong></li>
@@ -3597,11 +3813,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.25 · Linear probing</h2>
   <p>32 starting entries across 5 deterministic trial(s); 22 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.1273</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.2455</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.1273 / 1 / 2 / 3</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.2455 / 1 / 2 / 3</strong></li>
     <li>Avg delete probes: <strong>1.1</strong></li>
     <li>Avg probe distance: <strong>0.1273</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.4896</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.3595</strong></li>
     <li>Probe-distance stddev: <strong>0.3595</strong></li>
     <li>Max probe distance: <strong>2</strong></li>
     <li>Max cluster length: <strong>4</strong></li>
@@ -3611,11 +3828,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.5 · Robin Hood hashing</h2>
   <p>64 starting entries across 5 deterministic trial(s); 45 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.2622</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.4089</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.2622 / 1 / 2 / 4</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.4089 / 1 / 3 / 4</strong></li>
     <li>Avg delete probes: <strong>1.4526</strong></li>
     <li>Avg probe distance: <strong>0.2622</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.6051</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.5229</strong></li>
     <li>Probe-distance stddev: <strong>0.5229</strong></li>
     <li>Max probe distance: <strong>3</strong></li>
     <li>Max cluster length: <strong>7</strong></li>
@@ -3625,11 +3843,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.5 · Linear probing</h2>
   <p>64 starting entries across 5 deterministic trial(s); 45 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.2622</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.7244</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.2622 / 1 / 3 / 4</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.7244 / 1 / 4 / 8</strong></li>
     <li>Avg delete probes: <strong>1.5053</strong></li>
     <li>Avg probe distance: <strong>0.2622</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>1.141</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.6093</strong></li>
     <li>Probe-distance stddev: <strong>0.6093</strong></li>
     <li>Max probe distance: <strong>3</strong></li>
     <li>Max cluster length: <strong>7</strong></li>
@@ -3639,11 +3858,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.7 · Robin Hood hashing</h2>
   <p>89 starting entries across 5 deterministic trial(s); 62 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.4097</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.6806</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.4097 / 1 / 3 / 4</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.6806 / 1 / 4 / 5</strong></li>
     <li>Avg delete probes: <strong>1.5481</strong></li>
     <li>Avg probe distance: <strong>0.4097</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>0.9112</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.6647</strong></li>
     <li>Probe-distance stddev: <strong>0.6647</strong></li>
     <li>Max probe distance: <strong>3</strong></li>
     <li>Max cluster length: <strong>16</strong></li>
@@ -3653,11 +3873,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.7 · Linear probing</h2>
   <p>89 starting entries across 5 deterministic trial(s); 62 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.4097</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>2.5065</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.4097 / 1 / 3 / 8</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>2.5065 / 1 / 8 / 16</strong></li>
     <li>Avg delete probes: <strong>1.4444</strong></li>
     <li>Avg probe distance: <strong>0.4097</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>2.5282</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.9721</strong></li>
     <li>Probe-distance stddev: <strong>0.9721</strong></li>
     <li>Max probe distance: <strong>7</strong></li>
     <li>Max cluster length: <strong>16</strong></li>
@@ -3667,11 +3888,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.85 · Robin Hood hashing</h2>
   <p>108 starting entries across 5 deterministic trial(s); 76 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.6395</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.9842</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.6395 / 1 / 3 / 6</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>1.9842 / 2 / 4 / 6</strong></li>
     <li>Avg delete probes: <strong>2.25</strong></li>
     <li>Avg probe distance: <strong>0.6395</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>1.0905</strong></li>
+    <li>Successful lookup probe stddev: <strong>0.9026</strong></li>
     <li>Probe-distance stddev: <strong>0.9026</strong></li>
     <li>Max probe distance: <strong>5</strong></li>
     <li>Max cluster length: <strong>20</strong></li>
@@ -3681,11 +3903,12 @@
   <h2>Delete-heavy (30.0% removals) · start 0.85 · Linear probing</h2>
   <p>108 starting entries across 5 deterministic trial(s); 76 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.6395</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>3.1921</strong></li>
+    <li>Successful lookup avg / p50 / p95 / max: <strong>1.6395 / 1 / 4 / 14</strong></li>
+    <li>Unsuccessful lookup avg / p50 / p95 / max: <strong>3.1921 / 2 / 11 / 20</strong></li>
     <li>Avg delete probes: <strong>2.9625</strong></li>
     <li>Avg probe distance: <strong>0.6395</strong></li>
     <li>Unsuccessful lookup probe stddev: <strong>3.3051</strong></li>
+    <li>Successful lookup probe stddev: <strong>1.4882</strong></li>
     <li>Probe-distance stddev: <strong>1.4882</strong></li>
     <li>Max probe distance: <strong>13</strong></li>
     <li>Max cluster length: <strong>20</strong></li>

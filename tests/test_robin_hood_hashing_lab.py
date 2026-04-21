@@ -239,6 +239,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
                 max_cluster_length=2,
                 swap_count=0,
                 probe_distance_histogram={0: 1, 2: 1},
+                successful_lookup_probe_histogram={1: 1, 2: 1},
                 unsuccessful_lookup_probe_histogram={1: 1, 3: 1},
             ),
             BenchmarkRow(
@@ -260,6 +261,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
                 max_cluster_length=2,
                 swap_count=0,
                 probe_distance_histogram={0: 1, 4: 1},
+                successful_lookup_probe_histogram={2: 1, 5: 1},
                 unsuccessful_lookup_probe_histogram={2: 1, 4: 1},
             ),
         ]
@@ -281,6 +283,10 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         self.assertEqual(result["unsuccessful_lookup_probe_stddev"], 1.118)
         self.assertEqual(result["unsuccessful_lookup_probe_histogram"][3]["probes"], 4)
         self.assertEqual(result["unsuccessful_lookup_probe_histogram"][3]["share"], 0.25)
+        self.assertEqual(result["average_successful_lookup_probes"], 2.5)
+        self.assertEqual(result["successful_lookup_p50_probes"], 2)
+        self.assertEqual(result["successful_lookup_p95_probes"], 5)
+        self.assertEqual(result["max_successful_lookup_probes"], 5)
 
     def test_save_benchmark_csv_preserves_numeric_histogram_key_order(self) -> None:
         row = BenchmarkRow(
@@ -302,6 +308,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             max_cluster_length=3,
             swap_count=0,
             probe_distance_histogram={0: 1, 2: 1, 10: 1},
+            successful_lookup_probe_histogram={1: 1, 3: 1, 12: 1},
             unsuccessful_lookup_probe_histogram={1: 1, 2: 1, 11: 1},
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -312,6 +319,9 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         histogram_cell = csv_row["probe_distance_histogram"]
         self.assertEqual(histogram_cell, '{"0": 1, "2": 1, "10": 1}')
         self.assertNotEqual(histogram_cell, '{"0": 1, "10": 1, "2": 1}')
+        hit_histogram_cell = csv_row["successful_lookup_probe_histogram"]
+        self.assertEqual(hit_histogram_cell, '{"1": 1, "3": 1, "12": 1}')
+        self.assertNotEqual(hit_histogram_cell, '{"1": 1, "12": 1, "3": 1}')
         miss_histogram_cell = csv_row["unsuccessful_lookup_probe_histogram"]
         self.assertEqual(miss_histogram_cell, '{"1": 1, "2": 1, "11": 1}')
         self.assertNotEqual(miss_histogram_cell, '{"1": 1, "11": 1, "2": 1}')
@@ -545,16 +555,23 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             self.assertTrue(all(row["probe_distance_histogram"] for row in benchmark_rows))
             self.assertTrue(all(float(row["average_unsuccessful_lookup_probes"]) > 0 for row in benchmark_rows))
             self.assertTrue(all(row["unsuccessful_lookup_probe_histogram"] for row in benchmark_rows))
+            self.assertTrue(all(row["successful_lookup_probe_histogram"] for row in benchmark_rows))
             self.assertTrue(benchmark_markdown_path.exists())
             markdown = benchmark_markdown_path.read_text(encoding="utf-8")
             self.assertIn("Headline comparisons", markdown)
             self.assertIn("Delete-heavy (30.0% removals)", markdown)
+            self.assertIn("Lookup percentile callouts", markdown)
+            self.assertIn("Successful lookups avg / p50 / p95 / max", markdown)
+            self.assertIn("Lower hit p95", markdown)
             self.assertIn("Probe-distance histograms", markdown)
             self.assertIn("Unsuccessful-lookup histograms", markdown)
             self.assertTrue(benchmark_html_path.exists())
             html = benchmark_html_path.read_text(encoding="utf-8")
             self.assertIn("Robin Hood hashing benchmark comparison with delete-heavy workloads", html)
             self.assertIn("Per-workload winners and deltas against the linear-probing baseline for both successful and unsuccessful lookups.", html)
+            self.assertIn("Lookup percentile callouts", html)
+            self.assertIn("Successful lookup avg / p50 / p95 / max", html)
+            self.assertIn("Lookup tail winners", html)
             self.assertIn("Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.25", html)
             self.assertIn("Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.25", html)
             if chrome_binary:
@@ -587,6 +604,7 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             self.assertEqual({row["workload"] for row in benchmark_json}, {"fill-only", "delete-heavy"})
             self.assertTrue(all(row["capacity"] == 31 for row in benchmark_json))
             self.assertTrue(all("probe_distance_histogram" in row for row in benchmark_json))
+            self.assertTrue(all("successful_lookup_probe_histogram" in row for row in benchmark_json))
             self.assertTrue(all("unsuccessful_lookup_probe_histogram" in row for row in benchmark_json))
 
     def test_single_strategy_reports_use_single_strategy_default_title(self) -> None:
@@ -626,13 +644,15 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             self.assertTrue(markdown.startswith("# Robin Hood hashing fill vs delete-heavy benchmark summary"))
             self.assertIn("Deterministic benchmark report for Robin Hood hashing", markdown)
             self.assertIn("delete-heavy workload that removes 30.0% of keys", markdown)
-            self.assertIn("unsuccessful-lookup histograms", markdown)
+            self.assertIn("Lookup percentile callouts", markdown)
+            self.assertIn("Unsuccessful-lookup histograms", markdown)
             self.assertNotIn("against a linear-probing baseline", markdown)
 
             html = benchmark_html_path.read_text(encoding="utf-8")
             self.assertIn("<title>Robin Hood hashing fill vs delete-heavy benchmark summary</title>", html)
             self.assertIn("Deterministic benchmark report for Robin Hood hashing", html)
             self.assertIn("delete-heavy workload that removes 30.0% of keys", html)
+            self.assertIn("Lookup percentile callouts", html)
             self.assertIn("Unsuccessful lookup probe histograms", html)
             self.assertNotIn("against a linear-probing baseline", html)
 
