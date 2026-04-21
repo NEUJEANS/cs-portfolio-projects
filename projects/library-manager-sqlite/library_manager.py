@@ -13,6 +13,7 @@ class LibraryError(Exception):
 
 
 BORROWER_TREND_COLORS = ['#2563eb', '#dc2626', '#059669', '#7c3aed', '#d97706', '#0f766e']
+GENRE_TREND_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0f766e']
 
 
 class Library:
@@ -39,6 +40,7 @@ class Library:
             )
             columns = {row['name'] for row in conn.execute('PRAGMA table_info(books)')}
             migrations = {
+                'genre': 'ALTER TABLE books ADD COLUMN genre TEXT DEFAULT "General"',
                 'borrower': 'ALTER TABLE books ADD COLUMN borrower TEXT',
                 'checked_out_at': 'ALTER TABLE books ADD COLUMN checked_out_at TEXT',
                 'due_date': 'ALTER TABLE books ADD COLUMN due_date TEXT',
@@ -46,6 +48,9 @@ class Library:
             for column, statement in migrations.items():
                 if column not in columns:
                     conn.execute(statement)
+            conn.execute(
+                'UPDATE books SET genre = "General" WHERE genre IS NULL OR trim(genre) = ""'
+            )
             self._init_circulation_schema(conn)
             self._backfill_active_loans(conn)
             self.fts_enabled = self._init_search_index(conn)
@@ -137,6 +142,13 @@ class Library:
                 raise
             return row['id']
 
+    @staticmethod
+    def _normalize_genre(genre):
+        normalized = (genre or 'General').strip()
+        if not normalized:
+            raise LibraryError('genre is required when provided')
+        return normalized
+
     def _backfill_active_loans(self, conn):
         legacy_rows = conn.execute(
             'SELECT id, borrower, checked_out_at, due_date '
@@ -165,16 +177,17 @@ class Library:
                 (row['id'], borrower_id, row['checked_out_at'], row['due_date'], loan_days),
             )
 
-    def add_book(self, title, author):
+    def add_book(self, title, author, genre='General'):
         title = title.strip()
         author = author.strip()
+        genre = self._normalize_genre(genre)
         if not title or not author:
             raise LibraryError('title and author are required')
         with self._connect() as conn:
             cursor = conn.execute(
-                'INSERT INTO books(title, author, available, borrower, checked_out_at, due_date) '
-                'VALUES (?, ?, 1, NULL, NULL, NULL)',
-                (title, author),
+                'INSERT INTO books(title, author, genre, available, borrower, checked_out_at, due_date) '
+                'VALUES (?, ?, ?, 1, NULL, NULL, NULL)',
+                (title, author, genre),
             )
             if self.fts_enabled:
                 book_id = cursor.lastrowid
@@ -759,11 +772,161 @@ class Library:
             'summary': [borrower_summaries[name] for name in selected_names],
         }
 
+    def genre_trend_breakdown(self, start_date=None, end_date=None, top_limit=4):
+        if top_limit <= 0:
+            raise LibraryError('top_limit must be positive')
+
+        today = date.today()
+        with self._connect() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    'SELECT '
+                    'COALESCE(NULLIF(trim(b.genre), ""), "General") AS genre, '
+                    'l.checked_out_at, '
+                    'l.due_date, '
+                    'l.returned_at '
+                    'FROM loans AS l '
+                    'JOIN books AS b ON b.id = l.book_id '
+                    'ORDER BY l.checked_out_at, l.id'
+                )
+            ]
+
+        parsed_loans = []
+        min_checkout_day = None
+        max_activity_day = None
+        for row in rows:
+            checked_out_day = self._parse_iso_date(row['checked_out_at'])
+            due_day = self._parse_iso_date(row['due_date'])
+            returned_day = self._parse_iso_date(row['returned_at'])
+            if checked_out_day is None or due_day is None:
+                continue
+            parsed_loans.append(
+                {
+                    'genre': row['genre'],
+                    'checked_out_day': checked_out_day,
+                    'due_day': due_day,
+                    'returned_day': returned_day,
+                }
+            )
+            min_checkout_day = checked_out_day if min_checkout_day is None else min(min_checkout_day, checked_out_day)
+            activity_day = returned_day or checked_out_day
+            max_activity_day = activity_day if max_activity_day is None else max(max_activity_day, activity_day)
+
+        resolved_start = start_date or min_checkout_day or today
+        resolved_end = end_date or max(max_activity_day or resolved_start, today)
+        if resolved_end < resolved_start:
+            raise LibraryError('end date must be on or after start date')
+
+        genre_candidates = {}
+        for loan in parsed_loans:
+            if loan['checked_out_day'] > resolved_end:
+                continue
+            if loan['returned_day'] is not None and loan['returned_day'] < resolved_start:
+                continue
+            genre = loan['genre']
+            summary = genre_candidates.setdefault(
+                genre,
+                {
+                    'genre': genre,
+                    'total_loans': 0,
+                    'last_checkout_ordinal': 0,
+                    'last_checkout_at': None,
+                },
+            )
+            summary['total_loans'] += 1
+            summary['last_checkout_ordinal'] = max(
+                summary['last_checkout_ordinal'],
+                loan['checked_out_day'].toordinal(),
+            )
+            checkout_iso = loan['checked_out_day'].isoformat()
+            if summary['last_checkout_at'] is None or checkout_iso > summary['last_checkout_at']:
+                summary['last_checkout_at'] = checkout_iso
+
+        selected_genres = sorted(
+            genre_candidates.values(),
+            key=lambda row: (-row['total_loans'], -row['last_checkout_ordinal'], row['genre'].lower()),
+        )[:top_limit]
+        selected_names = [row['genre'] for row in selected_genres]
+
+        genre_summaries = {
+            row['genre']: {
+                'genre': row['genre'],
+                'total_loans': row['total_loans'],
+                'last_checkout_at': row['last_checkout_at'],
+                'peak_active_loans': 0,
+                'peak_overdue_loans': 0,
+                'total_checkouts_started': 0,
+                'total_returns_completed': 0,
+                'days_with_active_loans': 0,
+            }
+            for row in selected_genres
+        }
+
+        points = []
+        current_day = resolved_start
+        while current_day <= resolved_end:
+            genre_points = []
+            for genre in selected_names:
+                active_loans = 0
+                overdue_loans = 0
+                checkouts_started = 0
+                returns_completed = 0
+
+                for loan in parsed_loans:
+                    if loan['genre'] != genre:
+                        continue
+                    if loan['checked_out_day'] == current_day:
+                        checkouts_started += 1
+                    if loan['returned_day'] == current_day:
+                        returns_completed += 1
+                    if loan['checked_out_day'] <= current_day and (
+                        loan['returned_day'] is None or loan['returned_day'] > current_day
+                    ):
+                        active_loans += 1
+                        if loan['due_day'] < current_day:
+                            overdue_loans += 1
+
+                genre_summaries[genre]['peak_active_loans'] = max(
+                    genre_summaries[genre]['peak_active_loans'],
+                    active_loans,
+                )
+                genre_summaries[genre]['peak_overdue_loans'] = max(
+                    genre_summaries[genre]['peak_overdue_loans'],
+                    overdue_loans,
+                )
+                genre_summaries[genre]['total_checkouts_started'] += checkouts_started
+                genre_summaries[genre]['total_returns_completed'] += returns_completed
+                if active_loans:
+                    genre_summaries[genre]['days_with_active_loans'] += 1
+
+                genre_points.append(
+                    {
+                        'genre': genre,
+                        'active_loans': active_loans,
+                        'overdue_loans': overdue_loans,
+                        'checkouts_started': checkouts_started,
+                        'returns_completed': returns_completed,
+                    }
+                )
+
+            points.append({'date': current_day.isoformat(), 'genres': genre_points})
+            current_day += timedelta(days=1)
+
+        return {
+            'start_date': resolved_start.isoformat(),
+            'end_date': resolved_end.isoformat(),
+            'genres': selected_names,
+            'points': points,
+            'summary': [genre_summaries[name] for name in selected_names],
+        }
+
 
 
 def format_book(row):
     state = 'available' if row['available'] else f"checked out to {row['borrower']} (due {row['due_date']})"
-    rendered = f"#{row['id']} {row['title']} - {row['author']} [{state}]"
+    genre = row.get('genre') or 'General'
+    rendered = f"#{row['id']} {row['title']} - {row['author']} [genre: {genre}] [{state}]"
     preview = row.get('search_preview')
     if preview:
         rendered += f"\n    match: {preview}"
@@ -1349,6 +1512,41 @@ def build_borrower_trend_snapshot(
     }
 
 
+def build_genre_trend_snapshot(
+    library,
+    start_date=None,
+    end_date=None,
+    top_limit=4,
+    title='Library genre trend breakdown',
+    generated_at=None,
+):
+    snapshot = library.genre_trend_breakdown(
+        start_date=start_date,
+        end_date=end_date,
+        top_limit=top_limit,
+    )
+    color_map = {
+        genre: GENRE_TREND_COLORS[index % len(GENRE_TREND_COLORS)]
+        for index, genre in enumerate(snapshot['genres'])
+    }
+    return {
+        'title': title.strip() or 'Library genre trend breakdown',
+        'generated_at': generated_at or _utc_timestamp_iso(),
+        'start_date': snapshot['start_date'],
+        'end_date': snapshot['end_date'],
+        'days': len(snapshot['points']),
+        'top_limit': top_limit,
+        'genres': [
+            {
+                **row,
+                'color': color_map[row['genre']],
+            }
+            for row in snapshot['summary']
+        ],
+        'points': snapshot['points'],
+    }
+
+
 def render_trends_csv(snapshot):
     headers = [
         'date',
@@ -1386,6 +1584,32 @@ def render_borrower_trends_csv(snapshot):
                     borrower['overdue_loans'],
                     borrower['checkouts_started'],
                     borrower['returns_completed'],
+                ]
+            )
+    return buffer.getvalue().rstrip()
+
+
+def render_genre_trends_csv(snapshot):
+    buffer = StringIO()
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow([
+        'date',
+        'genre',
+        'active_loans',
+        'overdue_loans',
+        'checkouts_started',
+        'returns_completed',
+    ])
+    for point in snapshot['points']:
+        for genre in point['genres']:
+            writer.writerow(
+                [
+                    point['date'],
+                    genre['genre'],
+                    genre['active_loans'],
+                    genre['overdue_loans'],
+                    genre['checkouts_started'],
+                    genre['returns_completed'],
                 ]
             )
     return buffer.getvalue().rstrip()
@@ -1569,6 +1793,97 @@ def _render_borrower_trend_panel(snapshot, metric_key, label, left, top, width, 
     )
 
 
+def _render_genre_trend_panel(snapshot, metric_key, label, left, top, width, height, panel_id):
+    chart_left = left + 52
+    chart_top = top + 42
+    chart_width = width - 78
+    chart_height = height - 82
+    baseline_y = chart_top + chart_height
+    max_value = 0
+    series = []
+    for genre in snapshot['genres']:
+        values = []
+        for point in snapshot['points']:
+            row = next(item for item in point['genres'] if item['genre'] == genre['genre'])
+            values.append(row[metric_key])
+        max_value = max(max_value, max(values, default=0))
+        series.append({'genre': genre['genre'], 'color': genre['color'], 'values': values})
+
+    mid_value = max((max_value + 1) // 2, 1) if max_value else 0
+    y_ticks = [0]
+    if max_value > 1 and mid_value not in {0, max_value}:
+        y_ticks.append(mid_value)
+    if max_value not in {0, y_ticks[-1]}:
+        y_ticks.append(max_value)
+
+    grid_lines = ''.join(
+        (
+            f'<line x1="{chart_left:.2f}" y1="{_trend_y(tick, max_value, chart_top, chart_height):.2f}" '
+            f'x2="{chart_left + chart_width:.2f}" y2="{_trend_y(tick, max_value, chart_top, chart_height):.2f}" '
+            'stroke="#dbe4f0" stroke-width="1" />'
+            f'<text x="{left + 14:.2f}" y="{_trend_y(tick, max_value, chart_top, chart_height) + 4:.2f}" '
+            'font-size="12" fill="#64748b">'
+            f'{escape(str(tick))}'
+            '</text>'
+        )
+        for tick in y_ticks
+    )
+
+    series_markup = ''.join(
+        (
+            f'<polyline fill="none" stroke="{series_entry["color"]}" stroke-width="3" '
+            'stroke-linecap="round" stroke-linejoin="round" '
+            f'points="{' '.join(
+                f'{_trend_x(index, len(snapshot["points"]), chart_left, chart_width):.2f},{_trend_y(value, max_value, chart_top, chart_height):.2f}'
+                for index, value in enumerate(series_entry["values"])
+            )}" />'
+            + ''.join(
+                (
+                    f'<circle cx="{_trend_x(index, len(snapshot["points"]), chart_left, chart_width):.2f}" '
+                    f'cy="{_trend_y(value, max_value, chart_top, chart_height):.2f}" r="3.5" fill="{series_entry["color"]}">'
+                    f'<title>{escape(series_entry["genre"])} {escape(label.lower())} on '
+                    f'{escape(snapshot["points"][index]["date"])}: {value}</title>'
+                    '</circle>'
+                )
+                for index, value in enumerate(series_entry['values'])
+            )
+        )
+        for series_entry in series
+    )
+
+    first_date = snapshot['points'][0]['date']
+    mid_date = snapshot['points'][len(snapshot['points']) // 2]['date']
+    last_date = snapshot['points'][-1]['date']
+    axis_labels = ''.join(
+        (
+            f'<text x="{x:.2f}" y="{top + height - 16:.2f}" font-size="12" fill="#64748b" '
+            f'text-anchor="{anchor}">{escape(label_text)}</text>'
+        )
+        for x, label_text, anchor in [
+            (chart_left, first_date, 'start'),
+            (chart_left + chart_width / 2, mid_date, 'middle'),
+            (chart_left + chart_width, last_date, 'end'),
+        ]
+    )
+
+    title_id = f'{panel_id}-title'
+    desc_id = f'{panel_id}-desc'
+    return (
+        f'<g role="group" aria-labelledby="{title_id}" aria-describedby="{desc_id}">'
+        f'<title id="{title_id}">{escape(label)}</title>'
+        f'<desc id="{desc_id}">Daily {escape(label.lower())} for the top {len(snapshot["genres"])} genres '
+        f'from {escape(snapshot["start_date"])} to {escape(snapshot["end_date"])}. Peak value {max_value}.</desc>'
+        f'<rect x="{left:.2f}" y="{top:.2f}" width="{width:.2f}" height="{height:.2f}" '
+        'rx="22" fill="#ffffff" stroke="#d6deeb" />'
+        f'<text x="{left + 18:.2f}" y="{top + 28:.2f}" font-size="18" font-weight="700" fill="#0f172a">{escape(label)}</text>'
+        f'{grid_lines}'
+        f'<line x1="{chart_left:.2f}" y1="{baseline_y:.2f}" x2="{chart_left + chart_width:.2f}" y2="{baseline_y:.2f}" stroke="#94a3b8" stroke-width="1.2" />'
+        f'{series_markup}'
+        f'{axis_labels}'
+        '</g>'
+    )
+
+
 def render_borrower_trends_svg(snapshot):
     title_id = 'library-borrower-trends-title'
     desc_id = 'library-borrower-trends-desc'
@@ -1630,6 +1945,78 @@ def render_borrower_trends_svg(snapshot):
   <text x="40" y="546" font-size="18" font-weight="700" fill="#0f172a">Borrower summary</text>
   <rect x="40" y="568" width="1080" height="36" rx="10" fill="#dbeafe" stroke="#bfdbfe" />
   <text x="58" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Borrower</text>
+  <text x="380" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Loans</text>
+  <text x="500" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Peak active</text>
+  <text x="650" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Peak overdue</text>
+  <text x="792" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Checkouts</text>
+  <text x="932" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Returns</text>
+  <text x="1046" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Active days</text>
+  {table_rows}
+</svg>'''
+
+
+def render_genre_trends_svg(snapshot):
+    title_id = 'library-genre-trends-title'
+    desc_id = 'library-genre-trends-desc'
+    selected_count = len(snapshot['genres'])
+
+    legend_markup = ''.join(
+        (
+            f'<rect x="{40 + (index % 2) * 320:.2f}" y="{126 + (index // 2) * 22:.2f}" width="16" height="16" rx="4" fill="{genre["color"]}" />'
+            f'<text x="{64 + (index % 2) * 320:.2f}" y="{139 + (index // 2) * 22:.2f}" font-size="14" fill="#334155">{escape(genre["genre"])}</text>'
+        )
+        for index, genre in enumerate(snapshot['genres'])
+    )
+    card_width = 260
+    cards_markup = ''.join(
+        (
+            f'<g transform="translate({40 + index * (card_width + 16)}, 160)">'
+            '<rect width="260" height="90" rx="18" fill="#ffffff" stroke="#d6deeb" />'
+            f'<text x="18" y="30" font-size="14" fill="#64748b">{escape(genre["genre"])}</text>'
+            f'<text x="18" y="62" font-size="30" font-weight="700" fill="{genre["color"]}">{genre["total_loans"]}</text>'
+            f'<text x="18" y="78" font-size="12" fill="#64748b">loans touching this range, peak active {genre["peak_active_loans"]}</text>'
+            '</g>'
+        )
+        for index, genre in enumerate(snapshot['genres'][:4])
+    )
+    panels = ''.join(
+        [
+            _render_genre_trend_panel(snapshot, 'active_loans', 'Active loans by genre', 40, 274, 520, 220, 'genre-active-panel'),
+            _render_genre_trend_panel(snapshot, 'overdue_loans', 'Overdue loans by genre', 600, 274, 520, 220, 'genre-overdue-panel'),
+        ]
+    )
+
+    table_top = 524
+    row_height = 30
+    table_rows = ''.join(
+        (
+            f'<rect x="40" y="{table_top + 80 + index * row_height:.2f}" width="1080" height="{row_height:.2f}" '
+            f'fill="{"#ffffff" if index % 2 == 0 else "#f8fafc"}" stroke="#e2e8f0" />'
+            f'<text x="58" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{escape(genre["genre"])}</text>'
+            f'<text x="380" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["total_loans"]}</text>'
+            f'<text x="500" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["peak_active_loans"]}</text>'
+            f'<text x="650" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["peak_overdue_loans"]}</text>'
+            f'<text x="792" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["total_checkouts_started"]}</text>'
+            f'<text x="932" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["total_returns_completed"]}</text>'
+            f'<text x="1046" y="{table_top + 100 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["days_with_active_loans"]}</text>'
+        )
+        for index, genre in enumerate(snapshot['genres'])
+    )
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="760" viewBox="0 0 1160 760" role="img" aria-labelledby="{title_id}" aria-describedby="{desc_id}">
+  <title id="{title_id}">{escape(snapshot['title'])}</title>
+  <desc id="{desc_id}">Genre-level circulation trend breakdown from {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])}. The export includes {selected_count} selected genres touching the chosen range plus active-loan and overdue-loan trend panels and a summary table.</desc>
+  <rect width="1160" height="760" fill="#f4f7fb" />
+  <rect x="24" y="24" width="1112" height="712" rx="28" fill="#eef4ff" stroke="#d6deeb" />
+  <text x="40" y="68" font-size="30" font-weight="700" fill="#0f172a">{escape(snapshot['title'])}</text>
+  <text x="40" y="95" font-size="15" fill="#475569">Top circulation genres from the SQLite loan history, exported as a static trend pack for portfolio screenshots and recruiter walkthroughs.</text>
+  <text x="40" y="118" font-size="14" fill="#475569">Range: {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])} • Days: {snapshot['days']} • Generated at: {escape(snapshot['generated_at'])}</text>
+  {legend_markup}
+  {cards_markup}
+  {panels}
+  <text x="40" y="546" font-size="18" font-weight="700" fill="#0f172a">Genre summary</text>
+  <rect x="40" y="568" width="1080" height="36" rx="10" fill="#dbeafe" stroke="#bfdbfe" />
+  <text x="58" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Genre</text>
   <text x="380" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Loans</text>
   <text x="500" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Peak active</text>
   <text x="650" y="590" font-size="13" font-weight="700" fill="#1e3a8a">Peak overdue</text>
@@ -1713,6 +2100,7 @@ def main(argv=None):
     add_parser = sub.add_parser('add', help='Add a book to the catalog')
     add_parser.add_argument('title')
     add_parser.add_argument('author')
+    add_parser.add_argument('--genre', default='General')
 
     checkout_parser = sub.add_parser('checkout', help='Check out a book')
     checkout_parser.add_argument('book_id', type=int)
@@ -1758,6 +2146,15 @@ def main(argv=None):
     borrower_trends_parser.add_argument('--title', default='Library borrower trend breakdown')
     borrower_trends_parser.add_argument('--generated-at')
 
+    genre_trends_parser = sub.add_parser('genre-trends', help='Export genre-level circulation trend breakdowns')
+    genre_trends_parser.add_argument('--start-date')
+    genre_trends_parser.add_argument('--end-date')
+    genre_trends_parser.add_argument('--top', type=int, default=4)
+    genre_trends_parser.add_argument('--csv-out', type=Path)
+    genre_trends_parser.add_argument('--svg-out', type=Path)
+    genre_trends_parser.add_argument('--title', default='Library genre trend breakdown')
+    genre_trends_parser.add_argument('--generated-at')
+
     dashboard_parser = sub.add_parser('dashboard', help='Export a recruiter-friendly circulation snapshot')
     dashboard_parser.add_argument('--date', dest='reference_date')
     dashboard_parser.add_argument('--top', type=int, default=5)
@@ -1773,7 +2170,7 @@ def main(argv=None):
 
     try:
         if args.cmd == 'add':
-            library.add_book(args.title, args.author)
+            library.add_book(args.title, args.author, genre=args.genre)
             print('book added')
         elif args.cmd == 'checkout':
             due_day = library.checkout(args.book_id, args.borrower, args.days)
@@ -1856,6 +2253,30 @@ def main(argv=None):
                 written.append(str(args.svg_out))
             if written:
                 print('borrower trend artifacts written: ' + ', '.join(written))
+            else:
+                print(csv_output)
+        elif args.cmd == 'genre-trends':
+            start_day = parse_optional_date(args.start_date, 'start date')
+            end_day = parse_optional_date(args.end_date, 'end date')
+            generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
+            snapshot = build_genre_trend_snapshot(
+                library,
+                start_date=start_day,
+                end_date=end_day,
+                top_limit=args.top,
+                title=args.title,
+                generated_at=generated_at,
+            )
+            csv_output = render_genre_trends_csv(snapshot)
+            written = []
+            if args.csv_out:
+                _write_text_output(args.csv_out, csv_output + '\n')
+                written.append(str(args.csv_out))
+            if args.svg_out:
+                _write_text_output(args.svg_out, render_genre_trends_svg(snapshot) + '\n')
+                written.append(str(args.svg_out))
+            if written:
+                print('genre trend artifacts written: ' + ', '.join(written))
             else:
                 print(csv_output)
         elif args.cmd == 'dashboard':

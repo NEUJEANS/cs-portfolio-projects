@@ -11,12 +11,15 @@ from library_manager import (
     LibraryError,
     build_borrower_trend_snapshot,
     build_dashboard_snapshot,
+    build_genre_trend_snapshot,
     build_trend_snapshot,
     main,
     render_borrower_trends_csv,
     render_borrower_trends_svg,
     render_dashboard_html,
     render_dashboard_markdown,
+    render_genre_trends_csv,
+    render_genre_trends_svg,
     render_trends_csv,
     render_trends_svg,
 )
@@ -39,6 +42,7 @@ class LibraryTests(unittest.TestCase):
         self.assertFalse(checked_out['available'])
         self.assertEqual(checked_out['borrower'], 'Alex')
         self.assertEqual(checked_out['due_date'], '2026-04-21')
+        self.assertEqual(checked_out['genre'], 'General')
 
         lib.return_book(1, return_date=date(2026, 4, 20))
         returned = lib.list_books()[0]
@@ -195,10 +199,12 @@ class LibraryTests(unittest.TestCase):
         lib = Library(db)
         with sqlite3.connect(db) as conn:
             columns = {row[1] for row in conn.execute('PRAGMA table_info(books)')}
+            genres = conn.execute('SELECT id, genre FROM books ORDER BY id').fetchall()
             fts_count = conn.execute('SELECT COUNT(*) FROM books_fts').fetchone()[0]
             borrower_count = conn.execute('SELECT COUNT(*) FROM borrowers').fetchone()[0]
             active_loan_count = conn.execute('SELECT COUNT(*) FROM loans WHERE returned_at IS NULL').fetchone()[0]
-        self.assertTrue({'borrower', 'checked_out_at', 'due_date'}.issubset(columns))
+        self.assertTrue({'genre', 'borrower', 'checked_out_at', 'due_date'}.issubset(columns))
+        self.assertEqual(genres, [(1, 'General'), (2, 'General')])
         self.assertEqual(fts_count, 2)
         self.assertEqual(borrower_count, 1)
         self.assertEqual(active_loan_count, 1)
@@ -251,6 +257,22 @@ class LibraryTests(unittest.TestCase):
         overdue_output = buffer.getvalue()
         self.assertIn('checked out to Alex', overdue_output)
         self.assertNotIn('Refactoring', overdue_output)
+
+    def test_add_and_list_preserve_explicit_genre_metadata(self):
+        lib, db = self.make_library()
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'add', 'Distributed Systems', 'Andrew S. Tanenbaum', '--genre', 'Distributed Systems'])
+        self.assertIn('book added', buffer.getvalue())
+
+        rows = lib.list_books()
+        self.assertEqual(rows[0]['genre'], 'Distributed Systems')
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'list'])
+        self.assertIn('[genre: Distributed Systems]', buffer.getvalue())
 
 
     def test_recent_activity_orders_returns_by_return_date(self):
@@ -538,6 +560,120 @@ class LibraryTests(unittest.TestCase):
         stdout_breakdown = buffer.getvalue()
         self.assertIn('date,borrower,active_loans,overdue_loans,checkouts_started,returns_completed', stdout_breakdown)
         self.assertIn('2026-04-03,Alex,1,0,0,0', stdout_breakdown)
+
+    def test_genre_trend_snapshot_and_renderers_focus_on_top_genres(self):
+        lib, _ = self.make_library()
+        seeded_books = [
+            ('D1', 'Author', 'Distributed Systems'),
+            ('D2', 'Author', 'Distributed Systems'),
+            ('DB1', 'Author', 'Databases'),
+            ('DB2', 'Author', 'Databases'),
+            ('SEC1', 'Author', 'Security'),
+            ('OS1', 'Author', 'Operating Systems'),
+        ]
+        for title, author, genre in seeded_books:
+            lib.add_book(title, author, genre=genre)
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+        lib.checkout(2, 'Sam', loan_days=10, checkout_date=date(2026, 4, 5))
+        lib.checkout(3, 'Alex', loan_days=7, checkout_date=date(2026, 4, 3))
+        lib.return_book(3, return_date=date(2026, 4, 7))
+        lib.checkout(4, 'Priya', loan_days=14, checkout_date=date(2026, 4, 8))
+        lib.checkout(5, 'Lee', loan_days=14, checkout_date=date(2026, 4, 6))
+
+        snapshot = build_genre_trend_snapshot(
+            lib,
+            start_date=date(2026, 4, 1),
+            end_date=date(2026, 4, 12),
+            top_limit=2,
+            title='Genre trend pack',
+            generated_at='2026-04-12T09:00:00Z',
+        )
+
+        self.assertEqual(snapshot['start_date'], '2026-04-01')
+        self.assertEqual(snapshot['end_date'], '2026-04-12')
+        self.assertEqual(snapshot['days'], 12)
+        self.assertEqual([row['genre'] for row in snapshot['genres']], ['Databases', 'Distributed Systems'])
+        self.assertEqual(snapshot['genres'][0]['total_loans'], 2)
+        self.assertEqual(snapshot['genres'][1]['total_loans'], 2)
+
+        by_day = {
+            row['date']: {entry['genre']: entry for entry in row['genres']}
+            for row in snapshot['points']
+        }
+        self.assertEqual(by_day['2026-04-06']['Distributed Systems']['active_loans'], 2)
+        self.assertEqual(by_day['2026-04-08']['Databases']['active_loans'], 1)
+        self.assertEqual(by_day['2026-04-08']['Databases']['checkouts_started'], 1)
+        self.assertEqual(by_day['2026-04-09']['Distributed Systems']['overdue_loans'], 1)
+
+        csv_output = render_genre_trends_csv(snapshot)
+        self.assertIn('date,genre,active_loans,overdue_loans,checkouts_started,returns_completed', csv_output)
+        self.assertIn('2026-04-08,Databases,1,0,1,0', csv_output)
+        self.assertNotIn('Security', csv_output)
+
+        svg_output = render_genre_trends_svg(snapshot)
+        self.assertIn('Genre trend pack', svg_output)
+        self.assertIn('Distributed Systems', svg_output)
+        self.assertIn('Databases', svg_output)
+        self.assertIn('genre-active-panel-title', svg_output)
+        self.assertIn('Genre summary', svg_output)
+
+    def test_cli_genre_trends_writes_artifacts_and_supports_stdout_mode(self):
+        lib, db = self.make_library()
+        seeded_books = [
+            ('D1', 'Author', 'Distributed Systems'),
+            ('D2', 'Author', 'Distributed Systems'),
+            ('DB1', 'Author', 'Databases'),
+        ]
+        for title, author, genre in seeded_books:
+            lib.add_book(title, author, genre=genre)
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 3))
+        lib.checkout(3, 'Priya', loan_days=10, checkout_date=date(2026, 4, 5))
+        lib.return_book(1, return_date=date(2026, 4, 10))
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        csv_path = Path(tmp.name) / 'artifacts' / 'genre_trends.csv'
+        svg_path = Path(tmp.name) / 'artifacts' / 'genre_trends.svg'
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(
+                [
+                    '--db',
+                    str(db),
+                    'genre-trends',
+                    '--start-date',
+                    '2026-04-01',
+                    '--end-date',
+                    '2026-04-12',
+                    '--top',
+                    '2',
+                    '--csv-out',
+                    str(csv_path),
+                    '--svg-out',
+                    str(svg_path),
+                    '--title',
+                    'CLI genre trends',
+                    '--generated-at',
+                    '2026-04-12T09:00:00Z',
+                ]
+            )
+        command_output = buffer.getvalue()
+        self.assertIn('genre trend artifacts written:', command_output)
+        self.assertTrue(csv_path.exists())
+        self.assertTrue(svg_path.exists())
+        self.assertIn('2026-04-05,Databases,1,0,1,0', csv_path.read_text())
+        self.assertIn('CLI genre trends', svg_path.read_text())
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'genre-trends', '--start-date', '2026-04-01', '--end-date', '2026-04-03', '--top', '2'])
+        stdout_breakdown = buffer.getvalue()
+        self.assertIn('date,genre,active_loans,overdue_loans,checkouts_started,returns_completed', stdout_breakdown)
+        self.assertIn('2026-04-03,Distributed Systems,2,0,1,0', stdout_breakdown)
 
     def test_cli_dashboard_writes_artifacts_and_supports_stdout_mode(self):
         lib, db = self.make_library()
