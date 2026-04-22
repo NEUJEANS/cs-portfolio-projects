@@ -16,6 +16,7 @@ from fenwick_tree_range_query_lab import (
     load_values,
     render_benchmark_markdown,
     render_benchmark_svg,
+    resolve_benchmark_profile,
     run_benchmark,
     save_snapshot,
 )
@@ -138,9 +139,7 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             operations=120,
             seed=11,
             repeats=2,
-            query_ratio=0.4,
-            set_ratio=0.2,
-            max_range_width=8,
+            preset="query-heavy",
             value_min=0,
             value_max=25,
             delta_min=-3,
@@ -149,13 +148,29 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
         self.assertTrue(payload["correctness_verified"])
         self.assertEqual({result["strategy"] for result in payload["strategies"]}, {"range-fenwick", "segment-tree"})
         self.assertGreater(payload["speedup"], 0)
+        self.assertEqual(payload["preset"], "query-heavy")
+        self.assertEqual(payload["query_ratio"], 0.75)
         markdown = render_benchmark_markdown(payload)
         self.assertIn("Fenwick vs Segment Tree Benchmark", markdown)
+        self.assertIn("workload preset: query-heavy", markdown)
         self.assertIn("range-fenwick", markdown)
         svg = render_benchmark_svg(payload)
         self.assertIn("<svg", svg)
         self.assertIn("Throughput comparison", svg)
+        self.assertIn("Workload preset", svg)
         self.assertIn("segment-tree", svg)
+
+    def test_resolve_benchmark_profile_supports_overrides(self):
+        profile = resolve_benchmark_profile(
+            preset="point-set-heavy",
+            query_ratio=0.3,
+            set_ratio=None,
+            max_range_width=9,
+        )
+        self.assertEqual(profile.name, "point-set-heavy")
+        self.assertEqual(profile.query_ratio, 0.3)
+        self.assertEqual(profile.set_ratio, 0.55)
+        self.assertEqual(profile.max_range_width, 9)
 
     def test_cli_build_sum_add_set_export_and_benchmark(self):
         temp_dir = ROOT / self._testMethodName
@@ -218,6 +233,8 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
                     sys.executable,
                     str(SCRIPT),
                     "benchmark",
+                    "--preset",
+                    "query-heavy",
                     "--size",
                     "16",
                     "--operations",
@@ -225,8 +242,6 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
                     "--repeats",
                     "1",
                     "--seed",
-                    "5",
-                    "--max-range-width",
                     "5",
                     "--output",
                     str(benchmark_json),
@@ -243,12 +258,14 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             )
             payload = json.loads(benchmark_result.stdout)
             self.assertTrue(payload["correctness_verified"])
+            self.assertEqual(payload["preset"], "query-heavy")
             self.assertTrue(benchmark_json.exists())
             self.assertTrue(benchmark_csv.exists())
             self.assertTrue(benchmark_md.exists())
             self.assertTrue(benchmark_svg.exists())
+            self.assertIn("query-heavy", benchmark_csv.read_text())
             self.assertIn("segment-tree", benchmark_csv.read_text())
-            self.assertIn("relative speedup", benchmark_md.read_text())
+            self.assertIn("workload preset: query-heavy", benchmark_md.read_text())
             self.assertIn("Per-operation latency", benchmark_svg.read_text())
         finally:
             for child in temp_dir.iterdir():

@@ -1,3 +1,3 @@
 preset,query_ratio,range_add_ratio,set_ratio,max_range_width,strategy,average_seconds,best_seconds,worst_seconds,operations,operations_per_second,query_checksum,final_total,verified_against_baseline,range_sum_avg_us,range_add_avg_us,point_set_avg_us
-balanced,0.45,0.4,0.15,32,range-fenwick,0.002541,0.002522,0.002575,1000,393522.2,570945,18517,True,1.719,2.361,4.167
-balanced,0.45,0.4,0.15,32,segment-tree,0.004038,0.003779,0.00424,1000,247640.54,570945,18517,True,3.166,4.321,4.638
+update-heavy,0.2,0.7,0.1,24,range-fenwick,0.002714,0.002593,0.002793,1000,368505.73,205264,18297,True,1.942,2.501,4.702
+update-heavy,0.2,0.7,0.1,24,segment-tree,0.004323,0.004266,0.004421,1000,231298.82,205264,18297,True,3.432,4.31,4.948

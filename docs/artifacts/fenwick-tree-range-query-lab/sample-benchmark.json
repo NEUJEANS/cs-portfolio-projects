@@ -3,6 +3,8 @@
   "operations": 1000,
   "repeats": 3,
   "seed": 7,
+  "preset": "balanced",
+  "preset_description": "Balanced mix across reads, range updates, and point overwrites.",
   "query_ratio": 0.45,
   "set_ratio": 0.15,
   "range_add_ratio": 0.4,
@@ -19,33 +21,33 @@
   },
   "correctness_verified": true,
   "faster_strategy": "range-fenwick",
-  "speedup": 1.535,
+  "speedup": 1.589,
   "strategies": [
     {
       "strategy": "range-fenwick",
       "repeats": 3,
-      "average_seconds": 0.002528,
-      "best_seconds": 0.002502,
-      "worst_seconds": 0.002561,
+      "average_seconds": 0.002541,
+      "best_seconds": 0.002522,
+      "worst_seconds": 0.002575,
       "operations": 1000,
-      "operations_per_second": 395581.67,
+      "operations_per_second": 393522.2,
       "query_checksum": 570945,
       "final_total": 18517,
       "timings": {
         "range_sum": {
           "count": 408,
-          "total_seconds": 0.002097,
-          "average_microseconds": 1.713
+          "total_seconds": 0.002105,
+          "average_microseconds": 1.719
         },
         "range_add": {
           "count": 408,
-          "total_seconds": 0.002852,
-          "average_microseconds": 2.33
+          "total_seconds": 0.00289,
+          "average_microseconds": 2.361
         },
         "point_set": {
           "count": 184,
-          "total_seconds": 0.00232,
-          "average_microseconds": 4.203
+          "total_seconds": 0.0023,
+          "average_microseconds": 4.167
         }
       },
       "verified_against_baseline": true
@@ -53,28 +55,28 @@
     {
       "strategy": "segment-tree",
       "repeats": 3,
-      "average_seconds": 0.003881,
-      "best_seconds": 0.003838,
-      "worst_seconds": 0.003932,
+      "average_seconds": 0.004038,
+      "best_seconds": 0.003779,
+      "worst_seconds": 0.00424,
       "operations": 1000,
-      "operations_per_second": 257693.68,
+      "operations_per_second": 247640.54,
       "query_checksum": 570945,
       "final_total": 18517,
       "timings": {
         "range_sum": {
           "count": 408,
-          "total_seconds": 0.003698,
-          "average_microseconds": 3.021
+          "total_seconds": 0.003875,
+          "average_microseconds": 3.166
         },
         "range_add": {
           "count": 408,
-          "total_seconds": 0.005094,
-          "average_microseconds": 4.162
+          "total_seconds": 0.005289,
+          "average_microseconds": 4.321
         },
         "point_set": {
           "count": 184,
-          "total_seconds": 0.002495,
-          "average_microseconds": 4.52
+          "total_seconds": 0.00256,
+          "average_microseconds": 4.638
         }
       },
       "verified_against_baseline": true

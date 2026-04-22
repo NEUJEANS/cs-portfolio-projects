@@ -15,6 +15,7 @@ A portfolio-ready Python lab for Binary Indexed Trees (Fenwick trees) that suppo
 - JSON snapshot save/load workflow for resumable demos
 - CSV export with prefix sums for visualization or spreadsheet inspection
 - deterministic benchmark mode that replays the same mixed range-sum, range-add, and point-set workload through both a RangeFenwick implementation and a lazy segment tree baseline
+- named benchmark presets for balanced, query-heavy, update-heavy, and point-set-heavy workload stories, with optional ratio overrides when you want to tune a preset further
 - JSON, CSV, Markdown, and standalone SVG benchmark artifact export for README charts, blog posts, recruiter-ready notes, or slide screenshots
 - tests that cover core Fenwick behavior, persistence, CLI workflows, mixed-structure correctness, and benchmark verification
 
@@ -66,6 +67,7 @@ Benchmark RangeFenwick against a lazy segment tree and save portfolio-ready arti
 
 ```bash
 python3 fenwick_tree_range_query_lab.py benchmark \
+  --preset balanced \
   --size 256 \
   --operations 1000 \
   --repeats 3 \
@@ -79,13 +81,31 @@ python3 fenwick_tree_range_query_lab.py benchmark \
   --svg-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-chart.svg
 ```
 
-The benchmark validates correctness before comparing timing numbers, so the same report can support both engineering discussion and portfolio storytelling. The SVG export turns the same deterministic payload into a screenshot-friendly chart with throughput and per-operation latency bars.
+Generate a query-heavy variant of the same benchmark story:
+
+```bash
+python3 fenwick_tree_range_query_lab.py benchmark \
+  --preset query-heavy \
+  --size 256 \
+  --operations 1000 \
+  --repeats 3 \
+  --seed 7 \
+  --output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark.json \
+  --csv-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark.csv \
+  --markdown-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark-report.md \
+  --svg-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark-chart.svg
+```
+
+The benchmark validates correctness before comparing timing numbers, so the same report can support both engineering discussion and portfolio storytelling. Presets make it easier to show how Fenwick trees behave under different mixes instead of only one balanced workload, and the SVG export turns each deterministic payload into a screenshot-friendly chart with throughput and per-operation latency bars.
 
 ## Sample committed artifacts
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.json`
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.csv`
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-report.md`
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-chart.svg`
+- `docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark-report.md`
+- `docs/artifacts/fenwick-tree-range-query-lab/presets/update-heavy-benchmark-report.md`
+- `docs/artifacts/fenwick-tree-range-query-lab/presets/point-set-heavy-benchmark-report.md`
 
 ## Test
 
@@ -95,4 +115,4 @@ python3 -m unittest projects/fenwick-tree-range-query-lab/test_fenwick_tree_rang
 
 ## Future improvements
 - support floating-point values or generic monoids where inversion is available
-- add workload presets that isolate query-heavy, update-heavy, and point-set-heavy mixes
+- add a multi-preset comparison dashboard so all workload presets can be contrasted in one recruiter-friendly artifact instead of separate files

@@ -4,28 +4,28 @@
 - operations per run: 1000
 - repeats: 3
 - seed: 7
-- workload preset: balanced
-- preset summary: Balanced mix across reads, range updates, and point overwrites.
-- query ratio: 0.45
-- range-add ratio: 0.4
-- point-set ratio: 0.15
-- max range width: 32
+- workload preset: update-heavy
+- preset summary: Range adds dominate the workload story.
+- query ratio: 0.2
+- range-add ratio: 0.7
+- point-set ratio: 0.1
+- max range width: 24
 - correctness verified: True
 - faster strategy: range-fenwick
-- relative speedup: 1.589x
+- relative speedup: 1.593x
 
 ## Operation mix
 
-- range_sum: 408
-- range_add: 408
-- point_set: 184
+- range_sum: 203
+- range_add: 705
+- point_set: 92
 
 ## Strategy summary
 
 | Strategy | Avg seconds | Ops/sec | Range sum avg μs | Range add avg μs | Point set avg μs | Verified |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| range-fenwick | 0.002541 | 393522.2 | 1.719 | 2.361 | 4.167 | True |
-| segment-tree | 0.004038 | 247640.54 | 3.166 | 4.321 | 4.638 | True |
+| range-fenwick | 0.002714 | 368505.73 | 1.942 | 2.501 | 4.702 | True |
+| segment-tree | 0.004323 | 231298.82 | 3.432 | 4.31 | 4.948 | True |
 
 ## Takeaways
 

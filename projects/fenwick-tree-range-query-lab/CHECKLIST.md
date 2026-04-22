@@ -18,3 +18,12 @@
 - [x] expand tests to cover the SVG renderer and CLI export path
 - [x] regenerate the committed sample benchmark artifacts, including the SVG chart
 - [x] document the chart export workflow in the project README
+
+## Vertical slice: benchmark workload presets
+- [x] confirm the next weak spot is preset coverage beyond one balanced workload
+- [x] refresh how query-heavy, update-heavy, and point-set-heavy mixes should differ
+- [x] add named benchmark presets with optional ratio overrides
+- [x] thread preset metadata through benchmark JSON, CSV, Markdown, and SVG outputs
+- [x] expand tests for preset resolution and CLI preset usage
+- [x] generate committed preset artifacts for query-heavy, update-heavy, and point-set-heavy runs
+- [x] document preset-driven benchmark workflows in the project README

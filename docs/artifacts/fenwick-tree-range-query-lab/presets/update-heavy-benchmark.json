@@ -1,0 +1,85 @@
+{
+  "size": 256,
+  "operations": 1000,
+  "repeats": 3,
+  "seed": 7,
+  "preset": "update-heavy",
+  "preset_description": "Range adds dominate the workload story.",
+  "query_ratio": 0.2,
+  "set_ratio": 0.1,
+  "range_add_ratio": 0.7,
+  "max_range_width": 24,
+  "value_min": 0,
+  "value_max": 200,
+  "delta_min": -20,
+  "delta_max": 20,
+  "initial_total": 24389,
+  "operation_mix": {
+    "range_sum": 203,
+    "range_add": 705,
+    "point_set": 92
+  },
+  "correctness_verified": true,
+  "faster_strategy": "range-fenwick",
+  "speedup": 1.593,
+  "strategies": [
+    {
+      "strategy": "range-fenwick",
+      "repeats": 3,
+      "average_seconds": 0.002714,
+      "best_seconds": 0.002593,
+      "worst_seconds": 0.002793,
+      "operations": 1000,
+      "operations_per_second": 368505.73,
+      "query_checksum": 205264,
+      "final_total": 18297,
+      "timings": {
+        "range_sum": {
+          "count": 203,
+          "total_seconds": 0.001183,
+          "average_microseconds": 1.942
+        },
+        "range_add": {
+          "count": 705,
+          "total_seconds": 0.00529,
+          "average_microseconds": 2.501
+        },
+        "point_set": {
+          "count": 92,
+          "total_seconds": 0.001298,
+          "average_microseconds": 4.702
+        }
+      },
+      "verified_against_baseline": true
+    },
+    {
+      "strategy": "segment-tree",
+      "repeats": 3,
+      "average_seconds": 0.004323,
+      "best_seconds": 0.004266,
+      "worst_seconds": 0.004421,
+      "operations": 1000,
+      "operations_per_second": 231298.82,
+      "query_checksum": 205264,
+      "final_total": 18297,
+      "timings": {
+        "range_sum": {
+          "count": 203,
+          "total_seconds": 0.00209,
+          "average_microseconds": 3.432
+        },
+        "range_add": {
+          "count": 705,
+          "total_seconds": 0.009115,
+          "average_microseconds": 4.31
+        },
+        "point_set": {
+          "count": 92,
+          "total_seconds": 0.001366,
+          "average_microseconds": 4.948
+        }
+      },
+      "verified_against_baseline": true
+    }
+  ]
+}

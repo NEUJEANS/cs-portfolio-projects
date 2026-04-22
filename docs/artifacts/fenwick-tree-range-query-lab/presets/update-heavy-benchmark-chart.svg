@@ -17,22 +17,22 @@ text { font-family: Inter, Arial, sans-serif; fill: #0f172a; }
 </style>
 <rect width="100%" height="100%" fill="#f8fafc" />
 <text class="title" x="40" y="48">Fenwick vs Segment Tree benchmark</text>
-<text class="body muted" x="40" y="74">Preset balanced • Size 256 • 1000 operations/run • 3 repeats • seed 7</text>
+<text class="body muted" x="40" y="74">Preset update-heavy • Size 256 • 1000 operations/run • 3 repeats • seed 7</text>
 <rect class="card" x="40" y="98" width="290" height="92" rx="14" />
 <text class="small subtle" x="58" y="124">Faster strategy</text>
 <text class="value" x="58" y="160">range-fenwick</text>
-<text class="small muted" x="58" y="180">1.589x speedup vs slower baseline</text>
+<text class="small muted" x="58" y="180">1.593x speedup vs slower baseline</text>
 <rect class="card" x="350" y="98" width="290" height="92" rx="14" />
 <text class="small subtle" x="368" y="124">Workload preset</text>
-<text class="value" x="368" y="160">balanced</text>
-<text class="small muted" x="368" y="180">Q 45% • A 40% • S 15% • width≤32</text>
+<text class="value" x="368" y="160">update-heavy</text>
+<text class="small muted" x="368" y="180">Q 20% • A 70% • S 10% • width≤24</text>
 <rect class="card" x="660" y="98" width="290" height="92" rx="14" />
 <text class="small subtle" x="678" y="124">Correctness</text>
 <text class="value" x="678" y="160">verified</text>
 <text class="small muted" x="678" y="180">Query checksum and final total matched across both structures</text>
 <rect class="card" x="970" y="98" width="290" height="92" rx="14" />
 <text class="small subtle" x="988" y="124">Operation mix</text>
-<text class="value" x="988" y="160">408/408/184</text>
+<text class="value" x="988" y="160">203/705/92</text>
 <text class="small muted" x="988" y="180">range_sum / range_add / point_set operations in the shared workload</text>
 <text class="label" x="930" y="116">Legend</text>
 <rect x="930" y="134" width="12" height="12" rx="3" fill="#2563eb" />
@@ -45,13 +45,13 @@ text { font-family: Inter, Arial, sans-serif; fill: #0f172a; }
 <text class="label" x="64" y="308">range-fenwick</text>
 <rect x="64" y="318" width="360" height="20" rx="10" fill="#e2e8f0" />
 <rect x="64" y="318" width="360.0" height="20" rx="10" fill="#2563eb" />
-<text class="body muted" x="436" y="333">393522.2 ops/sec</text>
-<text class="small subtle" x="64" y="356">avg 0.002541s, best 0.002522s</text>
+<text class="body muted" x="436" y="333">368505.73 ops/sec</text>
+<text class="small subtle" x="64" y="356">avg 0.002714s, best 0.002593s</text>
 <text class="label" x="64" y="376">segment-tree</text>
 <rect x="64" y="386" width="360" height="20" rx="10" fill="#e2e8f0" />
-<rect x="64" y="386" width="226.5" height="20" rx="10" fill="#f97316" />
-<text class="body muted" x="436" y="401">247640.54 ops/sec</text>
-<text class="small subtle" x="64" y="424">avg 0.004038s, best 0.003779s</text>
+<rect x="64" y="386" width="226.0" height="20" rx="10" fill="#f97316" />
+<text class="body muted" x="436" y="401">231298.82 ops/sec</text>
+<text class="small subtle" x="64" y="424">avg 0.004323s, best 0.004266s</text>
 <rect class="panel" x="530" y="222" width="470" height="380" rx="16" />
 <text class="section" x="554" y="254">Per-operation latency</text>
 <text class="small muted" x="554" y="274">Shorter bars are better because they show less average time spent per operation kind.</text>
@@ -59,32 +59,32 @@ text { font-family: Inter, Arial, sans-serif; fill: #0f172a; }
 <line class="grid" x1="554" y1="324" x2="960" y2="324" />
 <text class="small muted" x="554" y="348">range-fenwick</text>
 <rect x="648" y="336" width="230" height="16" rx="8" fill="#e2e8f0" />
-<rect x="648" y="336" width="85.2" height="16" rx="8" fill="#2563eb" />
-<text class="small muted" x="890" y="348">1.719 μs</text>
+<rect x="648" y="336" width="90.3" height="16" rx="8" fill="#2563eb" />
+<text class="small muted" x="890" y="348">1.942 μs</text>
 <text class="small muted" x="554" y="378">segment-tree</text>
 <rect x="648" y="366" width="230" height="16" rx="8" fill="#e2e8f0" />
-<rect x="648" y="366" width="157.0" height="16" rx="8" fill="#f97316" />
-<text class="small muted" x="890" y="378">3.166 μs</text>
+<rect x="648" y="366" width="159.5" height="16" rx="8" fill="#f97316" />
+<text class="small muted" x="890" y="378">3.432 μs</text>
 <text class="label" x="554" y="418">Range add μs</text>
 <line class="grid" x1="554" y1="426" x2="960" y2="426" />
 <text class="small muted" x="554" y="450">range-fenwick</text>
 <rect x="648" y="438" width="230" height="16" rx="8" fill="#e2e8f0" />
-<rect x="648" y="438" width="117.1" height="16" rx="8" fill="#2563eb" />
-<text class="small muted" x="890" y="450">2.361 μs</text>
+<rect x="648" y="438" width="116.3" height="16" rx="8" fill="#2563eb" />
+<text class="small muted" x="890" y="450">2.501 μs</text>
 <text class="small muted" x="554" y="480">segment-tree</text>
 <rect x="648" y="468" width="230" height="16" rx="8" fill="#e2e8f0" />
-<rect x="648" y="468" width="214.3" height="16" rx="8" fill="#f97316" />
-<text class="small muted" x="890" y="480">4.321 μs</text>
+<rect x="648" y="468" width="200.3" height="16" rx="8" fill="#f97316" />
+<text class="small muted" x="890" y="480">4.31 μs</text>
 <text class="label" x="554" y="520">Point set μs</text>
 <line class="grid" x1="554" y1="528" x2="960" y2="528" />
 <text class="small muted" x="554" y="552">range-fenwick</text>
 <rect x="648" y="540" width="230" height="16" rx="8" fill="#e2e8f0" />
-<rect x="648" y="540" width="206.6" height="16" rx="8" fill="#2563eb" />
-<text class="small muted" x="890" y="552">4.167 μs</text>
+<rect x="648" y="540" width="218.6" height="16" rx="8" fill="#2563eb" />
+<text class="small muted" x="890" y="552">4.702 μs</text>
 <text class="small muted" x="554" y="582">segment-tree</text>
 <rect x="648" y="570" width="230" height="16" rx="8" fill="#e2e8f0" />
 <rect x="648" y="570" width="230.0" height="16" rx="8" fill="#f97316" />
-<text class="small muted" x="890" y="582">4.638 μs</text>
+<text class="small muted" x="890" y="582">4.948 μs</text>
 <rect class="panel" x="40" y="480" width="460" height="122" rx="16" />
 <text class="section" x="64" y="512">Why this chart matters</text>
 <text class="body muted" x="64" y="538">• The same deterministic preset workload is replayed through both data structures, so the timing comparison stays apples-to-apples.</text>

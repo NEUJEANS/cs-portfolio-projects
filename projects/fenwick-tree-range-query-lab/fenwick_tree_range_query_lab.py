@@ -229,6 +229,48 @@ class BenchmarkOperation:
     amount: int | None = None
 
 
+@dataclass(frozen=True)
+class BenchmarkPreset:
+    name: str
+    query_ratio: float
+    set_ratio: float
+    max_range_width: int | None
+    description: str
+
+
+DEFAULT_BENCHMARK_PRESET = "balanced"
+BENCHMARK_PRESETS: dict[str, BenchmarkPreset] = {
+    "balanced": BenchmarkPreset(
+        name="balanced",
+        query_ratio=0.45,
+        set_ratio=0.15,
+        max_range_width=32,
+        description="Balanced mix across reads, range updates, and point overwrites.",
+    ),
+    "query-heavy": BenchmarkPreset(
+        name="query-heavy",
+        query_ratio=0.75,
+        set_ratio=0.1,
+        max_range_width=48,
+        description="Range-sum reads dominate the workload story.",
+    ),
+    "update-heavy": BenchmarkPreset(
+        name="update-heavy",
+        query_ratio=0.2,
+        set_ratio=0.1,
+        max_range_width=24,
+        description="Range adds dominate the workload story.",
+    ),
+    "point-set-heavy": BenchmarkPreset(
+        name="point-set-heavy",
+        query_ratio=0.25,
+        set_ratio=0.55,
+        max_range_width=12,
+        description="Single-index overwrites dominate the workload story.",
+    ),
+}
+
+
 def load_values(path: Path) -> list[int]:
     values: list[int] = []
     for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
@@ -267,6 +309,26 @@ def generate_benchmark_values(size: int, *, seed: int, value_min: int, value_max
         raise ValueError("value_min must be <= value_max")
     rng = random.Random(seed)
     return [rng.randint(value_min, value_max) for _ in range(size)]
+
+
+def resolve_benchmark_profile(
+    *,
+    preset: str,
+    query_ratio: float | None,
+    set_ratio: float | None,
+    max_range_width: int | None,
+) -> BenchmarkPreset:
+    profile = BENCHMARK_PRESETS.get(preset)
+    if profile is None:
+        available = ", ".join(sorted(BENCHMARK_PRESETS))
+        raise ValueError(f"unknown benchmark preset: {preset}. choose from: {available}")
+    return BenchmarkPreset(
+        name=profile.name,
+        query_ratio=profile.query_ratio if query_ratio is None else query_ratio,
+        set_ratio=profile.set_ratio if set_ratio is None else set_ratio,
+        max_range_width=profile.max_range_width if max_range_width is None else max_range_width,
+        description=profile.description,
+    )
 
 
 def generate_benchmark_operations(
@@ -398,9 +460,10 @@ def run_benchmark(
     operations: int,
     seed: int,
     repeats: int,
-    query_ratio: float,
-    set_ratio: float,
-    max_range_width: int | None,
+    preset: str = DEFAULT_BENCHMARK_PRESET,
+    query_ratio: float | None = None,
+    set_ratio: float | None = None,
+    max_range_width: int | None = None,
     value_min: int,
     value_max: int,
     delta_min: int,
@@ -409,14 +472,21 @@ def run_benchmark(
     if repeats < 1:
         raise ValueError("repeats must be positive")
 
+    profile = resolve_benchmark_profile(
+        preset=preset,
+        query_ratio=query_ratio,
+        set_ratio=set_ratio,
+        max_range_width=max_range_width,
+    )
+
     initial_values = generate_benchmark_values(size, seed=seed, value_min=value_min, value_max=value_max)
     workload = generate_benchmark_operations(
         size=size,
         operations=operations,
         seed=seed + 1,
-        query_ratio=query_ratio,
-        set_ratio=set_ratio,
-        max_range_width=max_range_width,
+        query_ratio=profile.query_ratio,
+        set_ratio=profile.set_ratio,
+        max_range_width=profile.max_range_width,
         value_min=value_min,
         value_max=value_max,
         delta_min=delta_min,
@@ -446,10 +516,12 @@ def run_benchmark(
         "operations": operations,
         "repeats": repeats,
         "seed": seed,
-        "query_ratio": query_ratio,
-        "set_ratio": set_ratio,
-        "range_add_ratio": round(1 - query_ratio - set_ratio, 4),
-        "max_range_width": max_range_width,
+        "preset": profile.name,
+        "preset_description": profile.description,
+        "query_ratio": profile.query_ratio,
+        "set_ratio": profile.set_ratio,
+        "range_add_ratio": round(1 - profile.query_ratio - profile.set_ratio, 4),
+        "max_range_width": profile.max_range_width,
         "value_min": value_min,
         "value_max": value_max,
         "delta_min": delta_min,
@@ -471,6 +543,11 @@ def save_benchmark_json(path: Path, payload: dict[str, Any]) -> None:
 def save_benchmark_csv(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
+        "preset",
+        "query_ratio",
+        "range_add_ratio",
+        "set_ratio",
+        "max_range_width",
         "strategy",
         "average_seconds",
         "best_seconds",
@@ -490,6 +567,11 @@ def save_benchmark_csv(path: Path, payload: dict[str, Any]) -> None:
         for result in payload["strategies"]:
             writer.writerow(
                 {
+                    "preset": payload["preset"],
+                    "query_ratio": payload["query_ratio"],
+                    "range_add_ratio": payload["range_add_ratio"],
+                    "set_ratio": payload["set_ratio"],
+                    "max_range_width": payload["max_range_width"],
                     "strategy": result["strategy"],
                     "average_seconds": result["average_seconds"],
                     "best_seconds": result["best_seconds"],
@@ -524,6 +606,12 @@ def render_benchmark_markdown(payload: dict[str, Any]) -> str:
         f"- operations per run: {payload['operations']}",
         f"- repeats: {payload['repeats']}",
         f"- seed: {payload['seed']}",
+        f"- workload preset: {payload['preset']}",
+        f"- preset summary: {payload['preset_description']}",
+        f"- query ratio: {payload['query_ratio']}",
+        f"- range-add ratio: {payload['range_add_ratio']}",
+        f"- point-set ratio: {payload['set_ratio']}",
+        f"- max range width: {payload['max_range_width']}",
         f"- correctness verified: {payload['correctness_verified']}",
         f"- faster strategy: {payload['faster_strategy']}",
         f"- relative speedup: {payload['speedup']}x",
@@ -616,7 +704,7 @@ def render_benchmark_svg(payload: dict[str, Any]) -> str:
         '<text class="title" x="40" y="48">Fenwick vs Segment Tree benchmark</text>',
         (
             f'<text class="body muted" x="40" y="74">'
-            f'Size {payload["size"]} • {payload["operations"]} operations/run • '
+            f'Preset {payload["preset"]} • Size {payload["size"]} • {payload["operations"]} operations/run • '
             f'{payload["repeats"]} repeats • seed {payload["seed"]}'
             "</text>"
         ),
@@ -624,6 +712,17 @@ def render_benchmark_svg(payload: dict[str, Any]) -> str:
 
     summary_cards = [
         ("Faster strategy", payload["faster_strategy"], f'{_format_metric(payload["speedup"])}x speedup vs slower baseline'),
+        (
+            "Workload preset",
+            payload["preset"],
+            "Q "
+            f'{int(round(payload["query_ratio"] * 100))}% • '
+            "A "
+            f'{int(round(payload["range_add_ratio"] * 100))}% • '
+            "S "
+            f'{int(round(payload["set_ratio"] * 100))}% • '
+            f'width≤{payload["max_range_width"]}',
+        ),
         ("Correctness", "verified" if payload["correctness_verified"] else "failed", "Query checksum and final total matched across both structures"),
         (
             "Operation mix",
@@ -717,7 +816,7 @@ def render_benchmark_svg(payload: dict[str, Any]) -> str:
         [
             '<rect class="panel" x="40" y="480" width="460" height="122" rx="16" />',
             '<text class="section" x="64" y="512">Why this chart matters</text>',
-            '<text class="body muted" x="64" y="538">• The same deterministic workload is replayed through both data structures, so the timing comparison stays apples-to-apples.</text>',
+            '<text class="body muted" x="64" y="538">• The same deterministic preset workload is replayed through both data structures, so the timing comparison stays apples-to-apples.</text>',
             '<text class="body muted" x="64" y="562">• Correctness gates the benchmark, the chart is only meaningful when both structures agree on checksum and final total.</text>',
             '<text class="body muted" x="64" y="586">• RangeFenwick stays compact and wins this sample, while the segment tree remains a strong baseline for richer range-update/query stories.</text>',
         ]
@@ -782,6 +881,7 @@ def benchmark_command(args: argparse.Namespace) -> int:
         operations=args.operations,
         seed=args.seed,
         repeats=args.repeats,
+        preset=args.preset,
         query_ratio=args.query_ratio,
         set_ratio=args.set_ratio,
         max_range_width=args.max_range_width,
@@ -846,9 +946,15 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--operations", type=int, default=1000)
     benchmark_parser.add_argument("--seed", type=int, default=7)
     benchmark_parser.add_argument("--repeats", type=int, default=3)
-    benchmark_parser.add_argument("--query-ratio", type=float, default=0.45)
-    benchmark_parser.add_argument("--set-ratio", type=float, default=0.15)
-    benchmark_parser.add_argument("--max-range-width", type=int, default=32)
+    benchmark_parser.add_argument(
+        "--preset",
+        choices=sorted(BENCHMARK_PRESETS),
+        default=DEFAULT_BENCHMARK_PRESET,
+        help="named workload mix to use before any explicit ratio overrides",
+    )
+    benchmark_parser.add_argument("--query-ratio", type=float, help="override the preset range-sum ratio")
+    benchmark_parser.add_argument("--set-ratio", type=float, help="override the preset point-set ratio")
+    benchmark_parser.add_argument("--max-range-width", type=int, help="override the preset maximum sampled range width")
     benchmark_parser.add_argument("--value-min", type=int, default=0)
     benchmark_parser.add_argument("--value-max", type=int, default=200)
     benchmark_parser.add_argument("--delta-min", type=int, default=-20)
