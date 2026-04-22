@@ -338,6 +338,8 @@ class DeadlockDetectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             payload = Path(tmpdir) / "banker.json"
             markdown_out = Path(tmpdir) / "trace.md"
+            svg_out = Path(tmpdir) / "trace.svg"
+            html_out = Path(tmpdir) / "trace.html"
             payload.write_text(
                 json.dumps(
                     {
@@ -357,6 +359,10 @@ class DeadlockDetectorTests(unittest.TestCase):
                     str(payload),
                     "--markdown-out",
                     str(markdown_out),
+                    "--svg-out",
+                    str(svg_out),
+                    "--html-out",
+                    str(html_out),
                 ],
                 check=True,
                 capture_output=True,
@@ -365,14 +371,22 @@ class DeadlockDetectorTests(unittest.TestCase):
             )
 
             markdown = markdown_out.read_text(encoding="utf-8")
+            svg = svg_out.read_text(encoding="utf-8")
+            html_report = html_out.read_text(encoding="utf-8")
             self.assertIn("# Banker's algorithm safety trace", markdown)
             self.assertIn("| Step | Chosen process | Runnable set |", markdown)
             self.assertIn("`P1`", markdown)
+            self.assertIn("algorithm safety view", svg)
+            self.assertIn("Trace steps", svg)
+            self.assertIn("Banker's algorithm safety view", html_report)
+            self.assertIn("Need matrix", html_report)
 
     def test_cli_writes_banker_request_markdown_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             payload = Path(tmpdir) / "banker-request.json"
             markdown_out = Path(tmpdir) / "request-trace.md"
+            svg_out = Path(tmpdir) / "request-trace.svg"
+            html_out = Path(tmpdir) / "request-trace.html"
             payload.write_text(
                 json.dumps(
                     {
@@ -406,6 +420,10 @@ class DeadlockDetectorTests(unittest.TestCase):
                     str(payload),
                     "--markdown-out",
                     str(markdown_out),
+                    "--svg-out",
+                    str(svg_out),
+                    "--html-out",
+                    str(html_out),
                 ],
                 check=True,
                 capture_output=True,
@@ -414,9 +432,15 @@ class DeadlockDetectorTests(unittest.TestCase):
             )
 
             markdown = markdown_out.read_text(encoding="utf-8")
+            svg = svg_out.read_text(encoding="utf-8")
+            html_report = html_out.read_text(encoding="utf-8")
             self.assertIn("# Banker's algorithm request trace", markdown)
             self.assertIn("- Granted: yes", markdown)
             self.assertIn("`P1`", markdown)
+            self.assertIn("algorithm request trial", svg)
+            self.assertIn("Decision takeaway", svg)
+            self.assertIn("Banker's algorithm request trial", html_report)
+            self.assertIn("Trial details", html_report)
 
     def test_cli_writes_detection_vs_avoidance_dashboard_exports(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -528,6 +552,8 @@ class DeadlockDetectorTests(unittest.TestCase):
             self.assertIn("Wait-for graph detection", html_report)
             self.assertIn("Banker's safety analysis", html_report)
             self.assertIn("Banker's request trial", html_report)
+            self.assertIn("algorithm safety view", html_report)
+            self.assertIn("Decision takeaway", html_report)
             self.assertIn("Evaluated available vector", html_report)
 
     def test_cli_dashboard_supports_optional_request_section(self) -> None:

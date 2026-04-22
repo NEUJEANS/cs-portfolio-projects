@@ -5,6 +5,7 @@ import argparse
 import html
 import json
 import math
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -663,6 +664,481 @@ def _svg_text(x: float, y: float, text: str, class_name: str = "label", anchor: 
     )
 
 
+def _wrap_svg_lines(text: str, max_chars: int = 44) -> list[str]:
+    raw_lines = text.splitlines() or [text]
+    wrapped: list[str] = []
+    for raw_line in raw_lines:
+        line = raw_line.strip()
+        if not line:
+            wrapped.append("")
+            continue
+        wrapped.extend(
+            textwrap.wrap(
+                line,
+                width=max_chars,
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            or [line]
+        )
+    return wrapped or [""]
+
+
+def _svg_multiline_text(
+    x: float,
+    y: float,
+    lines: list[str],
+    class_name: str = "tiny",
+    anchor: str = "start",
+    line_height: float = 18.0,
+) -> str:
+    rendered: list[str] = []
+    current_y = y
+    for line in lines:
+        if line:
+            rendered.append(_svg_text(x, current_y, line, class_name, anchor=anchor))
+        current_y += line_height
+    return "\n".join(rendered)
+
+
+def _svg_panel(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    title: str,
+    body_lines: list[str],
+    *,
+    tone_class: str = "panel",
+    body_class: str = "tiny",
+) -> str:
+    body = _svg_multiline_text(x + 14, y + 50, body_lines, body_class, anchor="start", line_height=17.0)
+    return "\n".join(
+        [
+            f'<rect class="{tone_class}" x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="18" />',
+            _svg_text(x + 14, y + 28, title, "section-title", anchor="start"),
+            body,
+        ]
+    )
+
+
+def _svg_metric_card(x: float, y: float, width: float, height: float, label: str, value: str) -> str:
+    lines = _wrap_svg_lines(value, max(14, min(28, int((width - 28) / 7))))
+    body = _svg_multiline_text(x + 14, y + 52, lines, "metric-value", anchor="start", line_height=19.0)
+    return "\n".join(
+        [
+            f'<rect class="metric-card" x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="18" />',
+            _svg_text(x + 14, y + 28, label, "section-title", anchor="start"),
+            body,
+        ]
+    )
+
+
+def _trace_step_card_lines(step: BankerTraceStep) -> list[str]:
+    return [
+        f"Runnable: {_format_process_list(step.runnable_processes)}",
+        f"Work before: {_format_resource_vector(step.work_before)}",
+        f"Need: {_format_resource_vector(step.need)}",
+        f"Release: {_format_resource_vector(step.allocation_released)}",
+        f"Work after: {_format_resource_vector(step.work_after)}",
+    ]
+
+
+def _trace_step_card_height(step: BankerTraceStep, width: float) -> float:
+    max_chars = max(28, min(72, int((width - 28) / 6.7)))
+    line_count = sum(len(_wrap_svg_lines(line, max_chars)) for line in _trace_step_card_lines(step))
+    return 54.0 + line_count * 17.0 + 14.0
+
+
+def render_banker_safety_svg(analysis: BankerSafetyAnalysis, source_label: str) -> str:
+    diagram_id = _svg_id(f"banker-safety-{source_label}")
+    width = 1120.0
+    outer_x = 24.0
+    outer_y = 24.0
+    inner_width = width - 48.0
+    metric_gap = 14.0
+    metric_width = (inner_width - metric_gap * 3) / 4
+    metric_height = 92.0
+    summary_y = 112.0
+    need_lines = [
+        f"{process}: {_format_resource_vector(analysis.need[process]) or 'none'}"
+        for process in analysis.processes
+    ]
+    blocking_lines = _wrap_svg_lines(
+        _format_blocking_summary(analysis.blocking)
+        if analysis.blocking
+        else "No blocking shortages remain in the current state.",
+        48,
+    )
+    note_lines = _wrap_svg_lines(
+        "Question answered: is the current state safe before any new request is granted?",
+        42,
+    )
+    left_panel_height = 66.0 + len(need_lines) * 17.0
+    right_panel_body_lines = note_lines + [""] + ["Blocking summary:"] + blocking_lines
+    right_panel_height = 66.0 + len(right_panel_body_lines) * 17.0
+    detail_height = max(left_panel_height, right_panel_height)
+    detail_y = summary_y + metric_height + 20.0
+    trace_y = detail_y + detail_height + 20.0
+    trace_card_width = inner_width
+    trace_cards: list[tuple[BankerTraceStep | None, float]] = []
+    if analysis.trace_steps:
+        for step in analysis.trace_steps:
+            trace_cards.append((step, _trace_step_card_height(step, trace_card_width)))
+    else:
+        trace_cards.append((None, 112.0))
+
+    trace_total_height = sum(height for _, height in trace_cards) + max(len(trace_cards) - 1, 0) * 14.0
+    height = trace_y + trace_total_height + 48.0
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-labelledby="{diagram_id}-title {diagram_id}-desc">',
+        f'  <title id="{diagram_id}-title">Banker\'s algorithm safety visualization for {html.escape(source_label)}</title>',
+        f'  <desc id="{diagram_id}-desc">A static summary of the Banker\'s algorithm safety state, including the safe sequence and per-step work evolution.</desc>',
+        '  <style>',
+        '    .bg { fill: #f8fafc; }',
+        '    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }',
+        '    .metric-card { fill: #eff6ff; stroke: #bfdbfe; stroke-width: 1.2; }',
+        '    .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; }',
+        '    .accent-panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; }',
+        '    .trace-card { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.2; }',
+        '    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }',
+        '    .section-title { fill: #0f172a; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; }',
+        '    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }',
+        '    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }',
+        '    .metric-value { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }',
+        '  </style>',
+        f'  <rect class="bg" x="0" y="0" width="{width:.0f}" height="{height:.0f}" rx="24" />',
+        f'  <rect class="card" x="{outer_x:.0f}" y="{outer_y:.0f}" width="{width - 48:.0f}" height="{height - 48:.0f}" rx="20" />',
+        _svg_text(52, 58, "Banker's algorithm safety view", "label", anchor="start"),
+        _svg_text(52, 82, f"Source: {source_label}", "muted", anchor="start"),
+        _svg_text(width - 52, 58, "safe state" if analysis.safe else "unsafe state", "muted", anchor="end"),
+        _svg_metric_card(outer_x + 18, summary_y, metric_width, metric_height, "State", "safe" if analysis.safe else "unsafe"),
+        _svg_metric_card(
+            outer_x + 18 + (metric_width + metric_gap),
+            summary_y,
+            metric_width,
+            metric_height,
+            "Safe sequence",
+            _format_process_list(analysis.safe_sequence),
+        ),
+        _svg_metric_card(
+            outer_x + 18 + (metric_width + metric_gap) * 2,
+            summary_y,
+            metric_width,
+            metric_height,
+            "Final work",
+            _format_resource_vector(analysis.work) or "none",
+        ),
+        _svg_metric_card(
+            outer_x + 18 + (metric_width + metric_gap) * 3,
+            summary_y,
+            metric_width,
+            metric_height,
+            "Unfinished",
+            _format_process_list(analysis.unfinished_processes),
+        ),
+        _svg_panel(outer_x + 18, detail_y, 360.0, detail_height, "Need matrix", need_lines, tone_class="panel"),
+        _svg_panel(
+            outer_x + 392,
+            detail_y,
+            width - outer_x - 392 - 42,
+            detail_height,
+            "Safety takeaway",
+            right_panel_body_lines,
+            tone_class="accent-panel",
+        ),
+        _svg_text(outer_x + 18, trace_y - 10, "Trace steps", "section-title", anchor="start"),
+    ]
+
+    current_y = trace_y
+    for step, card_height in trace_cards:
+        x = outer_x + 18
+        if step is None:
+            parts.append(
+                _svg_panel(
+                    x,
+                    current_y,
+                    trace_card_width,
+                    card_height,
+                    "No runnable step",
+                    ["No process can finish with the current work vector."],
+                    tone_class="trace-card",
+                )
+            )
+        else:
+            max_chars = max(28, min(72, int((trace_card_width - 28) / 6.7)))
+            body_lines: list[str] = []
+            for line in _trace_step_card_lines(step):
+                body_lines.extend(_wrap_svg_lines(line, max_chars))
+            parts.append(
+                _svg_panel(
+                    x,
+                    current_y,
+                    trace_card_width,
+                    card_height,
+                    f"Step {step.step}: run {step.process}",
+                    body_lines,
+                    tone_class="trace-card",
+                )
+            )
+        current_y += card_height + 14.0
+
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def render_banker_safety_html(analysis: BankerSafetyAnalysis, source_label: str) -> str:
+    svg = render_banker_safety_svg(analysis, source_label).strip()
+    need_rows = "\n".join(
+        f"<tr><td><code>{html.escape(process)}</code></td><td><code>{html.escape(_format_resource_vector(analysis.need[process]) or 'none')}</code></td></tr>"
+        for process in analysis.processes
+    )
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>Banker's algorithm safety view</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1240px; margin: 0 auto; padding: 32px 24px 56px; }}
+    .card {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }}
+    .metric {{ background: #eff6ff; border-radius: 14px; padding: 14px; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }}
+    th, td {{ border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }}
+    th {{ font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }}
+    code {{ font-family: \"SFMono-Regular\", Consolas, monospace; font-size: 0.95em; }}
+    .table-wrap {{ overflow-x: auto; }}
+    svg {{ width: 100%; height: auto; display: block; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"card\">
+      <h1>Banker's algorithm safety view</h1>
+      <p>This artifact answers whether the current state is safe before any new request is granted.</p>
+      <div class=\"grid\">
+        <div class=\"metric\"><strong>Source</strong><br /><code>{html.escape(source_label)}</code></div>
+        <div class=\"metric\"><strong>State</strong><br />{'safe' if analysis.safe else 'unsafe'}</div>
+        <div class=\"metric\"><strong>Safe sequence</strong><br /><code>{html.escape(_format_process_list(analysis.safe_sequence))}</code></div>
+        <div class=\"metric\"><strong>Final work</strong><br /><code>{html.escape(_format_resource_vector(analysis.work) or 'none')}</code></div>
+      </div>
+    </section>
+
+    <section class=\"card\">{svg}</section>
+
+    <section class=\"card\">
+      <h2>Need matrix</h2>
+      <div class=\"table-wrap\">
+        <table>
+          <thead><tr><th>Process</th><th>Remaining need</th></tr></thead>
+          <tbody>{need_rows}</tbody>
+        </table>
+      </div>
+      <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(analysis.blocking))}</code></p>
+      <div class=\"table-wrap\">{_render_trace_steps_html_table(analysis.trace_steps)}</div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def render_banker_request_svg(analysis: BankerRequestAnalysis, source_label: str) -> str:
+    diagram_id = _svg_id(f"banker-request-{source_label}")
+    width = 1120.0
+    outer_x = 24.0
+    outer_y = 24.0
+    inner_width = width - 48.0
+    metric_gap = 14.0
+    metric_width = (inner_width - metric_gap * 3) / 4
+    metric_height = 92.0
+    summary_y = 112.0
+    detail_y = summary_y + metric_height + 20.0
+    request_lines = _wrap_svg_lines(f"Process {analysis.process}: {_format_resource_vector(analysis.request)}", 40)
+    reason_lines = _wrap_svg_lines(analysis.reason, 48)
+    blocking_lines = _wrap_svg_lines(
+        _format_blocking_summary(analysis.blocking)
+        if analysis.blocking
+        else "No blocking shortages remain after the evaluated trial.",
+        48,
+    )
+    left_panel_height = 66.0 + len(request_lines) * 17.0
+    right_panel_body_lines = (
+        _wrap_svg_lines("Question answered: can this request be granted while keeping the system safe?", 48)
+        + [""]
+        + ["Reason:"]
+        + reason_lines
+        + [""]
+        + ["Blocking summary:"]
+        + blocking_lines
+    )
+    right_panel_height = 66.0 + len(right_panel_body_lines) * 17.0
+    detail_height = max(left_panel_height, right_panel_height)
+    trace_y = detail_y + detail_height + 20.0
+    trace_card_width = inner_width
+    trace_cards: list[tuple[BankerTraceStep | None, float]] = []
+    if analysis.trace_steps:
+        for step in analysis.trace_steps:
+            trace_cards.append((step, _trace_step_card_height(step, trace_card_width)))
+    else:
+        trace_cards.append((None, 112.0))
+
+    trace_total_height = sum(height for _, height in trace_cards) + max(len(trace_cards) - 1, 0) * 14.0
+    height = trace_y + trace_total_height + 48.0
+    evaluated_available = analysis.trial_available if analysis.trial_available is not None else analysis.available
+    available_label = "Trial available" if analysis.trial_available is not None else "Current available"
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-labelledby="{diagram_id}-title {diagram_id}-desc">',
+        f'  <title id="{diagram_id}-title">Banker\'s algorithm request visualization for {html.escape(source_label)}</title>',
+        f'  <desc id="{diagram_id}-desc">A static summary of the evaluated Banker\'s algorithm request, including the trial decision and per-step work evolution.</desc>',
+        '  <style>',
+        '    .bg { fill: #f8fafc; }',
+        '    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }',
+        '    .metric-card { fill: #ecfeff; stroke: #a5f3fc; stroke-width: 1.2; }',
+        '    .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; }',
+        '    .accent-panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; }',
+        '    .trace-card { fill: #fefce8; stroke: #fde68a; stroke-width: 1.2; }',
+        '    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }',
+        '    .section-title { fill: #0f172a; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; }',
+        '    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }',
+        '    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }',
+        '    .metric-value { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }',
+        '  </style>',
+        f'  <rect class="bg" x="0" y="0" width="{width:.0f}" height="{height:.0f}" rx="24" />',
+        f'  <rect class="card" x="{outer_x:.0f}" y="{outer_y:.0f}" width="{width - 48:.0f}" height="{height - 48:.0f}" rx="20" />',
+        _svg_text(52, 58, "Banker's algorithm request trial", "label", anchor="start"),
+        _svg_text(52, 82, f"Source: {source_label}", "muted", anchor="start"),
+        _svg_text(width - 52, 58, "granted" if analysis.granted else "denied", "muted", anchor="end"),
+        _svg_metric_card(outer_x + 18, summary_y, metric_width, metric_height, "Decision", "granted" if analysis.granted else "denied"),
+        _svg_metric_card(
+            outer_x + 18 + (metric_width + metric_gap),
+            summary_y,
+            metric_width,
+            metric_height,
+            "Safe after trial",
+            "yes" if analysis.safe else "no",
+        ),
+        _svg_metric_card(
+            outer_x + 18 + (metric_width + metric_gap) * 2,
+            summary_y,
+            metric_width,
+            metric_height,
+            "Safe sequence",
+            _format_process_list(analysis.safe_sequence),
+        ),
+        _svg_metric_card(
+            outer_x + 18 + (metric_width + metric_gap) * 3,
+            summary_y,
+            metric_width,
+            metric_height,
+            available_label,
+            _format_resource_vector(evaluated_available) or "none",
+        ),
+        _svg_panel(outer_x + 18, detail_y, 360.0, detail_height, "Request", request_lines, tone_class="panel"),
+        _svg_panel(
+            outer_x + 392,
+            detail_y,
+            width - outer_x - 392 - 42,
+            detail_height,
+            "Decision takeaway",
+            right_panel_body_lines,
+            tone_class="accent-panel",
+        ),
+        _svg_text(outer_x + 18, trace_y - 10, "Trial safety trace", "section-title", anchor="start"),
+    ]
+
+    current_y = trace_y
+    for step, card_height in trace_cards:
+        x = outer_x + 18
+        if step is None:
+            parts.append(
+                _svg_panel(
+                    x,
+                    current_y,
+                    trace_card_width,
+                    card_height,
+                    "No runnable step",
+                    ["No process can finish after applying the trial request."],
+                    tone_class="trace-card",
+                )
+            )
+        else:
+            max_chars = max(28, min(72, int((trace_card_width - 28) / 6.7)))
+            body_lines: list[str] = []
+            for line in _trace_step_card_lines(step):
+                body_lines.extend(_wrap_svg_lines(line, max_chars))
+            parts.append(
+                _svg_panel(
+                    x,
+                    current_y,
+                    trace_card_width,
+                    card_height,
+                    f"Step {step.step}: run {step.process}",
+                    body_lines,
+                    tone_class="trace-card",
+                )
+            )
+        current_y += card_height + 14.0
+
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def render_banker_request_html(analysis: BankerRequestAnalysis, source_label: str) -> str:
+    svg = render_banker_request_svg(analysis, source_label).strip()
+    evaluated_available = analysis.trial_available if analysis.trial_available is not None else analysis.available
+    available_label = "Trial available vector" if analysis.trial_available is not None else "Current available vector"
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>Banker's algorithm request trial</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1240px; margin: 0 auto; padding: 32px 24px 56px; }}
+    .card {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }}
+    .metric {{ background: #ecfeff; border-radius: 14px; padding: 14px; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }}
+    th, td {{ border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }}
+    th {{ font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }}
+    code {{ font-family: \"SFMono-Regular\", Consolas, monospace; font-size: 0.95em; }}
+    .table-wrap {{ overflow-x: auto; }}
+    svg {{ width: 100%; height: auto; display: block; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"card\">
+      <h1>Banker's algorithm request trial</h1>
+      <p>This artifact answers whether one concrete request should be granted while keeping the system safe.</p>
+      <div class=\"grid\">
+        <div class=\"metric\"><strong>Source</strong><br /><code>{html.escape(source_label)}</code></div>
+        <div class=\"metric\"><strong>Process</strong><br /><code>{html.escape(analysis.process)}</code></div>
+        <div class=\"metric\"><strong>Request</strong><br /><code>{html.escape(_format_resource_vector(analysis.request))}</code></div>
+        <div class=\"metric\"><strong>Decision</strong><br />{'granted' if analysis.granted else 'denied'}</div>
+      </div>
+    </section>
+
+    <section class=\"card\">{svg}</section>
+
+    <section class=\"card\">
+      <h2>Trial details</h2>
+      <p><strong>Reason:</strong> {html.escape(analysis.reason)}</p>
+      <p><strong>Safe sequence:</strong> <code>{html.escape(_format_process_list(analysis.safe_sequence))}</code></p>
+      <p><strong>{available_label}:</strong> <code>{html.escape(_format_resource_vector(evaluated_available) or 'none')}</code></p>
+      <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(analysis.blocking))}</code></p>
+      <div class=\"table-wrap\">{_render_trace_steps_html_table(analysis.trace_steps)}</div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 def render_wait_graph_svg(analysis: WaitForAnalysis, source_label: str, edges: list[tuple[str, str]]) -> str:
     diagram_id = _svg_id(f"wait-{source_label}")
     node_count = max(len(analysis.processes), 1)
@@ -1226,6 +1702,7 @@ def render_detection_avoidance_html(
         allocation_map,
         request_map,
     ).strip()
+    banker_svg = render_banker_safety_svg(dashboard.banker_safety, banker_source).strip()
     takeaway_items = "\n".join(f"<li>{html.escape(takeaway)}</li>" for takeaway in dashboard.key_takeaways)
     request_metric = (
         f"<div class=\"metric\"><strong>Sample request</strong><br />{'granted' if dashboard.banker_request.granted else 'denied'}</div>"
@@ -1235,6 +1712,7 @@ def render_detection_avoidance_html(
     banker_request_section = ""
     if dashboard.banker_request is not None:
         request = dashboard.banker_request
+        banker_request_svg = render_banker_request_svg(request, banker_request_source or "banker-request")
         banker_request_section = f"""
       <section class="card">
         <h2>Banker's request trial</h2>
@@ -1250,6 +1728,7 @@ def render_detection_avoidance_html(
         <p><strong>Safe sequence:</strong> <code>{html.escape(_format_process_list(request.safe_sequence))}</code></p>
         <p><strong>Evaluated available vector:</strong> <code>{html.escape(_format_resource_vector(request.trial_available if request.trial_available is not None else request.available))}</code></p>
         <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(request.blocking))}</code></p>
+        {banker_request_svg}
         <div class="table-wrap">{_render_trace_steps_html_table(request.trace_steps)}</div>
       </section>
 """
@@ -1326,6 +1805,7 @@ def render_detection_avoidance_html(
         <p><strong>Safe sequence:</strong> <code>{html.escape(_format_process_list(dashboard.banker_safety.safe_sequence))}</code></p>
         <p><strong>Final work:</strong> <code>{html.escape(_format_resource_vector(dashboard.banker_safety.work))}</code></p>
         <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(dashboard.banker_safety.blocking))}</code></p>
+        {banker_svg}
         <div class="table-wrap">{_render_trace_steps_html_table(dashboard.banker_safety.trace_steps)}</div>
       </section>
 {banker_request_section}
@@ -1381,6 +1861,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--markdown-out",
         help="optional path for a step-by-step Banker's safety trace markdown export",
     )
+    banker_parser.add_argument(
+        "--svg-out",
+        help="optional path for a static Banker's safety SVG export",
+    )
+    banker_parser.add_argument(
+        "--html-out",
+        help="optional path for a static Banker's safety HTML export",
+    )
 
     banker_request_parser = subparsers.add_parser(
         "request-banker",
@@ -1393,6 +1881,14 @@ def build_parser() -> argparse.ArgumentParser:
     banker_request_parser.add_argument(
         "--markdown-out",
         help="optional path for a Banker's request evaluation markdown trace export",
+    )
+    banker_request_parser.add_argument(
+        "--svg-out",
+        help="optional path for a static Banker's request SVG export",
+    )
+    banker_request_parser.add_argument(
+        "--html-out",
+        help="optional path for a static Banker's request HTML export",
     )
 
     dashboard_parser = subparsers.add_parser(
@@ -1466,12 +1962,20 @@ def main(argv: list[str] | None = None) -> int:
             result = analysis.to_dict()
             if getattr(args, "markdown_out", None):
                 markdown = render_banker_safety_markdown(analysis, args.input)
+            if getattr(args, "svg_out", None):
+                svg = render_banker_safety_svg(analysis, args.input)
+            if getattr(args, "html_out", None):
+                html_report = render_banker_safety_html(analysis, args.input)
         elif args.command == "request-banker":
             payload = load_json(Path(args.input))
             analysis = analyze_banker_request(payload)
             result = analysis.to_dict()
             if getattr(args, "markdown_out", None):
                 markdown = render_banker_request_markdown(analysis, args.input)
+            if getattr(args, "svg_out", None):
+                svg = render_banker_request_svg(analysis, args.input)
+            if getattr(args, "html_out", None):
+                html_report = render_banker_request_html(analysis, args.input)
         elif args.command == "dashboard":
             wait_payload = load_json(Path(args.wait_input))
             allocation_payload = load_json(Path(args.allocation_input))

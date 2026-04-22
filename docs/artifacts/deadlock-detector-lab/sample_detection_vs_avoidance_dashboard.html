@@ -179,6 +179,90 @@
         <p><strong>Safe sequence:</strong> <code>P1, P3, P4, P0, P2</code></p>
         <p><strong>Final work:</strong> <code>A=10, B=5, C=7</code></p>
         <p><strong>Blocking summary:</strong> <code>none</code></p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1281" role="img" aria-labelledby="banker-safety-projects-deadlock-detector-lab-sample-banker-state-json-title banker-safety-projects-deadlock-detector-lab-sample-banker-state-json-desc">
+  <title id="banker-safety-projects-deadlock-detector-lab-sample-banker-state-json-title">Banker's algorithm safety visualization for projects/deadlock-detector-lab/sample_banker_state.json</title>
+  <desc id="banker-safety-projects-deadlock-detector-lab-sample-banker-state-json-desc">A static summary of the Banker's algorithm safety state, including the safe sequence and per-step work evolution.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .metric-card { fill: #eff6ff; stroke: #bfdbfe; stroke-width: 1.2; }
+    .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; }
+    .accent-panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; }
+    .trace-card { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.2; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }
+    .section-title { fill: #0f172a; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+    .metric-value { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1120" height="1281" rx="24" />
+  <rect class="card" x="24" y="24" width="1072" height="1233" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Banker&#x27;s algorithm safety view</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_banker_state.json</text>
+<text x="1068.0" y="58.0" text-anchor="end" class="muted">safe state</text>
+<rect class="metric-card" x="42.0" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="56.0" y="140.0" text-anchor="start" class="section-title">State</text>
+<text x="56.0" y="164.0" text-anchor="start" class="metric-value">safe</text>
+<rect class="metric-card" x="313.5" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="327.5" y="140.0" text-anchor="start" class="section-title">Safe sequence</text>
+<text x="327.5" y="164.0" text-anchor="start" class="metric-value">P1, P3, P4, P0, P2</text>
+<rect class="metric-card" x="585.0" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="599.0" y="140.0" text-anchor="start" class="section-title">Final work</text>
+<text x="599.0" y="164.0" text-anchor="start" class="metric-value">A=10, B=5, C=7</text>
+<rect class="metric-card" x="856.5" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="870.5" y="140.0" text-anchor="start" class="section-title">Unfinished</text>
+<text x="870.5" y="164.0" text-anchor="start" class="metric-value">none</text>
+<rect class="panel" x="42.0" y="224.0" width="360.0" height="168.0" rx="18" />
+<text x="56.0" y="252.0" text-anchor="start" class="section-title">Need matrix</text>
+<text x="56.0" y="274.0" text-anchor="start" class="tiny">P0: A=7, B=4, C=3</text>
+<text x="56.0" y="291.0" text-anchor="start" class="tiny">P1: A=1, B=2, C=2</text>
+<text x="56.0" y="308.0" text-anchor="start" class="tiny">P2: A=6, B=0, C=0</text>
+<text x="56.0" y="325.0" text-anchor="start" class="tiny">P3: A=0, B=1, C=1</text>
+<text x="56.0" y="342.0" text-anchor="start" class="tiny">P4: A=4, B=3, C=1</text>
+<rect class="accent-panel" x="416.0" y="224.0" width="662.0" height="168.0" rx="18" />
+<text x="430.0" y="252.0" text-anchor="start" class="section-title">Safety takeaway</text>
+<text x="430.0" y="274.0" text-anchor="start" class="tiny">Question answered: is the current state</text>
+<text x="430.0" y="291.0" text-anchor="start" class="tiny">safe before any new request is granted?</text>
+<text x="430.0" y="325.0" text-anchor="start" class="tiny">Blocking summary:</text>
+<text x="430.0" y="342.0" text-anchor="start" class="tiny">No blocking shortages remain in the current</text>
+<text x="430.0" y="359.0" text-anchor="start" class="tiny">state.</text>
+<text x="42.0" y="402.0" text-anchor="start" class="section-title">Trace steps</text>
+<rect class="trace-card" x="42.0" y="412.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="440.0" text-anchor="start" class="section-title">Step 1: run P1</text>
+<text x="56.0" y="462.0" text-anchor="start" class="tiny">Runnable: P1, P3</text>
+<text x="56.0" y="479.0" text-anchor="start" class="tiny">Work before: A=3, B=3, C=2</text>
+<text x="56.0" y="496.0" text-anchor="start" class="tiny">Need: A=1, B=2, C=2</text>
+<text x="56.0" y="513.0" text-anchor="start" class="tiny">Release: A=2, B=0, C=0</text>
+<text x="56.0" y="530.0" text-anchor="start" class="tiny">Work after: A=5, B=3, C=2</text>
+<rect class="trace-card" x="42.0" y="579.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="607.0" text-anchor="start" class="section-title">Step 2: run P3</text>
+<text x="56.0" y="629.0" text-anchor="start" class="tiny">Runnable: P3, P4</text>
+<text x="56.0" y="646.0" text-anchor="start" class="tiny">Work before: A=5, B=3, C=2</text>
+<text x="56.0" y="663.0" text-anchor="start" class="tiny">Need: A=0, B=1, C=1</text>
+<text x="56.0" y="680.0" text-anchor="start" class="tiny">Release: A=2, B=1, C=1</text>
+<text x="56.0" y="697.0" text-anchor="start" class="tiny">Work after: A=7, B=4, C=3</text>
+<rect class="trace-card" x="42.0" y="746.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="774.0" text-anchor="start" class="section-title">Step 3: run P4</text>
+<text x="56.0" y="796.0" text-anchor="start" class="tiny">Runnable: P0, P2, P4</text>
+<text x="56.0" y="813.0" text-anchor="start" class="tiny">Work before: A=7, B=4, C=3</text>
+<text x="56.0" y="830.0" text-anchor="start" class="tiny">Need: A=4, B=3, C=1</text>
+<text x="56.0" y="847.0" text-anchor="start" class="tiny">Release: A=0, B=0, C=2</text>
+<text x="56.0" y="864.0" text-anchor="start" class="tiny">Work after: A=7, B=4, C=5</text>
+<rect class="trace-card" x="42.0" y="913.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="941.0" text-anchor="start" class="section-title">Step 4: run P0</text>
+<text x="56.0" y="963.0" text-anchor="start" class="tiny">Runnable: P0, P2</text>
+<text x="56.0" y="980.0" text-anchor="start" class="tiny">Work before: A=7, B=4, C=5</text>
+<text x="56.0" y="997.0" text-anchor="start" class="tiny">Need: A=7, B=4, C=3</text>
+<text x="56.0" y="1014.0" text-anchor="start" class="tiny">Release: A=0, B=1, C=0</text>
+<text x="56.0" y="1031.0" text-anchor="start" class="tiny">Work after: A=7, B=5, C=5</text>
+<rect class="trace-card" x="42.0" y="1080.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="1108.0" text-anchor="start" class="section-title">Step 5: run P2</text>
+<text x="56.0" y="1130.0" text-anchor="start" class="tiny">Runnable: P2</text>
+<text x="56.0" y="1147.0" text-anchor="start" class="tiny">Work before: A=7, B=5, C=5</text>
+<text x="56.0" y="1164.0" text-anchor="start" class="tiny">Need: A=6, B=0, C=0</text>
+<text x="56.0" y="1181.0" text-anchor="start" class="tiny">Release: A=3, B=0, C=2</text>
+<text x="56.0" y="1198.0" text-anchor="start" class="tiny">Work after: A=10, B=5, C=7</text>
+</svg>
         <div class="table-wrap"><table><thead><tr><th>Step</th><th>Chosen process</th><th>Runnable set</th><th>Work before</th><th>Remaining need</th><th>Allocation released</th><th>Work after</th></tr></thead><tbody><tr><td>1</td><td><code>P1</code></td><td><code>P1, P3</code></td><td><code>A=3, B=3, C=2</code></td><td><code>A=1, B=2, C=2</code></td><td><code>A=2, B=0, C=0</code></td><td><code>A=5, B=3, C=2</code></td></tr>
 <tr><td>2</td><td><code>P3</code></td><td><code>P3, P4</code></td><td><code>A=5, B=3, C=2</code></td><td><code>A=0, B=1, C=1</code></td><td><code>A=2, B=1, C=1</code></td><td><code>A=7, B=4, C=3</code></td></tr>
 <tr><td>3</td><td><code>P4</code></td><td><code>P0, P2, P4</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=4, B=3, C=1</code></td><td><code>A=0, B=0, C=2</code></td><td><code>A=7, B=4, C=5</code></td></tr>
@@ -200,6 +284,88 @@
         <p><strong>Safe sequence:</strong> <code>P1, P3, P4, P0, P2</code></p>
         <p><strong>Evaluated available vector:</strong> <code>A=2, B=3, C=0</code></p>
         <p><strong>Blocking summary:</strong> <code>none</code></p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1332" role="img" aria-labelledby="banker-request-projects-deadlock-detector-lab-sample-banker-request-json-title banker-request-projects-deadlock-detector-lab-sample-banker-request-json-desc">
+  <title id="banker-request-projects-deadlock-detector-lab-sample-banker-request-json-title">Banker's algorithm request visualization for projects/deadlock-detector-lab/sample_banker_request.json</title>
+  <desc id="banker-request-projects-deadlock-detector-lab-sample-banker-request-json-desc">A static summary of the evaluated Banker's algorithm request, including the trial decision and per-step work evolution.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .metric-card { fill: #ecfeff; stroke: #a5f3fc; stroke-width: 1.2; }
+    .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; }
+    .accent-panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; }
+    .trace-card { fill: #fefce8; stroke: #fde68a; stroke-width: 1.2; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }
+    .section-title { fill: #0f172a; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+    .metric-value { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1120" height="1332" rx="24" />
+  <rect class="card" x="24" y="24" width="1072" height="1284" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Banker&#x27;s algorithm request trial</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_banker_request.json</text>
+<text x="1068.0" y="58.0" text-anchor="end" class="muted">granted</text>
+<rect class="metric-card" x="42.0" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="56.0" y="140.0" text-anchor="start" class="section-title">Decision</text>
+<text x="56.0" y="164.0" text-anchor="start" class="metric-value">granted</text>
+<rect class="metric-card" x="313.5" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="327.5" y="140.0" text-anchor="start" class="section-title">Safe after trial</text>
+<text x="327.5" y="164.0" text-anchor="start" class="metric-value">yes</text>
+<rect class="metric-card" x="585.0" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="599.0" y="140.0" text-anchor="start" class="section-title">Safe sequence</text>
+<text x="599.0" y="164.0" text-anchor="start" class="metric-value">P1, P3, P4, P0, P2</text>
+<rect class="metric-card" x="856.5" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="870.5" y="140.0" text-anchor="start" class="section-title">Trial available</text>
+<text x="870.5" y="164.0" text-anchor="start" class="metric-value">A=2, B=3, C=0</text>
+<rect class="panel" x="42.0" y="224.0" width="360.0" height="219.0" rx="18" />
+<text x="56.0" y="252.0" text-anchor="start" class="section-title">Request</text>
+<text x="56.0" y="274.0" text-anchor="start" class="tiny">Process P1: A=1, B=0, C=2</text>
+<rect class="accent-panel" x="416.0" y="224.0" width="662.0" height="219.0" rx="18" />
+<text x="430.0" y="252.0" text-anchor="start" class="section-title">Decision takeaway</text>
+<text x="430.0" y="274.0" text-anchor="start" class="tiny">Question answered: can this request be granted</text>
+<text x="430.0" y="291.0" text-anchor="start" class="tiny">while keeping the system safe?</text>
+<text x="430.0" y="325.0" text-anchor="start" class="tiny">Reason:</text>
+<text x="430.0" y="342.0" text-anchor="start" class="tiny">request can be granted safely</text>
+<text x="430.0" y="376.0" text-anchor="start" class="tiny">Blocking summary:</text>
+<text x="430.0" y="393.0" text-anchor="start" class="tiny">No blocking shortages remain after the evaluated</text>
+<text x="430.0" y="410.0" text-anchor="start" class="tiny">trial.</text>
+<text x="42.0" y="453.0" text-anchor="start" class="section-title">Trial safety trace</text>
+<rect class="trace-card" x="42.0" y="463.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="491.0" text-anchor="start" class="section-title">Step 1: run P1</text>
+<text x="56.0" y="513.0" text-anchor="start" class="tiny">Runnable: P1</text>
+<text x="56.0" y="530.0" text-anchor="start" class="tiny">Work before: A=2, B=3, C=0</text>
+<text x="56.0" y="547.0" text-anchor="start" class="tiny">Need: A=0, B=2, C=0</text>
+<text x="56.0" y="564.0" text-anchor="start" class="tiny">Release: A=3, B=0, C=2</text>
+<text x="56.0" y="581.0" text-anchor="start" class="tiny">Work after: A=5, B=3, C=2</text>
+<rect class="trace-card" x="42.0" y="630.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="658.0" text-anchor="start" class="section-title">Step 2: run P3</text>
+<text x="56.0" y="680.0" text-anchor="start" class="tiny">Runnable: P3, P4</text>
+<text x="56.0" y="697.0" text-anchor="start" class="tiny">Work before: A=5, B=3, C=2</text>
+<text x="56.0" y="714.0" text-anchor="start" class="tiny">Need: A=0, B=1, C=1</text>
+<text x="56.0" y="731.0" text-anchor="start" class="tiny">Release: A=2, B=1, C=1</text>
+<text x="56.0" y="748.0" text-anchor="start" class="tiny">Work after: A=7, B=4, C=3</text>
+<rect class="trace-card" x="42.0" y="797.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="825.0" text-anchor="start" class="section-title">Step 3: run P4</text>
+<text x="56.0" y="847.0" text-anchor="start" class="tiny">Runnable: P0, P2, P4</text>
+<text x="56.0" y="864.0" text-anchor="start" class="tiny">Work before: A=7, B=4, C=3</text>
+<text x="56.0" y="881.0" text-anchor="start" class="tiny">Need: A=4, B=3, C=1</text>
+<text x="56.0" y="898.0" text-anchor="start" class="tiny">Release: A=0, B=0, C=2</text>
+<text x="56.0" y="915.0" text-anchor="start" class="tiny">Work after: A=7, B=4, C=5</text>
+<rect class="trace-card" x="42.0" y="964.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="992.0" text-anchor="start" class="section-title">Step 4: run P0</text>
+<text x="56.0" y="1014.0" text-anchor="start" class="tiny">Runnable: P0, P2</text>
+<text x="56.0" y="1031.0" text-anchor="start" class="tiny">Work before: A=7, B=4, C=5</text>
+<text x="56.0" y="1048.0" text-anchor="start" class="tiny">Need: A=7, B=4, C=3</text>
+<text x="56.0" y="1065.0" text-anchor="start" class="tiny">Release: A=0, B=1, C=0</text>
+<text x="56.0" y="1082.0" text-anchor="start" class="tiny">Work after: A=7, B=5, C=5</text>
+<rect class="trace-card" x="42.0" y="1131.0" width="1072.0" height="153.0" rx="18" />
+<text x="56.0" y="1159.0" text-anchor="start" class="section-title">Step 5: run P2</text>
+<text x="56.0" y="1181.0" text-anchor="start" class="tiny">Runnable: P2</text>
+<text x="56.0" y="1198.0" text-anchor="start" class="tiny">Work before: A=7, B=5, C=5</text>
+<text x="56.0" y="1215.0" text-anchor="start" class="tiny">Need: A=6, B=0, C=0</text>
+<text x="56.0" y="1232.0" text-anchor="start" class="tiny">Release: A=3, B=0, C=2</text>
+<text x="56.0" y="1249.0" text-anchor="start" class="tiny">Work after: A=10, B=5, C=7</text>
+</svg>
         <div class="table-wrap"><table><thead><tr><th>Step</th><th>Chosen process</th><th>Runnable set</th><th>Work before</th><th>Remaining need</th><th>Allocation released</th><th>Work after</th></tr></thead><tbody><tr><td>1</td><td><code>P1</code></td><td><code>P1</code></td><td><code>A=2, B=3, C=0</code></td><td><code>A=0, B=2, C=0</code></td><td><code>A=3, B=0, C=2</code></td><td><code>A=5, B=3, C=2</code></td></tr>
 <tr><td>2</td><td><code>P3</code></td><td><code>P3, P4</code></td><td><code>A=5, B=3, C=2</code></td><td><code>A=0, B=1, C=1</code></td><td><code>A=2, B=1, C=1</code></td><td><code>A=7, B=4, C=3</code></td></tr>
 <tr><td>3</td><td><code>P4</code></td><td><code>P0, P2, P4</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=4, B=3, C=1</code></td><td><code>A=0, B=0, C=2</code></td><td><code>A=7, B=4, C=5</code></td></tr>
