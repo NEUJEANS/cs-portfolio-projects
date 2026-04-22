@@ -10,6 +10,10 @@
 - sample_banker_request.json: P1 requesting A=1, B=0, C=2 stays safe with sequence P1, P3, P4, P0, P2.
 - sample_banker_request_unsafe.json: P0 requesting A=0, B=0, C=2 is denied because request would move the system into an unsafe state; the trial leaves no runnable process and blocking is P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1.
 
+## Delta callouts
+
+- sample_banker_request.json keeps the path grantable after spending shared slack C=2; plus granted-only slack A=1; and still leaves first runnable set P1; whereas sample_banker_request_unsafe.json leaves first runnable set none; so runnable option P1 disappears; and blocking becomes P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1.
+
 ## Request comparison
 
 | Source | Process | Request | Decision | First runnable set | Safe sequence | Evaluated available | Blocking |

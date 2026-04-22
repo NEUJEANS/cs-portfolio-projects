@@ -154,12 +154,14 @@ class BankerRequestGallery:
     request_reports: list[BankerRequestReport]
     decision_totals: dict[str, int]
     highlights: list[str]
+    delta_callouts: list[dict[str, object]]
 
     def to_dict(self) -> dict[str, object]:
         return {
             "model": "banker-request-gallery",
             "decision_totals": self.decision_totals,
             "highlights": self.highlights,
+            "delta_callouts": self.delta_callouts,
             "request_reports": [report.to_dict() for report in self.request_reports],
         }
 
@@ -627,11 +629,155 @@ def build_banker_request_gallery(request_reports: list[BankerRequestReport]) -> 
                 f"{label}: {analysis.process} requesting {request_text} is denied because {analysis.reason}; the trial leaves no runnable process and blocking is {_format_blocking_summary(analysis.blocking)}."
             )
 
+    delta_callouts = _build_banker_request_delta_callouts(request_reports)
+
     return BankerRequestGallery(
         request_reports=request_reports,
         decision_totals={"granted": granted, "denied": denied},
         highlights=highlights,
+        delta_callouts=delta_callouts,
     )
+
+
+def _build_banker_request_delta_callouts(request_reports: list[BankerRequestReport]) -> list[dict[str, object]]:
+    granted_reports = [report for report in request_reports if report.analysis.granted]
+    denied_reports = [report for report in request_reports if not report.analysis.granted]
+    if not granted_reports or not denied_reports:
+        return []
+
+    callouts: list[dict[str, object]] = []
+    for denied_report in denied_reports:
+        granted_report = _select_reference_granted_report(denied_report, granted_reports)
+        granted_analysis = granted_report.analysis
+        denied_analysis = denied_report.analysis
+        granted_label = Path(granted_report.source).name
+        denied_label = Path(denied_report.source).name
+        granted_available = _evaluated_available(granted_analysis)
+        denied_available = _evaluated_available(denied_analysis)
+        granted_consumed = _consumed_slack(_starting_available(granted_analysis), granted_available)
+        denied_consumed = _consumed_slack(_starting_available(denied_analysis), denied_available)
+        shared_consumed, granted_only_consumed, denied_only_consumed = _split_shared_resource_deltas(
+            granted_consumed,
+            denied_consumed,
+        )
+        granted_first_runnable = _first_runnable_processes(granted_analysis)
+        denied_first_runnable = _first_runnable_processes(denied_analysis)
+        lost_runnable_options = sorted(set(granted_first_runnable) - set(denied_first_runnable))
+
+        shared_text = _format_resource_vector(shared_consumed) or "none"
+        granted_only_text = _format_resource_vector(granted_only_consumed) or "none"
+        denied_only_text = _format_resource_vector(denied_only_consumed) or "none"
+        lost_runnable_text = _format_process_list(lost_runnable_options)
+        summary_parts = [
+            f"{granted_label} keeps the path grantable after spending shared slack {shared_text}",
+        ]
+        if granted_only_consumed:
+            summary_parts.append(f"plus granted-only slack {granted_only_text}")
+        summary_parts.append(
+            f"and still leaves first runnable set {_format_process_list(granted_first_runnable)}"
+        )
+        summary_parts.append(
+            f"whereas {denied_label} leaves first runnable set {_format_process_list(denied_first_runnable)}"
+        )
+        if denied_only_consumed:
+            summary_parts.append(f"after denied-only slack {denied_only_text} disappears")
+        if lost_runnable_options:
+            summary_parts.append(
+                f"so runnable option{'s' if len(lost_runnable_options) != 1 else ''} {lost_runnable_text} disappear{'s' if len(lost_runnable_options) == 1 else ''}"
+            )
+        summary_parts.append(f"and blocking becomes {_format_blocking_summary(denied_analysis.blocking)}")
+
+        callouts.append(
+            {
+                "granted_source": granted_report.source,
+                "denied_source": denied_report.source,
+                "shared_slack_spent": shared_consumed,
+                "granted_only_slack_spent": granted_only_consumed,
+                "denied_only_slack_spent": denied_only_consumed,
+                "granted_first_runnable": granted_first_runnable,
+                "denied_first_runnable": denied_first_runnable,
+                "lost_runnable_options": lost_runnable_options,
+                "denied_blocking": denied_analysis.blocking,
+                "summary": "; ".join(summary_parts) + ".",
+            }
+        )
+    return callouts
+
+
+def _select_reference_granted_report(
+    denied_report: BankerRequestReport,
+    granted_reports: list[BankerRequestReport],
+) -> BankerRequestReport:
+    denied_analysis = denied_report.analysis
+    denied_available = _starting_available(denied_analysis)
+
+    def score(report: BankerRequestReport) -> tuple[int, int, int]:
+        granted_analysis = report.analysis
+        granted_available = _starting_available(granted_analysis)
+        shared_resources = len(
+            set(granted_available).intersection(denied_available)
+        )
+        shared_processes = len(
+            set(granted_analysis.allocation).intersection(denied_analysis.allocation)
+        )
+        distance = sum(
+            abs(granted_available.get(resource, 0) - denied_available.get(resource, 0))
+            for resource in stable_unique(list(granted_available) + list(denied_available))
+        )
+        return (shared_resources, shared_processes, -distance)
+
+    return max(granted_reports, key=score)
+
+
+def _evaluated_available(analysis: BankerRequestAnalysis) -> dict[str, int]:
+    return analysis.trial_available if analysis.trial_available is not None else analysis.available
+
+
+def _starting_available(analysis: BankerRequestAnalysis) -> dict[str, int]:
+    if not analysis.granted:
+        return analysis.available
+    return {
+        resource: int(analysis.available.get(resource, 0)) + int(analysis.request.get(resource, 0))
+        for resource in stable_unique(list(analysis.available) + list(analysis.request))
+    }
+
+
+def _consumed_slack(
+    before: dict[str, int],
+    after: dict[str, int],
+) -> dict[str, int]:
+    consumed: dict[str, int] = {}
+    for resource in stable_unique(list(before) + list(after)):
+        delta = before.get(resource, 0) - after.get(resource, 0)
+        if delta > 0:
+            consumed[resource] = delta
+    return consumed
+
+
+def _split_shared_resource_deltas(
+    granted_consumed: dict[str, int],
+    denied_consumed: dict[str, int],
+) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+    shared: dict[str, int] = {}
+    granted_only: dict[str, int] = {}
+    denied_only: dict[str, int] = {}
+    for resource in stable_unique(list(granted_consumed) + list(denied_consumed)):
+        granted_value = granted_consumed.get(resource, 0)
+        denied_value = denied_consumed.get(resource, 0)
+        common = min(granted_value, denied_value)
+        if common > 0:
+            shared[resource] = common
+        if granted_value > common:
+            granted_only[resource] = granted_value - common
+        if denied_value > common:
+            denied_only[resource] = denied_value - common
+    return shared, granted_only, denied_only
+
+
+def _first_runnable_processes(analysis: BankerRequestAnalysis) -> list[str]:
+    if not analysis.trace_steps:
+        return []
+    return analysis.trace_steps[0].runnable_processes
 
 
 def build_detection_avoidance_dashboard(
@@ -1215,6 +1361,9 @@ def render_banker_request_gallery_markdown(gallery: BankerRequestGallery) -> str
         "",
     ]
     lines.extend(f"- {highlight}" for highlight in gallery.highlights)
+    if gallery.delta_callouts:
+        lines.extend(["", "## Delta callouts", ""])
+        lines.extend(f"- {callout['summary']}" for callout in gallery.delta_callouts)
     lines.extend(
         [
             "",
@@ -1271,6 +1420,19 @@ def render_banker_request_gallery_html(gallery: BankerRequestGallery) -> str:
         for report in gallery.request_reports
     )
     highlight_items = "\n".join(f"<li>{html.escape(highlight)}</li>" for highlight in gallery.highlights)
+    delta_items = "\n".join(
+        f"<li>{html.escape(str(callout['summary']))}</li>" for callout in gallery.delta_callouts
+    )
+    delta_section = (
+        f"""<section class=\"card\">
+      <h2>Delta callouts</h2>
+      <p>This section focuses on what immediate slack and runnable options disappear when a safe request turns into an unsafe one.</p>
+      <ul>{delta_items}</ul>
+    </section>
+""".rstrip()
+        if gallery.delta_callouts
+        else ""
+    )
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
 <head>
@@ -1305,7 +1467,7 @@ def render_banker_request_gallery_html(gallery: BankerRequestGallery) -> str:
       </div>
       <h2>Highlights</h2>
       <ul>{highlight_items}</ul>
-    </section>
+    </section>{f'\n\n    {delta_section}' if delta_section else ''}
 
     <section class=\"card\">
       <h2>Comparison table</h2>

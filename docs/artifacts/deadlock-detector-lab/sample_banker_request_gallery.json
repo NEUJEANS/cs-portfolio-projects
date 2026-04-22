@@ -3,6 +3,47 @@
     "denied": 1,
     "granted": 1
   },
+  "delta_callouts": [
+    {
+      "denied_blocking": {
+        "P0": {
+          "A": 4,
+          "B": 1,
+          "C": 1
+        },
+        "P1": {
+          "C": 2
+        },
+        "P2": {
+          "A": 3
+        },
+        "P3": {
+          "C": 1
+        },
+        "P4": {
+          "A": 1,
+          "C": 1
+        }
+      },
+      "denied_first_runnable": [],
+      "denied_only_slack_spent": {},
+      "denied_source": "projects/deadlock-detector-lab/sample_banker_request_unsafe.json",
+      "granted_first_runnable": [
+        "P1"
+      ],
+      "granted_only_slack_spent": {
+        "A": 1
+      },
+      "granted_source": "projects/deadlock-detector-lab/sample_banker_request.json",
+      "lost_runnable_options": [
+        "P1"
+      ],
+      "shared_slack_spent": {
+        "C": 2
+      },
+      "summary": "sample_banker_request.json keeps the path grantable after spending shared slack C=2; plus granted-only slack A=1; and still leaves first runnable set P1; whereas sample_banker_request_unsafe.json leaves first runnable set none; so runnable option P1 disappears; and blocking becomes P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1."
+    }
+  ],
   "highlights": [
     "This gallery contrasts 1 granted request with 1 denied request.",
     "sample_banker_request.json: P1 requesting A=1, B=0, C=2 stays safe with sequence P1, P3, P4, P0, P2.",

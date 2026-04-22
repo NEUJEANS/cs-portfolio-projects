@@ -100,3 +100,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-22 Banker request delta-callout slice
+- [x] inspect the latest deadlock-detector wrap-up and confirm the next weak spot is missing delta-focused granted-vs-denied callouts
+- [x] skip external web research because this slice extends the existing Banker's gallery output directly
+- [x] refresh the request-trial slack and runnable-set story with a quick self-test
+- [x] add resumable checklist coverage for this slice
+- [x] implement delta-focused callouts in the Banker request gallery JSON, Markdown, and HTML outputs
+- [x] regenerate deterministic sample gallery artifacts under `docs/artifacts/deadlock-detector-lab/`
+- [x] refresh README usage notes and future follow-up guidance
+- [x] extend automated tests for the new delta callout outputs
+- [x] run project tests and gallery artifact-generation smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

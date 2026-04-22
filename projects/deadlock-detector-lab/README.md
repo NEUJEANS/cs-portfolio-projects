@@ -19,6 +19,7 @@ A compact operating-systems portfolio project that detects deadlocks from either
 - emit step-by-step Banker's trace steps with runnable sets, `work` vectors, and released allocations
 - export Banker's safety and request demos as Markdown, SVG, and HTML artifacts
 - evaluate whether a proposed resource request should be granted or denied safely
+- compare granted and denied request trials with delta-focused callouts for lost slack and runnable options
 - validate malformed inputs with clear errors
 
 ## Usage
@@ -103,7 +104,7 @@ python3 projects/deadlock-detector-lab/deadlock_detector.py request-banker \
   --html-out docs/artifacts/deadlock-detector-lab/sample_banker_request_trace.html
 ```
 
-Compare safe and unsafe Banker's request trials side by side:
+Compare safe and unsafe Banker's request trials side by side, including delta-focused callouts:
 
 ```bash
 python3 projects/deadlock-detector-lab/deadlock_detector.py compare-banker-requests \
@@ -161,4 +162,4 @@ python3 -m unittest projects/deadlock-detector-lab/test_deadlock_detector.py
 
 ## Future improvements
 - export Graphviz `.dot` output for teams that want to post-process the same layouts externally
-- add a small delta-focused callout that explicitly highlights which resource slack vanished between the granted and denied request paths
+- add a compact combined dashboard panel that pulls the granted-vs-denied request delta callout into the main detection-vs-avoidance report
