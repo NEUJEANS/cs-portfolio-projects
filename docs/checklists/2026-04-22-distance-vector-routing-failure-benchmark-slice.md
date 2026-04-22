@@ -21,5 +21,5 @@ Add a benchmark/report path that compares failure reconvergence across routing m
 - [x] review pass 2 and fix issues found
 - [x] review pass 3 and fix issues found
 - [x] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up
+- [x] commit and push
+- [x] append wrap-up
