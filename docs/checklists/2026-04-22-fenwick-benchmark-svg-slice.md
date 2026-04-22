@@ -6,10 +6,10 @@
 - [x] update the project checklist for the new visual-export slice
 - [x] implement screenshot-friendly benchmark SVG export
 - [x] wire `benchmark --svg-output` into the CLI
-- [ ] regenerate committed sample artifacts
-- [ ] run tests and smoke checks
-- [ ] review pass 1
-- [ ] review pass 2
-- [ ] review pass 3
-- [ ] run secret scan
-- [ ] commit, push, and add wrap-up
+- [x] regenerate committed sample artifacts
+- [x] run tests and smoke checks
+- [x] review pass 1
+- [x] review pass 2
+- [x] review pass 3
+- [x] run secret scan
+- [x] commit, push, and add wrap-up
