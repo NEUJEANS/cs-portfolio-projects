@@ -9,5 +9,5 @@
 - [x] run tests and CLI validation
 - [x] log at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit + push completed
-- [ ] wrap-up appended
+- [x] commit + push completed
+- [x] wrap-up appended
