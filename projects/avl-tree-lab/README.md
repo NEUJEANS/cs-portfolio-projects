@@ -12,10 +12,13 @@ A portfolio-friendly AVL tree project that implements insertion, deletion, valid
 ## Features
 - integer-key AVL tree with duplicate rejection
 - insertion and deletion with automatic LL, RR, LR, and RL rebalancing
-- validation for BST ordering, stored heights, and balance-factor constraints
+- validation for BST ordering, stored heights, subtree sizes, and balance-factor constraints
 - inorder/preorder traversal helpers plus `contains`, `rank`, and `select`
+- incrementally maintained subtree sizes so `rank` and `select` stay truly logarithmic
 - optional trace mode that records insert/delete events and rotation cases
 - CLI commands for demo runs, custom builds, membership queries, deletion, and validation
+- Graphviz DOT export for recruiter-friendly tree diagrams, with optional NIL leaves
+- Markdown trace walkthrough export that bundles before/after DOT snapshots with narrated rebalance events
 
 ## Usage
 
@@ -61,6 +64,20 @@ Validate a built tree:
 python3 projects/avl-tree-lab/avl_tree_lab.py validate 30 20 10 25 40 50
 ```
 
+Export a DOT diagram you can render with Graphviz:
+
+```bash
+python3 projects/avl-tree-lab/avl_tree_lab.py dot 30 20 10 25 40 50 --output docs/artifacts/avl-tree-lab/demo.dot
+```
+
+Add `--no-nil` if you want a more compact diagram without explicit NIL leaves.
+
+Generate a Markdown walkthrough for a traced delete:
+
+```bash
+python3 projects/avl-tree-lab/avl_tree_lab.py explain-trace delete 20 10 30 5 15 25 35 --query 10 --output docs/artifacts/avl-tree-lab/delete-trace.md
+```
+
 ## Test
 
 ```bash
@@ -71,10 +88,11 @@ python3 -m unittest projects/avl-tree-lab/test_avl_tree_lab.py
 - AVL trees store subtree height on each node and keep the left/right height difference within `[-1, 1]`.
 - Insertions and deletions rebalance on the way back up the recursion, which keeps the local repair logic small and inspectable.
 - Double-rotation cases are logged in trace mode so the tree can be used as an interview walkthrough artifact.
-- Validation recomputes expected heights recursively and reports invariant violations with explicit issue strings.
-- `rank` and `select` are implemented via subtree-size recomputation, which keeps the code compact for a teaching project at the cost of extra query work.
+- Validation recomputes expected heights and subtree sizes recursively, which catches stale metadata bugs after rotations and delete repairs.
+- `rank` and `select` use incrementally maintained subtree sizes so the project demonstrates proper order-statistics augmentation instead of repeated full-subtree scans.
+- `dot` and `explain-trace` make the balancing process portable into portfolio docs, blog posts, and interview prep notes without hand-drawing trees.
 
 ## Future improvements
-- maintain subtree sizes incrementally to make `rank` and `select` true `O(log n)` operations
-- emit Graphviz diagrams for each rebalance step
+- emit per-step Graphviz diagrams for every trace event instead of just the initial/final snapshots
 - benchmark height and rotation counts against the repo's red-black and splay tree labs
+- add a compact HTML renderer that turns trace walkthroughs into shareable portfolio cards
