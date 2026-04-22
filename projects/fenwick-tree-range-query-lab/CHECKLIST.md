@@ -27,3 +27,13 @@
 - [x] expand tests for preset resolution and CLI preset usage
 - [x] generate committed preset artifacts for query-heavy, update-heavy, and point-set-heavy runs
 - [x] document preset-driven benchmark workflows in the project README
+
+## Vertical slice: multi-preset comparison dashboard
+- [x] confirm the next weak spot is the lack of one landing-page artifact across all committed benchmark presets
+- [x] add a `compare-presets` benchmark mode that replays shared benchmark settings across multiple workload presets
+- [x] summarize strongest Fenwick edge, tightest race, per-operation winners, and per-preset throughput in one payload
+- [x] export the comparison pack as JSON, Markdown, HTML, and SVG so both browser and screenshot workflows are covered
+- [x] link the dashboard back to the committed per-preset artifact bundle for drill-down review
+- [x] expand tests for compare payload generation, dashboard renderers, and CLI artifact export
+- [x] generate and commit the multi-preset comparison artifacts under `docs/artifacts/fenwick-tree-range-query-lab/presets/`
+- [x] document the new comparison workflow in the project README

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="720" viewBox="0 0 1180 720" role="img" aria-labelledby="title desc">
+<title id="title">Fenwick preset comparison dashboard</title>
+<desc id="desc">A multi-preset benchmark dashboard comparing RangeFenwick and a lazy segment tree across balanced, query-heavy, update-heavy, and point-set-heavy workloads.</desc>
+<style>
+text { font-family: Inter, Arial, sans-serif; fill: #0f172a; }
+.muted { fill: #475569; }
+.subtle { fill: #64748b; }
+.title { font-size: 28px; font-weight: 700; }
+.section { font-size: 16px; font-weight: 700; }
+.label { font-size: 13px; font-weight: 600; }
+.body { font-size: 13px; }
+.small { font-size: 12px; }
+.value { font-size: 26px; font-weight: 700; }
+.card { fill: #ffffff; stroke: #dbe3ee; stroke-width: 1; }
+.panel { fill: #ffffff; stroke: #dbe3ee; stroke-width: 1; }
+</style>
+<rect width="100%" height="100%" fill="#f8fafc" />
+<text class="title" x="40" y="50">Fenwick workload preset comparison</text>
+<text class="body muted" x="40" y="76">Size 256 • 1000 operations/run • 3 repeats • seed 7 • average speedup 1.469x</text>
+<rect class="card" x="40" y="102" width="260" height="92" rx="16" />
+<text class="small subtle" x="58" y="128">Compared presets</text>
+<text class="value" x="58" y="162">4</text>
+<text class="small muted" x="58" y="182">balanced, query-heavy, update-heavy, point-set-heavy</text>
+<rect class="card" x="316" y="102" width="260" height="92" rx="16" />
+<text class="small subtle" x="334" y="128">Strongest edge</text>
+<text class="value" x="334" y="162">update-heavy</text>
+<text class="small muted" x="334" y="182">1.593x with range add dominance</text>
+<rect class="card" x="592" y="102" width="260" height="92" rx="16" />
+<text class="small subtle" x="610" y="128">Tightest race</text>
+<text class="value" x="610" y="162">point-set-heavy</text>
+<text class="small muted" x="610" y="182">1.102x speedup</text>
+<rect class="card" x="868" y="102" width="260" height="92" rx="16" />
+<text class="small subtle" x="886" y="128">Fastest Fenwick preset</text>
+<text class="value" x="886" y="162">query-heavy</text>
+<text class="small muted" x="886" y="182">447145.53 ops/sec</text>
+<rect class="panel" x="40" y="222" width="500" height="360" rx="18" />
+<text class="section" x="64" y="252">Speedup by preset</text>
+<text class="small muted" x="64" y="272">Longer bars show where RangeFenwick gains more relative distance over the segment tree baseline.</text>
+<rect class="panel" x="580" y="222" width="560" height="360" rx="18" />
+<text class="section" x="604" y="252">Throughput by preset</text>
+<text class="small muted" x="604" y="272">Each row keeps the same workload settings but swaps the preset mix.</text>
+<text class="label" x="64" y="308">balanced</text>
+<text class="small subtle" x="64" y="326">Q/A/S 45% / 40% / 15% • dominant range sum</text>
+<rect x="64" y="336" width="320" height="18" rx="9" fill="#e2e8f0" />
+<rect x="64" y="336" width="319.2" height="18" rx="9" fill="#2563eb" />
+<text class="small muted" x="396" y="350">1.589x</text>
+<text class="label" x="604" y="308">balanced</text>
+<rect x="604" y="326" width="170" height="14" rx="7" fill="#dbeafe" />
+<rect x="604" y="326" width="149.6" height="14" rx="7" fill="#2563eb" />
+<text class="small muted" x="782" y="337">Fenwick 393522.2</text>
+<rect x="604" y="350" width="170" height="14" rx="7" fill="#ffedd5" />
+<rect x="604" y="350" width="94.2" height="14" rx="7" fill="#f97316" />
+<text class="small muted" x="782" y="361">Segment 247640.54</text>
+<text class="label" x="64" y="376">query-heavy</text>
+<text class="small subtle" x="64" y="394">Q/A/S 75% / 15% / 10% • dominant range sum</text>
+<rect x="64" y="404" width="320" height="18" rx="9" fill="#e2e8f0" />
+<rect x="64" y="404" width="319.4" height="18" rx="9" fill="#2563eb" />
+<text class="small muted" x="396" y="418">1.59x</text>
+<text class="label" x="604" y="376">query-heavy</text>
+<rect x="604" y="394" width="170" height="14" rx="7" fill="#dbeafe" />
+<rect x="604" y="394" width="170.0" height="14" rx="7" fill="#2563eb" />
+<text class="small muted" x="782" y="405">Fenwick 447145.53</text>
+<rect x="604" y="418" width="170" height="14" rx="7" fill="#ffedd5" />
+<rect x="604" y="418" width="106.9" height="14" rx="7" fill="#f97316" />
+<text class="small muted" x="782" y="429">Segment 281261.25</text>
+<text class="label" x="64" y="444">update-heavy</text>
+<text class="small subtle" x="64" y="462">Q/A/S 20% / 70% / 10% • dominant range add</text>
+<rect x="64" y="472" width="320" height="18" rx="9" fill="#e2e8f0" />
+<rect x="64" y="472" width="320.0" height="18" rx="9" fill="#2563eb" />
+<text class="small muted" x="396" y="486">1.593x</text>
+<text class="label" x="604" y="444">update-heavy</text>
+<rect x="604" y="462" width="170" height="14" rx="7" fill="#dbeafe" />
+<rect x="604" y="462" width="140.1" height="14" rx="7" fill="#2563eb" />
+<text class="small muted" x="782" y="473">Fenwick 368505.73</text>
+<rect x="604" y="486" width="170" height="14" rx="7" fill="#ffedd5" />
+<rect x="604" y="486" width="87.9" height="14" rx="7" fill="#f97316" />
+<text class="small muted" x="782" y="497">Segment 231298.82</text>
+<text class="label" x="64" y="512">point-set-heavy</text>
+<text class="small subtle" x="64" y="530">Q/A/S 25% / 20% / 55% • dominant point set</text>
+<rect x="64" y="540" width="320" height="18" rx="9" fill="#e2e8f0" />
+<rect x="64" y="540" width="221.4" height="18" rx="9" fill="#2563eb" />
+<text class="small muted" x="396" y="554">1.102x</text>
+<text class="label" x="604" y="512">point-set-heavy</text>
+<rect x="604" y="530" width="170" height="14" rx="7" fill="#dbeafe" />
+<rect x="604" y="530" width="112.8" height="14" rx="7" fill="#2563eb" />
+<text class="small muted" x="782" y="541">Fenwick 296578.96</text>
+<rect x="604" y="554" width="170" height="14" rx="7" fill="#ffedd5" />
+<rect x="604" y="554" width="102.3" height="14" rx="7" fill="#f97316" />
+<text class="small muted" x="782" y="565">Segment 269069.06</text>
+<rect class="panel" x="40" y="606" width="1100" height="86" rx="18" />
+<text class="section" x="64" y="636">Why this dashboard matters</text>
+<text class="body muted" x="64" y="660">• Strongest edge: update-heavy at 1.593x. Tightest race: point-set-heavy at 1.102x.</text>
+<text class="body muted" x="64" y="682">• Use this as the one-screen summary, then open the linked Markdown or SVG preset artifacts for the deeper single-workload breakdown.</text>
+</svg>

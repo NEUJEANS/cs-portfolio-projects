@@ -17,6 +17,7 @@ A portfolio-ready Python lab for Binary Indexed Trees (Fenwick trees) that suppo
 - deterministic benchmark mode that replays the same mixed range-sum, range-add, and point-set workload through both a RangeFenwick implementation and a lazy segment tree baseline
 - named benchmark presets for balanced, query-heavy, update-heavy, and point-set-heavy workload stories, with optional ratio overrides when you want to tune a preset further
 - JSON, CSV, Markdown, and standalone SVG benchmark artifact export for README charts, blog posts, recruiter-ready notes, or slide screenshots
+- multi-preset comparison dashboards that line up all committed workload stories in one JSON, Markdown, HTML, and SVG landing-page artifact
 - tests that cover core Fenwick behavior, persistence, CLI workflows, mixed-structure correctness, and benchmark verification
 
 ## Usage
@@ -96,7 +97,20 @@ python3 fenwick_tree_range_query_lab.py benchmark \
   --svg-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark-chart.svg
 ```
 
+Generate a single dashboard that compares all workload presets side by side:
+
+```bash
+python3 fenwick_tree_range_query_lab.py compare-presets \
+  --use-saved-json \
+  --output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.json \
+  --markdown-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.md \
+  --html-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.html \
+  --svg-output ../../docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.svg
+```
+
 The benchmark validates correctness before comparing timing numbers, so the same report can support both engineering discussion and portfolio storytelling. Presets make it easier to show how Fenwick trees behave under different mixes instead of only one balanced workload, and the SVG export turns each deterministic payload into a screenshot-friendly chart with throughput and per-operation latency bars.
+
+`compare-presets` goes one step wider by turning the four named workload mixes into a small benchmark pack. That gives the project a single landing page you can share in a portfolio review before drilling into the balanced or specialized per-preset artifacts. Use `--use-saved-json` when you want the comparison page to assemble itself from the already-committed per-preset benchmark JSON files instead of re-running timings.
 
 ## Sample committed artifacts
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.json`
@@ -106,6 +120,9 @@ The benchmark validates correctness before comparing timing numbers, so the same
 - `docs/artifacts/fenwick-tree-range-query-lab/presets/query-heavy-benchmark-report.md`
 - `docs/artifacts/fenwick-tree-range-query-lab/presets/update-heavy-benchmark-report.md`
 - `docs/artifacts/fenwick-tree-range-query-lab/presets/point-set-heavy-benchmark-report.md`
+- `docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.md`
+- `docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.html`
+- `docs/artifacts/fenwick-tree-range-query-lab/presets/preset-comparison.svg`
 
 ## Test
 
@@ -115,4 +132,4 @@ python3 -m unittest projects/fenwick-tree-range-query-lab/test_fenwick_tree_rang
 
 ## Future improvements
 - support floating-point values or generic monoids where inversion is available
-- add a multi-preset comparison dashboard so all workload presets can be contrasted in one recruiter-friendly artifact instead of separate files
+- add a compact narrative case-study page that pairs the comparison dashboard with one hand-picked per-preset deep dive and interpretation notes

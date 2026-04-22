@@ -11,9 +11,13 @@ from fenwick_tree_range_query_lab import (
     FenwickTree,
     RangeAddSegmentTree,
     RangeFenwick,
+    compare_benchmark_presets,
     generate_benchmark_operations,
     load_snapshot,
     load_values,
+    render_preset_comparison_html,
+    render_preset_comparison_markdown,
+    render_preset_comparison_svg,
     render_benchmark_markdown,
     render_benchmark_svg,
     resolve_benchmark_profile,
@@ -172,6 +176,54 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
         self.assertEqual(profile.set_ratio, 0.55)
         self.assertEqual(profile.max_range_width, 9)
 
+    def test_compare_benchmark_presets_collects_summary_across_presets(self):
+        payload = compare_benchmark_presets(
+            presets=["balanced", "query-heavy", "update-heavy", "point-set-heavy"],
+            size=16,
+            operations=40,
+            seed=5,
+            repeats=1,
+            value_min=0,
+            value_max=30,
+            delta_min=-3,
+            delta_max=5,
+        )
+        self.assertEqual(payload["mode"], "compare-presets")
+        self.assertEqual(payload["preset_count"], 4)
+        self.assertTrue(payload["all_correctness_verified"])
+        self.assertEqual([row["preset"] for row in payload["presets"]], ["balanced", "query-heavy", "update-heavy", "point-set-heavy"])
+        self.assertIn(payload["strongest_edge"]["preset"], {"balanced", "query-heavy", "update-heavy", "point-set-heavy"})
+        self.assertIn(payload["tightest_race"]["preset"], {"balanced", "query-heavy", "update-heavy", "point-set-heavy"})
+        self.assertIn("range_sum", payload["operation_winner_counts"]["range-fenwick"])
+        self.assertIn("markdown", payload["presets"][0]["artifacts"])
+
+    def test_render_preset_comparison_artifacts_include_dashboard_sections(self):
+        payload = compare_benchmark_presets(
+            presets=["balanced", "query-heavy"],
+            size=16,
+            operations=40,
+            seed=5,
+            repeats=1,
+            value_min=0,
+            value_max=30,
+            delta_min=-3,
+            delta_max=5,
+        )
+        markdown = render_preset_comparison_markdown(payload)
+        self.assertIn("# Fenwick workload preset comparison", markdown)
+        self.assertIn("## Preset snapshot", markdown)
+        self.assertIn("balanced", markdown)
+        self.assertIn("query-heavy", markdown)
+        html = render_preset_comparison_html(payload)
+        self.assertIn("Workload preset comparison dashboard", html)
+        self.assertIn("Preset-by-preset snapshot", html)
+        self.assertIn("<table>", html)
+        svg = render_preset_comparison_svg(payload)
+        self.assertIn("<svg", svg)
+        self.assertIn("Fenwick workload preset comparison", svg)
+        self.assertIn("Speedup by preset", svg)
+        self.assertIn("Throughput by preset", svg)
+
     def test_cli_build_sum_add_set_export_and_benchmark(self):
         temp_dir = ROOT / self._testMethodName
         temp_dir.mkdir(exist_ok=True)
@@ -267,6 +319,60 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             self.assertIn("segment-tree", benchmark_csv.read_text())
             self.assertIn("workload preset: query-heavy", benchmark_md.read_text())
             self.assertIn("Per-operation latency", benchmark_svg.read_text())
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_cli_compare_presets_writes_dashboard_artifacts(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            compare_json = temp_dir / "preset-comparison.json"
+            compare_md = temp_dir / "preset-comparison.md"
+            compare_html = temp_dir / "preset-comparison.html"
+            compare_svg = temp_dir / "preset-comparison.svg"
+
+            compare_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "compare-presets",
+                    "--presets",
+                    "balanced",
+                    "query-heavy",
+                    "--size",
+                    "16",
+                    "--operations",
+                    "40",
+                    "--repeats",
+                    "1",
+                    "--seed",
+                    "5",
+                    "--output",
+                    str(compare_json),
+                    "--markdown-output",
+                    str(compare_md),
+                    "--html-output",
+                    str(compare_html),
+                    "--svg-output",
+                    str(compare_svg),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            payload = json.loads(compare_result.stdout)
+            self.assertEqual(payload["mode"], "compare-presets")
+            self.assertEqual(payload["preset_count"], 2)
+            self.assertTrue(compare_json.exists())
+            self.assertTrue(compare_md.exists())
+            self.assertTrue(compare_html.exists())
+            self.assertTrue(compare_svg.exists())
+            self.assertIn("Fenwick workload preset comparison", compare_md.read_text())
+            self.assertIn("Workload preset comparison dashboard", compare_html.read_text())
+            self.assertIn("Speedup by preset", compare_svg.read_text())
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()
