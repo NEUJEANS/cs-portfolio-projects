@@ -1,5 +1,20 @@
 # Log Analyzer Checklist
 
+## Card PNG slice (2026-04-22 03:28 UTC run)
+- [x] confirm repo sync before editing and continue the queued log-analyzer card-artifact follow-up instead of starting a different project
+- [x] do a brief Chrome headless / Python `tempfile` research check because PNG exports were the next highest-value artifact gap
+- [x] do a short PNG capture/self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add standalone `--time-bucket-card-png` and `--facet-compare-card-png` exports without branching into a second card-rendering path
+- [x] add shared Chrome capture controls plus safe temporary-HTML handling for PNG-only runs
+- [x] extend automated coverage for PNG helpers, CLI success, and validation errors
+- [x] refresh the committed sample artifacts so annotated PNG cards are reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider raster-ready gallery/detail-bundle exports next
+
 ## Facet ranking detail-bundle slice (2026-04-19 20:21 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer facet-artifact follow-up instead of starting a different project
 - [x] do a brief Python `zipfile` research check because deterministic download packets were the next highest-value gallery follow-up

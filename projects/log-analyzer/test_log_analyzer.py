@@ -1,5 +1,6 @@
 import csv
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,8 +16,10 @@ if str(PROJECT_DIR) not in sys.path:
 
 from log_analyzer import (
     analyze_lines,
+    build_html_png_command,
     build_card_annotation_preset_catalog,
     build_card_annotation_preset_previews,
+    default_card_png_height,
     expand_card_annotation_presets,
     format_card_annotation_preset_gallery_html,
     format_facet_comparison_card_html,
@@ -28,11 +31,43 @@ from log_analyzer import (
     load_card_annotation_preset_definitions,
     normalize_card_annotations,
     parse_line,
+    resolve_chrome_binary,
     write_facet_ranking_detail_bundle,
+)
+
+CHROME_BINARY = (
+    shutil.which('google-chrome')
+    or shutil.which('google-chrome-stable')
+    or shutil.which('chromium')
+    or shutil.which('chromium-browser')
 )
 
 
 class LogAnalyzerTests(unittest.TestCase):
+    def test_resolve_chrome_binary_prefers_explicit_binary(self):
+        resolved = resolve_chrome_binary(CHROME_BINARY or sys.executable)
+        self.assertTrue(Path(resolved).exists())
+
+    def test_default_card_png_height_scales_with_rows(self):
+        self.assertGreater(default_card_png_height(20, 1440), default_card_png_height(2, 1440))
+        self.assertGreaterEqual(default_card_png_height(1, 960), 1400)
+
+    def test_build_html_png_command_uses_expected_chrome_flags(self):
+        command = build_html_png_command(
+            'card.html',
+            'card.png',
+            width=1440,
+            height=1800,
+            capture_ms=1500,
+            chrome_binary=CHROME_BINARY or sys.executable,
+        )
+        self.assertIn('--headless', command)
+        self.assertIn('--hide-scrollbars', command)
+        self.assertIn('--window-size=1440,1800', command)
+        self.assertIn('--virtual-time-budget=1500', command)
+        self.assertTrue(any(part.startswith('--screenshot=') for part in command))
+        self.assertTrue(command[-1].startswith('file://'))
+
     def test_parse_line_supports_dash_bytes(self):
         parsed = parse_line('10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET / HTTP/1.1" 304 -')
         self.assertIsNotNone(parsed)
@@ -1703,6 +1738,44 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Bucket summary table', html_text)
             self.assertIn('<code>/api/report</code>', html_text)
 
+    @unittest.skipUnless(CHROME_BINARY, 'Chrome/Chromium required for PNG capture tests')
+    def test_cli_time_bucket_card_png_export_generates_png_without_persisted_html(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            png_path = Path(tmpdir) / 'exports' / 'trend-card.png'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-png',
+                    str(png_path),
+                    '--card-annotation',
+                    '2026-04-18T09:00:20Z=deploy|Deploy started',
+                    '--chrome-binary',
+                    CHROME_BINARY,
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            png_bytes = png_path.read_bytes()
+            self.assertGreater(len(png_bytes), 1024)
+            self.assertEqual(png_bytes[:8], b'\x89PNG\r\n\x1a\n')
+
     def test_cli_time_bucket_card_exports_support_annotations(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -1869,6 +1942,29 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--time-bucket-card-svg requires --time-bucket', completed.stderr)
 
+    def test_cli_rejects_time_bucket_card_png_without_granularity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            png_path = Path(tmpdir) / 'exports' / 'trend-card.png'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket-card-png',
+                    str(png_path),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--time-bucket-card-png requires --time-bucket', completed.stderr)
+
     def test_cli_facet_comparison_card_exports_generate_svg_and_html(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -1914,6 +2010,52 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('<!DOCTYPE html>', html_text)
             self.assertIn('Summary delta table', html_text)
             self.assertIn('Aligned bucket rows', html_text)
+
+    @unittest.skipUnless(CHROME_BINARY, 'Chrome/Chromium required for PNG capture tests')
+    def test_cli_facet_comparison_card_png_export_generates_png(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            html_path = Path(tmpdir) / 'exports' / 'compare-card.html'
+            png_path = Path(tmpdir) / 'exports' / 'compare-card.png'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.120 upstream_response_time=0.090 env=staging
+                    10.0.0.4 - - [18/Apr/2026:09:01:45 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.450 env=staging
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'staging',
+                    '--facet-compare-card-html',
+                    str(html_path),
+                    '--facet-compare-card-png',
+                    str(png_path),
+                    '--chrome-binary',
+                    CHROME_BINARY,
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(html_path.exists())
+            png_bytes = png_path.read_bytes()
+            self.assertGreater(len(png_bytes), 1024)
+            self.assertEqual(png_bytes[:8], b'\x89PNG\r\n\x1a\n')
 
     def test_cli_facet_comparison_card_exports_support_annotations(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1989,6 +2131,38 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('comparison-card export flags require --facet-compare-field and --facet-compare-values', completed.stderr)
+
+    def test_cli_rejects_invalid_card_png_size_flags(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            png_path = Path(tmpdir) / 'exports' / 'compare-card.png'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'staging',
+                    '--facet-compare-card-png',
+                    str(png_path),
+                    '--card-png-width',
+                    '0',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--card-png-width must be greater than 0', completed.stderr)
 
     def test_cli_rejects_card_annotation_without_card_export(self):
         with tempfile.TemporaryDirectory() as tmpdir:

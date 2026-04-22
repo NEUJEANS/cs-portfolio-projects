@@ -6,6 +6,9 @@ import json
 import math
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import textwrap
 import zipfile
 from collections import Counter, defaultdict
@@ -748,6 +751,216 @@ def format_bucket_latency_summary(
 def write_text_output(destination: str | Path, content: str) -> None:
     destination_path = ensure_parent_directory(destination)
     destination_path.write_text(content, encoding="utf-8")
+
+
+def resolve_chrome_binary(preferred: str | Path | None = None) -> str:
+    candidates: list[str] = []
+    if preferred is not None:
+        candidates.append(str(preferred))
+    candidates.extend([
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+    ])
+    for candidate in candidates:
+        candidate_path = Path(candidate).expanduser()
+        if candidate_path.is_absolute() and candidate_path.exists() and os.access(candidate_path, os.X_OK):
+            return str(candidate_path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError(
+        "Could not find a Chrome/Chromium binary for PNG capture. "
+        "Pass --chrome-binary or install google-chrome/chromium."
+    )
+
+
+def default_card_png_height(row_count: int, width: int) -> int:
+    normalized_width = max(960, width)
+    effective_rows = max(1, row_count)
+    if normalized_width >= 1320:
+        per_row_height = 44
+    elif normalized_width >= 1080:
+        per_row_height = 56
+    else:
+        per_row_height = 76
+    estimated_height = 1180 + (effective_rows * per_row_height)
+    return max(1400, min(estimated_height, 7200))
+
+
+def measure_html_document_height(
+    html_output_path: str | Path,
+    *,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> int | None:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        return None
+    html_text = html_path.read_text(encoding="utf-8")
+    marker_id = "html-png-scroll-height"
+    marker_script = (
+        "<script>\n"
+        'window.addEventListener("load", () => {\n'
+        '  const marker = document.createElement("pre");\n'
+        f'  marker.id = "{marker_id}";\n'
+        '  marker.textContent = JSON.stringify({\n'
+        '    bodyScrollHeight: document.body.scrollHeight,\n'
+        '    docScrollHeight: document.documentElement.scrollHeight,\n'
+        '    bodyClientHeight: document.body.clientHeight,\n'
+        '    docClientHeight: document.documentElement.clientHeight,\n'
+        '  });\n'
+        '  document.body.appendChild(marker);\n'
+        '});\n'
+        "</script>\n"
+    )
+    instrumented_html = (
+        html_text.replace("</body>", marker_script + "</body>")
+        if "</body>" in html_text
+        else html_text + marker_script
+    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        instrumented_path = Path(tmp_dir) / "html-png-height-probe.html"
+        instrumented_path.write_text(instrumented_html, encoding="utf-8")
+        command = [
+            resolve_chrome_binary(chrome_binary),
+            "--headless",
+            "--disable-gpu",
+            f"--virtual-time-budget={max(0, capture_ms)}",
+            "--dump-dom",
+            instrumented_path.resolve().as_uri(),
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+        except OSError:
+            return None
+    if result.returncode != 0:
+        return None
+    match = re.search(rf'<pre id="{marker_id}">([^<]+)</pre>', result.stdout)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+    height_candidates = [
+        payload.get("docScrollHeight"),
+        payload.get("bodyScrollHeight"),
+        payload.get("bodyClientHeight"),
+    ]
+    numeric_heights = [int(value) for value in height_candidates if isinstance(value, (int, float))]
+    return max(numeric_heights) if numeric_heights else None
+
+
+def build_html_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    resolved_html = Path(html_output_path).resolve()
+    resolved_png = Path(png_output_path).resolve()
+    return [
+        resolve_chrome_binary(chrome_binary),
+        "--headless",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        f"--window-size={width},{height}",
+        f"--virtual-time-budget={capture_ms}",
+        f"--screenshot={resolved_png}",
+        resolved_html.as_uri(),
+    ]
+
+
+def render_html_png(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    row_count: int,
+    width: int = 1440,
+    height: int | None = None,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        raise RuntimeError(f"HTML card not found for PNG capture: {html_path}")
+    png_path = ensure_parent_directory(png_output_path)
+    effective_width = max(960, width)
+    measured_height = None
+    if height is None:
+        measured_height = measure_html_document_height(
+            html_path,
+            capture_ms=max(0, capture_ms),
+            chrome_binary=chrome_binary,
+        )
+    heuristic_height = default_card_png_height(row_count, effective_width)
+    effective_height = (
+        height if height is not None else max(heuristic_height, (measured_height or 0) + 120)
+    )
+    command = build_html_png_command(
+        html_path,
+        png_path,
+        width=effective_width,
+        height=max(1200, effective_height),
+        capture_ms=max(0, capture_ms),
+        chrome_binary=chrome_binary,
+    )
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise RuntimeError(f"PNG capture failed: {exc}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown Chrome headless error"
+        raise RuntimeError(f"PNG capture failed: {detail}")
+    if not png_path.exists():
+        raise RuntimeError(f"PNG capture did not create the expected output file: {png_path}")
+    return png_path
+
+
+def write_html_and_optional_png_output(
+    html_content: str,
+    *,
+    html_output_path: str | Path | None = None,
+    png_output_path: str | Path | None = None,
+    png_row_count: int,
+    temp_html_name: str,
+    png_width: int = 1440,
+    png_height: int | None = None,
+    png_capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> None:
+    if html_output_path is not None:
+        write_text_output(html_output_path, html_content)
+    if png_output_path is None:
+        return
+    if html_output_path is not None:
+        render_html_png(
+            html_output_path,
+            png_output_path,
+            row_count=png_row_count,
+            width=png_width,
+            height=png_height,
+            capture_ms=png_capture_ms,
+            chrome_binary=chrome_binary,
+        )
+        return
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        temp_html_path = Path(tmp_dir) / temp_html_name
+        temp_html_path.write_text(html_content, encoding="utf-8")
+        render_html_png(
+            temp_html_path,
+            png_output_path,
+            row_count=png_row_count,
+            width=png_width,
+            height=png_height,
+            capture_ms=png_capture_ms,
+            chrome_binary=chrome_binary,
+        )
 
 
 def format_card_metric_value(
@@ -5117,6 +5330,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--time-bucket-card-png",
+        help=(
+            "Optional path for a standalone PNG mini trend card captured from the "
+            "self-contained HTML card (requires --time-bucket and Chrome/Chromium)"
+        ),
+    )
+    parser.add_argument(
         "--card-annotation",
         action="append",
         default=[],
@@ -5245,6 +5465,43 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--facet-compare-card-png",
+        help=(
+            "Optional path for a standalone PNG comparison card captured from the "
+            "self-contained HTML card (requires --facet-compare-field, "
+            "--facet-compare-values, and Chrome/Chromium)"
+        ),
+    )
+    parser.add_argument(
+        "--chrome-binary",
+        help=(
+            "Optional Chrome/Chromium binary to use for --*-card-png exports"
+        ),
+    )
+    parser.add_argument(
+        "--card-png-width",
+        type=int,
+        default=1440,
+        help="Viewport width for --*-card-png exports (default: 1440)",
+    )
+    parser.add_argument(
+        "--card-png-height",
+        type=int,
+        help=(
+            "Optional fixed viewport height for --*-card-png exports; defaults to an "
+            "auto-sized capture"
+        ),
+    )
+    parser.add_argument(
+        "--card-png-capture-ms",
+        type=int,
+        default=1500,
+        help=(
+            "Virtual-time budget in milliseconds before capturing --*-card-png exports "
+            "(default: 1500)"
+        ),
+    )
+    parser.add_argument(
         "--window-start",
         help=(
             "Inclusive lower time bound for log entries (ISO-8601 or common-log timestamp; "
@@ -5323,7 +5580,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--facet-compare-csv requires --facet-compare-field and --facet-compare-values"
         )
-    if (args.facet_compare_card_svg or args.facet_compare_card_html) and (
+    if (args.facet_compare_card_svg or args.facet_compare_card_html or args.facet_compare_card_png) and (
         normalized_facet_compare_field is None or normalized_facet_compare_values is None
     ):
         parser.error(
@@ -5341,12 +5598,22 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--time-bucket-card-svg requires --time-bucket")
     if args.time_bucket_card_html and not args.time_bucket:
         parser.error("--time-bucket-card-html requires --time-bucket")
+    if args.time_bucket_card_png and not args.time_bucket:
+        parser.error("--time-bucket-card-png requires --time-bucket")
+    if args.card_png_width <= 0:
+        parser.error("--card-png-width must be greater than 0")
+    if args.card_png_height is not None and args.card_png_height <= 0:
+        parser.error("--card-png-height must be greater than 0")
+    if args.card_png_capture_ms < 0:
+        parser.error("--card-png-capture-ms must be greater than or equal to 0")
     has_card_exports = any(
         [
             args.time_bucket_card_svg,
             args.time_bucket_card_html,
+            args.time_bucket_card_png,
             args.facet_compare_card_svg,
             args.facet_compare_card_html,
+            args.facet_compare_card_png,
         ]
     )
     if args.card_annotation and not args.time_bucket:
@@ -5638,15 +5905,22 @@ def main(argv: list[str] | None = None) -> int:
                 annotations=comparison_card_annotations,
             ),
         )
-    if args.facet_compare_card_html and result["facet_comparison"]:
-        write_text_output(
-            args.facet_compare_card_html,
+    if (args.facet_compare_card_html or args.facet_compare_card_png) and result["facet_comparison"]:
+        write_html_and_optional_png_output(
             format_facet_comparison_card_html(
                 result["facet_comparison"],
                 source_label=Path(args.logfile).name,
                 time_window=result["time_window"],
                 annotations=comparison_card_annotations,
             ),
+            html_output_path=args.facet_compare_card_html,
+            png_output_path=args.facet_compare_card_png,
+            png_row_count=len(result["facet_comparison"]["time_buckets"]),
+            temp_html_name="facet-compare-card.html",
+            png_width=args.card_png_width,
+            png_height=args.card_png_height,
+            png_capture_ms=args.card_png_capture_ms,
+            chrome_binary=args.chrome_binary,
         )
     if args.time_bucket_card_svg:
         write_text_output(
@@ -5657,14 +5931,21 @@ def main(argv: list[str] | None = None) -> int:
                 annotations=trend_card_annotations,
             ),
         )
-    if args.time_bucket_card_html:
-        write_text_output(
-            args.time_bucket_card_html,
+    if args.time_bucket_card_html or args.time_bucket_card_png:
+        write_html_and_optional_png_output(
             format_time_bucket_card_html(
                 result,
                 source_label=Path(args.logfile).name,
                 annotations=trend_card_annotations,
             ),
+            html_output_path=args.time_bucket_card_html,
+            png_output_path=args.time_bucket_card_png,
+            png_row_count=len(result["time_buckets"]),
+            temp_html_name="time-bucket-card.html",
+            png_width=args.card_png_width,
+            png_height=args.card_png_height,
+            png_capture_ms=args.card_png_capture_ms,
+            chrome_binary=args.chrome_binary,
         )
 
     if args.format == "json":

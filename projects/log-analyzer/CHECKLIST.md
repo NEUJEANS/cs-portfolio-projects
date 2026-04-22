@@ -1,6 +1,19 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 20:21 UTC run)
+## Current slice (2026-04-22 03:28 UTC run)
+- [x] resume the next `log-analyzer` follow-up after confirming `main` still matches `origin/main`
+- [x] keep building on the existing card artifacts instead of switching projects because PNG/raster exports were the clearest queued gap
+- [x] do a brief Chrome headless + Python `tempfile` research check plus a short PNG capture/self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add standalone `--time-bucket-card-png` and `--facet-compare-card-png` exports on top of the existing card pipeline without duplicating trend/comparison analysis
+- [x] add shared Chrome capture controls plus safe temporary-HTML handling for PNG-only runs
+- [x] extend automated coverage for PNG helpers, CLI success, and validation errors
+- [x] refresh README/checklist/research/learning/review docs and regenerate committed sample PNG artifacts alongside the existing annotated HTML/SVG cards
+- [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and write the wrap-up
+
+## Previous slice (2026-04-19 20:21 UTC run)
 - [x] resume the next `log-analyzer` follow-up after confirming `main` still matches `origin/main`
 - [x] keep building on the facet-ranking artifacts instead of switching projects because downloadable per-facet detail bundles were the clearest queued gap
 - [x] do a brief Python `zipfile` research check plus a short focused-page/self-test plan before coding
@@ -36,5 +49,5 @@
 
 ## Next follow-up ideas
 - [ ] consider facet-aware comparison cards or gallery views for referrer/user-agent heavy release reviews beyond the current ranking-focused page
-- [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
-- [ ] consider raster-ready focused-slice exports or screenshot helpers now that downloadable per-facet detail bundles exist
+- [x] add PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
+- [ ] consider raster-ready focused-slice exports or screenshot helpers for facet-ranking galleries/detail bundles now that trend/comparison card PNG exports exist

@@ -33,13 +33,13 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
-- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
+- supports standalone `--time-bucket-card-svg`, `--time-bucket-card-html`, and `--time-bucket-card-png` exports for presentation-ready mini trend cards, browser-friendly artifact pages, chat/slide-friendly raster artifacts, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path/top-referrer/top-user-agent rankings, hotspot/trend breakdowns, dedicated CSV exports, and browser-friendly ranking galleries
 - supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page, then explore the exported gallery with built-in search, per-field filters, sort presets, hide-empty controls, shareable URL state, and per-slice deep links
 - supports `--facet-ranking-detail-bundle-dir` so the same facet-aware ranking run can also emit a self-contained packet with an index page, manifest JSON, focused per-slice HTML pages, and a deterministic ZIP bundle for download/review handoff workflows
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
-- supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--facet-ranking-gallery-html`, `--facet-ranking-gallery-link`, `--facet-ranking-detail-bundle-dir`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports standalone `--facet-compare-card-svg`, `--facet-compare-card-html`, and `--facet-compare-card-png` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--facet-ranking-gallery-html`, `--facet-ranking-gallery-link`, `--facet-ranking-detail-bundle-dir`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--time-bucket-card-png`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--facet-compare-card-png`, `--chrome-binary`, `--card-png-width`, `--card-png-height`, `--card-png-capture-ms`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -51,6 +51,7 @@ python3 log_analyzer.py access.log --path-latency-csv request-hotspots.csv --ups
 python3 log_analyzer.py access.log --time-bucket minute --format json
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-csv minute-trends.csv --summary-csv summary.csv
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html
+python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-png trend-card.png
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --card-annotation '2026-04-18T09:00:20Z=deploy|Deploy started' --card-annotation '2026-04-18T09:01:40Z=rollback|Rollback triggered'
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html --card-annotation-preset 'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html --card-annotation-preset-file docs/artifacts/log-analyzer/custom-card-annotation-presets.json --card-annotation-preset 'release-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'
@@ -66,6 +67,7 @@ python3 log_analyzer.py access.log --facet-field env --facet-field region --face
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html
+python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-png release-compare-card.png
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation '2026-04-18T09:00:20Z=deploy|Deploy started' --card-annotation '2026-04-18T09:01:40Z=rollback|Rollback triggered'
 ```
 
@@ -225,13 +227,15 @@ Examples:
 - combine with `--window-start` / `--window-end` to isolate the deploy window before comparing the two slices
 
 ## Comparison card artifacts
-Use `--facet-compare-card-svg` when you want one standalone visual comparison card for slides, README screenshots, or release-review thumbnails. Use `--facet-compare-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus exact summary and aligned per-bucket delta tables.
+Use `--facet-compare-card-svg` when you want one standalone vector comparison card for slides, README screenshots, or release-review thumbnails. Use `--facet-compare-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus exact summary and aligned per-bucket delta tables. Use `--facet-compare-card-png` when chat uploads or slide tools prefer one rasterized image.
 
 Behavior:
 - both flags require `--facet-compare-field` and `--facet-compare-values`
 - they reuse the existing comparison summary and aligned time-bucket rows instead of creating a separate analysis path
 - the SVG card highlights request/error/latency deltas plus three side-by-side bucket charts (requests, error rate, average latency)
 - the HTML companion repeats the card and adds exact summary + per-bucket tables for verification, captions, and copy/paste into docs
+- PNG exports are captured from the same self-contained HTML card via headless Chrome/Chromium, so the raster output stays aligned with the browser artifact without adding Python imaging dependencies
+- use `--chrome-binary` to point at a specific browser, `--card-png-width` / `--card-png-height` to tune the viewport, and `--card-png-capture-ms` when the page needs a longer virtual-time budget before capture
 - add repeatable `--card-annotation TIMESTAMP=LABEL` or `TIMESTAMP=THEME|LABEL` flags (with `--time-bucket`) to pin numbered deploy/incident markers onto shared bucket rows in both the SVG footer and HTML annotation/table views
 - use `--card-annotation-preset PRESET=TIMESTAMP[,TIMESTAMP...]` when you want built-in stories such as `deploy-incident-recovery` or `deploy-rollback-recovery`, or combine it with `--card-annotation-preset-file custom-presets.json` to load reusable JSON-defined stories without repeating labels/themes on the CLI
 - explicit themes currently include `note`, `deploy`, `rollback`, `incident`, and `recovery`, each with distinct marker colors and badges in SVG/HTML exports
@@ -240,17 +244,20 @@ Behavior:
 Examples:
 - `--facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg`
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html`
+- `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-png release-compare-card.png`
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation '2026-04-18T09:00:20Z=deploy|Deploy started' --card-annotation '2026-04-18T09:01:40Z=rollback|Rollback triggered'`
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation-preset 'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'`
-- sample committed artifacts live under `docs/artifacts/log-analyzer/`, including annotated trend/comparison card bundles plus `custom-card-annotation-presets.json` for reusable story recipes
+- sample committed artifacts live under `docs/artifacts/log-analyzer/`, including annotated trend/comparison SVG, HTML, and PNG cards plus `custom-card-annotation-presets.json` for reusable story recipes
 
 ## Trend card artifacts
-Use `--time-bucket-card-svg` when you want one standalone visual card for slides, README screenshots, or portfolio thumbnails. Use `--time-bucket-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus a bucket summary table.
+Use `--time-bucket-card-svg` when you want one standalone vector card for slides, README screenshots, or portfolio thumbnails. Use `--time-bucket-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus a bucket summary table. Use `--time-bucket-card-png` when you need a ready-to-paste raster image for chat uploads or slide tools.
 
 Behavior:
 - both flags require `--time-bucket`
 - the SVG card highlights matched requests, overall error rate, weighted average latency, and the busiest / noisiest / slowest buckets
 - the HTML companion repeats the card and adds a tabular per-bucket breakdown with explicit bucket start/end boundaries for copy/paste-friendly captions or verification
+- PNG exports are captured from the same self-contained HTML card via headless Chrome/Chromium, so the raster output matches the browser artifact without maintaining a separate rendering path
+- use `--chrome-binary` to point at a specific browser, `--card-png-width` / `--card-png-height` to tune the viewport, and `--card-png-capture-ms` when the page needs a longer virtual-time budget before capture
 - add repeatable `--card-annotation TIMESTAMP=LABEL` or `TIMESTAMP=THEME|LABEL` flags to pin numbered deploy/incident markers onto matching buckets in both the SVG footer and HTML legend/table
 - use `--card-annotation-preset PRESET=TIMESTAMP[,TIMESTAMP...]` to expand common three-step stories such as `deploy-incident-recovery`, or add `--card-annotation-preset-file custom-presets.json` when you want reusable JSON-defined labels/themes for a specific app or incident style
 - explicit themes currently include `note`, `deploy`, `rollback`, `incident`, and `recovery`; unknown theme names fail fast so screenshots do not silently lose severity cues
@@ -259,6 +266,7 @@ Behavior:
 Examples:
 - `--time-bucket minute --time-bucket-card-svg release-trend.svg`
 - `--time-bucket minute --time-bucket-card-svg release-trend.svg --time-bucket-card-html release-trend.html`
+- `--time-bucket minute --time-bucket-card-png release-trend.png`
 - `--time-bucket minute --time-bucket-card-svg release-trend.svg --card-annotation '2026-04-18T09:00:20Z=deploy|Deploy started' --card-annotation '2026-04-18T09:01:40Z=incident|Error budget burn'`
 - `--time-bucket minute --time-bucket-card-svg release-trend.svg --time-bucket-card-html release-trend.html --card-annotation-preset 'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'`
 - combine with `--summary-csv`, `--time-bucket-csv`, and `--time-bucket-facet-csv` when you want both the visual card and spreadsheet/debugging companions in one run
