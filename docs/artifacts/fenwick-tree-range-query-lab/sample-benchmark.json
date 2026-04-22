@@ -1,0 +1,83 @@
+{
+  "size": 256,
+  "operations": 1000,
+  "repeats": 3,
+  "seed": 7,
+  "query_ratio": 0.45,
+  "set_ratio": 0.15,
+  "range_add_ratio": 0.4,
+  "max_range_width": 32,
+  "value_min": 0,
+  "value_max": 200,
+  "delta_min": -20,
+  "delta_max": 20,
+  "initial_total": 24389,
+  "operation_mix": {
+    "range_sum": 408,
+    "range_add": 408,
+    "point_set": 184
+  },
+  "correctness_verified": true,
+  "faster_strategy": "range-fenwick",
+  "speedup": 1.538,
+  "strategies": [
+    {
+      "strategy": "range-fenwick",
+      "repeats": 3,
+      "average_seconds": 0.00271,
+      "best_seconds": 0.002563,
+      "worst_seconds": 0.002813,
+      "operations": 1000,
+      "operations_per_second": 368938.07,
+      "query_checksum": 570945,
+      "final_total": 18517,
+      "timings": {
+        "range_sum": {
+          "count": 408,
+          "total_seconds": 0.002242,
+          "average_microseconds": 1.832
+        },
+        "range_add": {
+          "count": 408,
+          "total_seconds": 0.003042,
+          "average_microseconds": 2.485
+        },
+        "point_set": {
+          "count": 184,
+          "total_seconds": 0.002433,
+          "average_microseconds": 4.408
+        }
+      },
+      "verified_against_baseline": true
+    },
+    {
+      "strategy": "segment-tree",
+      "repeats": 3,
+      "average_seconds": 0.004169,
+      "best_seconds": 0.004068,
+      "worst_seconds": 0.004275,
+      "operations": 1000,
+      "operations_per_second": 239840.69,
+      "query_checksum": 570945,
+      "final_total": 18517,
+      "timings": {
+        "range_sum": {
+          "count": 408,
+          "total_seconds": 0.003976,
+          "average_microseconds": 3.249
+        },
+        "range_add": {
+          "count": 408,
+          "total_seconds": 0.005457,
+          "average_microseconds": 4.459
+        },
+        "point_set": {
+          "count": 184,
+          "total_seconds": 0.002642,
+          "average_microseconds": 4.786
+        }
+      },
+      "verified_against_baseline": true
+    }
+  ]
+}

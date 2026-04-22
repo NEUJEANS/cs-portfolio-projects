@@ -1,11 +1,12 @@
 # fenwick-tree-range-query-lab
 
-A portfolio-ready Python lab for Binary Indexed Trees (Fenwick trees) that supports fast prefix sums, range sums, range additions, snapshot persistence, and CLI-based demos.
+A portfolio-ready Python lab for Binary Indexed Trees (Fenwick trees) that supports fast prefix sums, range sums, range additions, snapshot persistence, CSV export, and a deterministic benchmark that compares the same mixed workload against a lazy segment tree.
 
 ## Why it is interesting
 - demonstrates a classic data structure for O(log n) updates and prefix/range queries
 - includes the more interview-worthy dual-tree trick for range-add + range-sum support
-- stays practical with snapshot files, CSV exports, and deterministic tests
+- now includes a direct lazy segment tree comparison, which makes the tradeoff story much stronger in interviews and portfolio writeups
+- stays practical with snapshot files, CSV exports, and deterministic benchmark artifacts
 - gives you a compact project to discuss bit tricks, cumulative frequency tables, and performance tradeoffs versus segment trees
 
 ## Features
@@ -13,7 +14,9 @@ A portfolio-ready Python lab for Binary Indexed Trees (Fenwick trees) that suppo
 - point and range operations through a CLI
 - JSON snapshot save/load workflow for resumable demos
 - CSV export with prefix sums for visualization or spreadsheet inspection
-- tests that cover core Fenwick behavior, persistence, and CLI workflows
+- deterministic benchmark mode that replays the same mixed range-sum, range-add, and point-set workload through both a RangeFenwick implementation and a lazy segment tree baseline
+- JSON, CSV, and Markdown benchmark artifact export for README charts, blog posts, or recruiter-ready notes
+- tests that cover core Fenwick behavior, persistence, CLI workflows, mixed-structure correctness, and benchmark verification
 
 ## Usage
 
@@ -59,6 +62,29 @@ python3 fenwick_tree_range_query_lab.py export \
   --output artifacts/fenwick.csv
 ```
 
+Benchmark RangeFenwick against a lazy segment tree and save portfolio-ready artifacts:
+
+```bash
+python3 fenwick_tree_range_query_lab.py benchmark \
+  --size 256 \
+  --operations 1000 \
+  --repeats 3 \
+  --seed 7 \
+  --query-ratio 0.45 \
+  --set-ratio 0.15 \
+  --max-range-width 32 \
+  --output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.json \
+  --csv-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.csv \
+  --markdown-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-report.md
+```
+
+The benchmark validates correctness before comparing timing numbers, so the same report can support both engineering discussion and portfolio storytelling.
+
+## Sample committed artifacts
+- `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.json`
+- `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.csv`
+- `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-report.md`
+
 ## Test
 
 ```bash
@@ -66,6 +92,6 @@ python3 -m unittest projects/fenwick-tree-range-query-lab/test_fenwick_tree_rang
 ```
 
 ## Future improvements
-- add a benchmark command that compares Fenwick and segment tree throughput on the same workloads
+- add a lightweight SVG or Mermaid chart export for benchmark results
 - support floating-point values or generic monoids where inversion is available
-- add matplotlib or mermaid visualizations of covered index ranges during updates
+- add workload presets that isolate query-heavy, update-heavy, and point-set-heavy mixes

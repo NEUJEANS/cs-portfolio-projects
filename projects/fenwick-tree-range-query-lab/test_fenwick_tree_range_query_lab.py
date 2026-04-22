@@ -7,7 +7,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from fenwick_tree_range_query_lab import FenwickTree, RangeFenwick, load_snapshot, load_values, save_snapshot
+from fenwick_tree_range_query_lab import (
+    FenwickTree,
+    RangeAddSegmentTree,
+    RangeFenwick,
+    generate_benchmark_operations,
+    load_snapshot,
+    load_values,
+    render_benchmark_markdown,
+    run_benchmark,
+    save_snapshot,
+)
 
 SCRIPT = ROOT / "fenwick_tree_range_query_lab.py"
 
@@ -28,6 +38,29 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
         lab.point_set(3, 20)
         self.assertEqual(lab.point_query(3), 20)
         self.assertEqual(lab.range_sum(2, 4), 38)
+
+    def test_segment_tree_matches_range_fenwick_for_mixed_updates(self):
+        values = [4, 1, 7, 3, 9, 2]
+        fenwick = RangeFenwick(values)
+        segment_tree = RangeAddSegmentTree(values)
+        operations = [
+            ("range_sum", 1, 3, None),
+            ("range_add", 2, 5, 4),
+            ("point_set", 4, 4, 11),
+            ("range_sum", 3, 6, None),
+            ("range_add", 1, 6, -2),
+            ("range_sum", 1, 6, None),
+        ]
+        for kind, left, right, amount in operations:
+            if kind == "range_sum":
+                self.assertEqual(fenwick.range_sum(left, right), segment_tree.range_sum(left, right))
+            elif kind == "range_add":
+                fenwick.range_add(left, right, amount)
+                segment_tree.range_add(left, right, amount)
+            else:
+                fenwick.point_set(left, amount)
+                segment_tree.point_set(left, amount)
+        self.assertEqual(fenwick.range_sum(1, fenwick.size), segment_tree.range_sum(1, len(values)))
 
     def test_snapshot_round_trip(self):
         temp_dir = ROOT / self._testMethodName
@@ -83,7 +116,43 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
                 child.unlink()
             temp_dir.rmdir()
 
-    def test_cli_build_sum_add_set_and_export(self):
+    def test_generate_benchmark_operations_validates_mix(self):
+        with self.assertRaisesRegex(ValueError, "<= 1"):
+            generate_benchmark_operations(
+                size=8,
+                operations=10,
+                seed=7,
+                query_ratio=0.7,
+                set_ratio=0.4,
+                max_range_width=4,
+                value_min=0,
+                value_max=10,
+                delta_min=-2,
+                delta_max=2,
+            )
+
+    def test_run_benchmark_verifies_consistent_results(self):
+        payload = run_benchmark(
+            size=32,
+            operations=120,
+            seed=11,
+            repeats=2,
+            query_ratio=0.4,
+            set_ratio=0.2,
+            max_range_width=8,
+            value_min=0,
+            value_max=25,
+            delta_min=-3,
+            delta_max=6,
+        )
+        self.assertTrue(payload["correctness_verified"])
+        self.assertEqual({result["strategy"] for result in payload["strategies"]}, {"range-fenwick", "segment-tree"})
+        self.assertGreater(payload["speedup"], 0)
+        markdown = render_benchmark_markdown(payload)
+        self.assertIn("Fenwick vs Segment Tree Benchmark", markdown)
+        self.assertIn("range-fenwick", markdown)
+
+    def test_cli_build_sum_add_set_export_and_benchmark(self):
         temp_dir = ROOT / self._testMethodName
         temp_dir.mkdir(exist_ok=True)
         try:
@@ -92,6 +161,9 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             updated = temp_dir / "updated.json"
             adjusted = temp_dir / "adjusted.json"
             exported = temp_dir / "values.csv"
+            benchmark_json = temp_dir / "benchmark.json"
+            benchmark_csv = temp_dir / "benchmark.csv"
+            benchmark_md = temp_dir / "benchmark.md"
             source.write_text("2\n4\n6\n8\n")
 
             build = subprocess.run(
@@ -134,6 +206,40 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             )
             self.assertEqual(json.loads(exported_result.stdout)["rows"], 4)
             self.assertIn("4,13,40", exported.read_text())
+
+            benchmark_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "benchmark",
+                    "--size",
+                    "16",
+                    "--operations",
+                    "40",
+                    "--repeats",
+                    "1",
+                    "--seed",
+                    "5",
+                    "--max-range-width",
+                    "5",
+                    "--output",
+                    str(benchmark_json),
+                    "--csv-output",
+                    str(benchmark_csv),
+                    "--markdown-output",
+                    str(benchmark_md),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(benchmark_result.stdout)
+            self.assertTrue(payload["correctness_verified"])
+            self.assertTrue(benchmark_json.exists())
+            self.assertTrue(benchmark_csv.exists())
+            self.assertTrue(benchmark_md.exists())
+            self.assertIn("segment-tree", benchmark_csv.read_text())
+            self.assertIn("relative speedup", benchmark_md.read_text())
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()
