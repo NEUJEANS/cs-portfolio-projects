@@ -117,3 +117,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-22 dashboard delta-callout slice
+- [x] inspect the latest deadlock-detector wrap-up and confirm the next weak spot is the missing delta panel in the main dashboard
+- [x] skip external web research because this slice extends the existing dashboard and gallery output directly
+- [x] refresh the granted-vs-denied dashboard story with a quick self-test
+- [x] add resumable checklist coverage for this slice
+- [x] implement an optional dashboard contrast input plus a granted-vs-denied delta panel in JSON, Markdown, and HTML outputs
+- [x] regenerate deterministic sample dashboard artifacts under `docs/artifacts/deadlock-detector-lab/`
+- [x] refresh README usage notes and future follow-up guidance
+- [x] extend automated tests for the dashboard delta and contrast-input guardrail
+- [x] run project tests and dashboard artifact-generation smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

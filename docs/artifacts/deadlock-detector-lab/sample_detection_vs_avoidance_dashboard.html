@@ -39,12 +39,14 @@
         <p><span class="tag">allocation</span><code>projects/deadlock-detector-lab/sample_allocation_state.json</code></p>
         <p><span class="tag">banker safety</span><code>projects/deadlock-detector-lab/sample_banker_state.json</code></p>
         <p><span class="tag">banker request</span><code>projects/deadlock-detector-lab/sample_banker_request.json</code></p>
+        <p><span class="tag">banker contrast</span><code>projects/deadlock-detector-lab/sample_banker_request_unsafe.json</code></p>
       </div>
       <h2>Key takeaways</h2>
       <ul><li>Wait-for detection finds a concrete cycle among P1, P2, P3.</li>
 <li>Resource-allocation detection still leaves P1, P2 blocked after only P3 can finish.</li>
 <li>Banker&#x27;s avoidance keeps the system safe with sequence P1, P3, P4, P0, P2.</li>
-<li>The sample request from P1 (A=1, B=0, C=2) is granted and still leaves safe sequence P1, P3, P4, P0, P2.</li></ul>
+<li>The sample request from P1 (A=1, B=0, C=2) is granted and still leaves safe sequence P1, P3, P4, P0, P2.</li>
+<li>sample_banker_request.json keeps the path grantable after spending shared slack C=2; plus granted-only slack A=1; and still leaves first runnable set P1; whereas sample_banker_request_unsafe.json leaves first runnable set none; so runnable option P1 disappears; and blocking becomes P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1.</li></ul>
     </section>
 
     <section class="split">
@@ -273,6 +275,7 @@
       <section class="card">
         <h2>Banker's request trial</h2>
         <p>Source: <code>projects/deadlock-detector-lab/sample_banker_request.json</code></p>
+        <p>Contrast source: <code>projects/deadlock-detector-lab/sample_banker_request_unsafe.json</code></p>
         <p><strong>Question answered:</strong> should this new request be granted while keeping the system safe?</p>
         <div class="grid compact-grid">
           <div class="metric"><strong>Process</strong><br /><code>P1</code></div>
@@ -371,6 +374,22 @@
 <tr><td>3</td><td><code>P4</code></td><td><code>P0, P2, P4</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=4, B=3, C=1</code></td><td><code>A=0, B=0, C=2</code></td><td><code>A=7, B=4, C=5</code></td></tr>
 <tr><td>4</td><td><code>P0</code></td><td><code>P0, P2</code></td><td><code>A=7, B=4, C=5</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=0, B=1, C=0</code></td><td><code>A=7, B=5, C=5</code></td></tr>
 <tr><td>5</td><td><code>P2</code></td><td><code>P2</code></td><td><code>A=7, B=5, C=5</code></td><td><code>A=6, B=0, C=0</code></td><td><code>A=3, B=0, C=2</code></td><td><code>A=10, B=5, C=7</code></td></tr></tbody></table></div>
+<section class="card">
+          <h3>Granted vs denied request delta</h3>
+          <p><strong>Question answered:</strong> what immediate slack and runnable options disappear between the safe and unsafe request paths?</p>
+          <div class="grid compact-grid">
+            <div class="metric"><strong>Reference granted request</strong><br /><code>sample_banker_request.json</code></div>
+            <div class="metric"><strong>Contrast denied request</strong><br /><code>sample_banker_request_unsafe.json</code></div>
+            <div class="metric"><strong>Shared slack spent</strong><br /><code>C=2</code></div>
+            <div class="metric"><strong>Granted-only slack spent</strong><br /><code>A=1</code></div>
+            <div class="metric"><strong>Denied-only slack spent</strong><br /><code>none</code></div>
+            <div class="metric"><strong>Lost runnable options</strong><br /><code>P1</code></div>
+          </div>
+          <p><strong>Granted first runnable set:</strong> <code>P1</code></p>
+          <p><strong>Denied first runnable set:</strong> <code>none</code></p>
+          <p><strong>Denied blocking:</strong> <code>P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1</code></p>
+          <p><strong>Summary:</strong> sample_banker_request.json keeps the path grantable after spending shared slack C=2; plus granted-only slack A=1; and still leaves first runnable set P1; whereas sample_banker_request_unsafe.json leaves first runnable set none; so runnable option P1 disappears; and blocking becomes P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1.</p>
+        </section>
       </section>
 
     </section>

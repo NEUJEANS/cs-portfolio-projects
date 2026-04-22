@@ -4,6 +4,7 @@
 - Allocation snapshot source: `projects/deadlock-detector-lab/sample_allocation_state.json`
 - Banker's safety source: `projects/deadlock-detector-lab/sample_banker_state.json`
 - Banker's request source: `projects/deadlock-detector-lab/sample_banker_request.json`
+- Banker's contrast request source: `projects/deadlock-detector-lab/sample_banker_request_unsafe.json`
 
 ## Key takeaways
 
@@ -11,6 +12,7 @@
 - Resource-allocation detection still leaves P1, P2 blocked after only P3 can finish.
 - Banker's avoidance keeps the system safe with sequence P1, P3, P4, P0, P2.
 - The sample request from P1 (A=1, B=0, C=2) is granted and still leaves safe sequence P1, P3, P4, P0, P2.
+- sample_banker_request.json keeps the path grantable after spending shared slack C=2; plus granted-only slack A=1; and still leaves first runnable set P1; whereas sample_banker_request_unsafe.json leaves first runnable set none; so runnable option P1 disappears; and blocking becomes P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1.
 
 ## Detection models
 
@@ -62,3 +64,16 @@
 | 3 | `P4` | `P0, P2, P4` | `A=7, B=4, C=3` | `A=4, B=3, C=1` | `A=0, B=0, C=2` | `A=7, B=4, C=5` |
 | 4 | `P0` | `P0, P2` | `A=7, B=4, C=5` | `A=7, B=4, C=3` | `A=0, B=1, C=0` | `A=7, B=5, C=5` |
 | 5 | `P2` | `P2` | `A=7, B=5, C=5` | `A=6, B=0, C=0` | `A=3, B=0, C=2` | `A=10, B=5, C=7` |
+
+### Granted vs denied request delta
+- Question answered: what immediate slack and runnable options disappear between the safe and unsafe request paths?
+- Reference granted request: `sample_banker_request.json`
+- Contrast denied request: `sample_banker_request_unsafe.json`
+- Shared slack spent: `C=2`
+- Granted-only slack spent: `A=1`
+- Denied-only slack spent: `none`
+- Granted first runnable set: `P1`
+- Denied first runnable set: `none`
+- Lost runnable options: `P1`
+- Denied blocking: `P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1`
+- Summary: sample_banker_request.json keeps the path grantable after spending shared slack C=2; plus granted-only slack A=1; and still leaves first runnable set P1; whereas sample_banker_request_unsafe.json leaves first runnable set none; so runnable option P1 disappears; and blocking becomes P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1.

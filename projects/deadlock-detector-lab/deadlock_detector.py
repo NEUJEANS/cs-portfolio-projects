@@ -172,6 +172,8 @@ class DetectionAvoidanceDashboard:
     allocation: AllocationAnalysis
     banker_safety: BankerSafetyAnalysis
     banker_request: BankerRequestAnalysis | None
+    banker_request_contrast: BankerRequestAnalysis | None
+    banker_request_delta_callout: dict[str, object] | None
     key_takeaways: list[str]
 
     def to_dict(self) -> dict[str, object]:
@@ -182,6 +184,8 @@ class DetectionAvoidanceDashboard:
             "allocation": self.allocation.to_dict(),
             "banker_safety": self.banker_safety.to_dict(),
             "banker_request": self.banker_request.to_dict() if self.banker_request else None,
+            "banker_request_contrast": self.banker_request_contrast.to_dict() if self.banker_request_contrast else None,
+            "banker_request_delta_callout": self.banker_request_delta_callout,
         }
 
 
@@ -785,6 +789,9 @@ def build_detection_avoidance_dashboard(
     allocation: AllocationAnalysis,
     banker_safety: BankerSafetyAnalysis,
     banker_request: BankerRequestAnalysis | None,
+    banker_request_contrast: BankerRequestAnalysis | None = None,
+    banker_request_source: str | None = None,
+    banker_request_contrast_source: str | None = None,
 ) -> DetectionAvoidanceDashboard:
     wait_takeaway = (
         f"Wait-for detection finds a concrete cycle among {', '.join(wait_for.blocked_processes)}."
@@ -808,6 +815,7 @@ def build_detection_avoidance_dashboard(
         else "Banker's safety check shows the state is already unsafe, so avoidance would reject further risky moves."
     )
     takeaways = [wait_takeaway, allocation_takeaway, banker_takeaway]
+    banker_request_delta_callout: dict[str, object] | None = None
     if banker_request is not None:
         request_text = _format_resource_vector(banker_request.request)
         request_sequence = _format_process_list(banker_request.safe_sequence)
@@ -818,11 +826,28 @@ def build_detection_avoidance_dashboard(
                 else f"The sample request from {banker_request.process} ({request_text}) is denied because {banker_request.reason}."
             )
         )
+    if banker_request is not None and banker_request_contrast is not None:
+        request_reports = [
+            BankerRequestReport(
+                source=banker_request_source or "banker-request-primary.json",
+                analysis=banker_request,
+            ),
+            BankerRequestReport(
+                source=banker_request_contrast_source or "banker-request-contrast.json",
+                analysis=banker_request_contrast,
+            ),
+        ]
+        delta_callouts = _build_banker_request_delta_callouts(request_reports)
+        if delta_callouts:
+            banker_request_delta_callout = delta_callouts[0]
+            takeaways.append(str(banker_request_delta_callout["summary"]))
     return DetectionAvoidanceDashboard(
         wait_for=wait_for,
         allocation=allocation,
         banker_safety=banker_safety,
         banker_request=banker_request,
+        banker_request_contrast=banker_request_contrast,
+        banker_request_delta_callout=banker_request_delta_callout,
         key_takeaways=takeaways,
     )
 
@@ -1956,6 +1981,7 @@ def render_detection_avoidance_markdown(
     allocation_source: str,
     banker_source: str,
     banker_request_source: str | None,
+    banker_request_contrast_source: str | None,
 ) -> str:
     lines = [
         "# Deadlock detection vs avoidance dashboard",
@@ -1966,6 +1992,8 @@ def render_detection_avoidance_markdown(
     ]
     if banker_request_source:
         lines.append(f"- Banker's request source: `{banker_request_source}`")
+    if banker_request_contrast_source:
+        lines.append(f"- Banker's contrast request source: `{banker_request_contrast_source}`")
     lines.extend(["", "## Key takeaways", ""])
     lines.extend(f"- {takeaway}" for takeaway in dashboard.key_takeaways)
     lines.extend(
@@ -2035,6 +2063,26 @@ def render_detection_avoidance_markdown(
         else:
             lines.append("| 0 | none | none | n/a | n/a | n/a | n/a |")
 
+    if dashboard.banker_request_delta_callout is not None:
+        callout = dashboard.banker_request_delta_callout
+        lines.extend(
+            [
+                "",
+                "### Granted vs denied request delta",
+                "- Question answered: what immediate slack and runnable options disappear between the safe and unsafe request paths?",
+                f"- Reference granted request: `{Path(str(callout['granted_source'])).name}`",
+                f"- Contrast denied request: `{Path(str(callout['denied_source'])).name}`",
+                f"- Shared slack spent: `{_format_resource_vector(callout['shared_slack_spent']) or 'none'}`",
+                f"- Granted-only slack spent: `{_format_resource_vector(callout['granted_only_slack_spent']) or 'none'}`",
+                f"- Denied-only slack spent: `{_format_resource_vector(callout['denied_only_slack_spent']) or 'none'}`",
+                f"- Granted first runnable set: `{_format_process_list(callout['granted_first_runnable'])}`",
+                f"- Denied first runnable set: `{_format_process_list(callout['denied_first_runnable'])}`",
+                f"- Lost runnable options: `{_format_process_list(callout['lost_runnable_options'])}`",
+                f"- Denied blocking: `{_format_blocking_summary(callout['denied_blocking'])}`",
+                f"- Summary: {callout['summary']}",
+            ]
+        )
+
     return "\n".join(lines) + "\n"
 
 
@@ -2044,6 +2092,7 @@ def render_detection_avoidance_html(
     allocation_source: str,
     banker_source: str,
     banker_request_source: str | None,
+    banker_request_contrast_source: str | None,
     wait_edges: list[tuple[str, str]],
     allocation_available: dict[str, int],
     allocation_map: dict[str, dict[str, int]],
@@ -2068,10 +2117,32 @@ def render_detection_avoidance_html(
     if dashboard.banker_request is not None:
         request = dashboard.banker_request
         banker_request_svg = render_banker_request_svg(request, banker_request_source or "banker-request")
+        banker_request_delta_section = ""
+        if dashboard.banker_request_delta_callout is not None:
+            callout = dashboard.banker_request_delta_callout
+            banker_request_delta_section = f"""
+        <section class=\"card\">
+          <h3>Granted vs denied request delta</h3>
+          <p><strong>Question answered:</strong> what immediate slack and runnable options disappear between the safe and unsafe request paths?</p>
+          <div class=\"grid compact-grid\">
+            <div class=\"metric\"><strong>Reference granted request</strong><br /><code>{html.escape(Path(str(callout['granted_source'])).name)}</code></div>
+            <div class=\"metric\"><strong>Contrast denied request</strong><br /><code>{html.escape(Path(str(callout['denied_source'])).name)}</code></div>
+            <div class=\"metric\"><strong>Shared slack spent</strong><br /><code>{html.escape(_format_resource_vector(callout['shared_slack_spent']) or 'none')}</code></div>
+            <div class=\"metric\"><strong>Granted-only slack spent</strong><br /><code>{html.escape(_format_resource_vector(callout['granted_only_slack_spent']) or 'none')}</code></div>
+            <div class=\"metric\"><strong>Denied-only slack spent</strong><br /><code>{html.escape(_format_resource_vector(callout['denied_only_slack_spent']) or 'none')}</code></div>
+            <div class=\"metric\"><strong>Lost runnable options</strong><br /><code>{html.escape(_format_process_list(callout['lost_runnable_options']))}</code></div>
+          </div>
+          <p><strong>Granted first runnable set:</strong> <code>{html.escape(_format_process_list(callout['granted_first_runnable']))}</code></p>
+          <p><strong>Denied first runnable set:</strong> <code>{html.escape(_format_process_list(callout['denied_first_runnable']))}</code></p>
+          <p><strong>Denied blocking:</strong> <code>{html.escape(_format_blocking_summary(callout['denied_blocking']))}</code></p>
+          <p><strong>Summary:</strong> {html.escape(str(callout['summary']))}</p>
+        </section>
+""".strip()
         banker_request_section = f"""
       <section class="card">
         <h2>Banker's request trial</h2>
         <p>Source: <code>{html.escape(banker_request_source or 'n/a')}</code></p>
+        {f'<p>Contrast source: <code>{html.escape(banker_request_contrast_source)}</code></p>' if banker_request_contrast_source else ''}
         <p><strong>Question answered:</strong> should this new request be granted while keeping the system safe?</p>
         <div class="grid compact-grid">
           <div class="metric"><strong>Process</strong><br /><code>{html.escape(request.process)}</code></div>
@@ -2085,6 +2156,7 @@ def render_detection_avoidance_html(
         <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(request.blocking))}</code></p>
         {banker_request_svg}
         <div class="table-wrap">{_render_trace_steps_html_table(request.trace_steps)}</div>
+{banker_request_delta_section}
       </section>
 """
     return f"""<!DOCTYPE html>
@@ -2128,6 +2200,7 @@ def render_detection_avoidance_html(
         <p><span class="tag">allocation</span><code>{html.escape(allocation_source)}</code></p>
         <p><span class="tag">banker safety</span><code>{html.escape(banker_source)}</code></p>
         {f'<p><span class="tag">banker request</span><code>{html.escape(banker_request_source)}</code></p>' if banker_request_source else ''}
+        {f'<p><span class="tag">banker contrast</span><code>{html.escape(banker_request_contrast_source)}</code></p>' if banker_request_contrast_source else ''}
       </div>
       <h2>Key takeaways</h2>
       <ul>{takeaway_items}</ul>
@@ -2284,6 +2357,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional path to a Banker's request JSON file to include in the dashboard",
     )
     dashboard_parser.add_argument(
+        "--banker-contrast-input",
+        help="optional path to a second Banker's request JSON file for a granted-vs-denied dashboard delta callout",
+    )
+    dashboard_parser.add_argument(
         "--markdown-out",
         help="optional path for a combined Markdown dashboard export",
     )
@@ -2366,11 +2443,16 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(args, "html_out", None):
                 html_report = render_banker_request_gallery_html(gallery)
         elif args.command == "dashboard":
+            if getattr(args, "banker_contrast_input", None) and not getattr(args, "banker_request_input", None):
+                raise ValueError("--banker-contrast-input requires --banker-request-input")
             wait_payload = load_json(Path(args.wait_input))
             allocation_payload = load_json(Path(args.allocation_input))
             banker_payload = load_json(Path(args.banker_input))
             banker_request_payload = (
                 load_json(Path(args.banker_request_input)) if getattr(args, "banker_request_input", None) else None
+            )
+            banker_contrast_payload = (
+                load_json(Path(args.banker_contrast_input)) if getattr(args, "banker_contrast_input", None) else None
             )
 
             wait_analysis = analyze_wait_for_graph(wait_payload)
@@ -2379,11 +2461,17 @@ def main(argv: list[str] | None = None) -> int:
             banker_request_analysis = (
                 analyze_banker_request(banker_request_payload) if banker_request_payload is not None else None
             )
+            banker_contrast_analysis = (
+                analyze_banker_request(banker_contrast_payload) if banker_contrast_payload is not None else None
+            )
             dashboard = build_detection_avoidance_dashboard(
                 wait_analysis,
                 allocation_analysis,
                 banker_analysis,
                 banker_request_analysis,
+                banker_contrast_analysis,
+                getattr(args, "banker_request_input", None),
+                getattr(args, "banker_contrast_input", None),
             )
             result = dashboard.to_dict()
             wait_edges = [
@@ -2401,6 +2489,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.allocation_input,
                     args.banker_input,
                     getattr(args, "banker_request_input", None),
+                    getattr(args, "banker_contrast_input", None),
                 )
             if (
                 getattr(args, "html_out", None)
@@ -2414,6 +2503,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.allocation_input,
                     args.banker_input,
                     getattr(args, "banker_request_input", None),
+                    getattr(args, "banker_contrast_input", None),
                     wait_edges,
                     allocation_available,
                     allocation_map,

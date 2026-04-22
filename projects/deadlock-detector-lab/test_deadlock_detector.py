@@ -448,6 +448,7 @@ class DeadlockDetectorTests(unittest.TestCase):
             allocation_payload = Path(tmpdir) / "allocation.json"
             banker_payload = Path(tmpdir) / "banker.json"
             banker_request_payload = Path(tmpdir) / "banker-request.json"
+            banker_contrast_payload = Path(tmpdir) / "banker-request-unsafe.json"
             markdown_out = Path(tmpdir) / "dashboard.md"
             html_out = Path(tmpdir) / "dashboard.html"
 
@@ -512,6 +513,30 @@ class DeadlockDetectorTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            banker_contrast_payload.write_text(
+                json.dumps(
+                    {
+                        "available": {"A": 3, "B": 3, "C": 2},
+                        "allocation": {
+                            "P0": {"A": 0, "B": 1, "C": 0},
+                            "P1": {"A": 2, "B": 0, "C": 0},
+                            "P2": {"A": 3, "B": 0, "C": 2},
+                            "P3": {"A": 2, "B": 1, "C": 1},
+                            "P4": {"A": 0, "B": 0, "C": 2},
+                        },
+                        "max": {
+                            "P0": {"A": 7, "B": 5, "C": 3},
+                            "P1": {"A": 3, "B": 2, "C": 2},
+                            "P2": {"A": 9, "B": 0, "C": 2},
+                            "P3": {"A": 2, "B": 2, "C": 2},
+                            "P4": {"A": 4, "B": 3, "C": 3},
+                        },
+                        "process": "P0",
+                        "request": {"A": 0, "B": 0, "C": 2},
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             completed = subprocess.run(
                 [
@@ -526,6 +551,8 @@ class DeadlockDetectorTests(unittest.TestCase):
                     str(banker_payload),
                     "--banker-request-input",
                     str(banker_request_payload),
+                    "--banker-contrast-input",
+                    str(banker_contrast_payload),
                     "--markdown-out",
                     str(markdown_out),
                     "--html-out",
@@ -543,15 +570,24 @@ class DeadlockDetectorTests(unittest.TestCase):
             self.assertEqual(result["model"], "deadlock-detection-vs-avoidance")
             self.assertTrue(result["wait_for"]["deadlocked"])
             self.assertTrue(result["banker_request"]["granted"])
-            self.assertGreaterEqual(len(result["key_takeaways"]), 4)
+            self.assertFalse(result["banker_request_contrast"]["granted"])
+            self.assertEqual(result["banker_request_delta_callout"]["shared_slack_spent"], {"C": 2})
+            self.assertEqual(result["banker_request_delta_callout"]["lost_runnable_options"], ["P1"])
+            self.assertGreaterEqual(len(result["key_takeaways"]), 5)
             self.assertIn("# Deadlock detection vs avoidance dashboard", markdown)
             self.assertIn("## Detection models", markdown)
             self.assertIn("Question answered: is there already a cycle among the waiting processes?", markdown)
             self.assertIn("### Banker's request trial", markdown)
+            self.assertIn("### Granted vs denied request delta", markdown)
+            self.assertIn("Lost runnable options: `P1`", markdown)
+            self.assertIn("banker-request-unsafe.json", markdown)
             self.assertIn("Deadlock detection vs avoidance dashboard", html_report)
             self.assertIn("Wait-for graph detection", html_report)
             self.assertIn("Banker's safety analysis", html_report)
             self.assertIn("Banker's request trial", html_report)
+            self.assertIn("Granted vs denied request delta", html_report)
+            self.assertIn("Lost runnable options", html_report)
+            self.assertIn("banker-request-unsafe.json", html_report)
             self.assertIn("algorithm safety view", html_report)
             self.assertIn("Decision takeaway", html_report)
             self.assertIn("Evaluated available vector", html_report)
@@ -611,7 +647,86 @@ class DeadlockDetectorTests(unittest.TestCase):
             result = json.loads(completed.stdout)
             markdown = markdown_out.read_text(encoding="utf-8")
             self.assertIsNone(result["banker_request"])
+            self.assertIsNone(result["banker_request_delta_callout"])
             self.assertNotIn("### Banker's request trial", markdown)
+
+    def test_cli_dashboard_requires_primary_request_for_contrast(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wait_payload = Path(tmpdir) / "wait.json"
+            allocation_payload = Path(tmpdir) / "allocation.json"
+            banker_payload = Path(tmpdir) / "banker.json"
+            banker_contrast_payload = Path(tmpdir) / "banker-request-unsafe.json"
+
+            wait_payload.write_text(
+                json.dumps({"edges": [{"from": "P1", "to": "P2"}, {"from": "P2", "to": "P1"}]}),
+                encoding="utf-8",
+            )
+            allocation_payload.write_text(
+                json.dumps(
+                    {
+                        "available": {"printer": 0, "scanner": 0},
+                        "allocation": {"P1": {"printer": 1}, "P2": {"scanner": 1}},
+                        "request": {"P1": {"scanner": 1}, "P2": {"printer": 1}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            banker_payload.write_text(
+                json.dumps(
+                    {
+                        "available": {"A": 1, "B": 1},
+                        "allocation": {"P1": {"A": 1, "B": 0}},
+                        "max": {"P1": {"A": 1, "B": 1}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            banker_contrast_payload.write_text(
+                json.dumps(
+                    {
+                        "available": {"A": 3, "B": 3, "C": 2},
+                        "allocation": {
+                            "P0": {"A": 0, "B": 1, "C": 0},
+                            "P1": {"A": 2, "B": 0, "C": 0},
+                            "P2": {"A": 3, "B": 0, "C": 2},
+                            "P3": {"A": 2, "B": 1, "C": 1},
+                            "P4": {"A": 0, "B": 0, "C": 2},
+                        },
+                        "max": {
+                            "P0": {"A": 7, "B": 5, "C": 3},
+                            "P1": {"A": 3, "B": 2, "C": 2},
+                            "P2": {"A": 9, "B": 0, "C": 2},
+                            "P3": {"A": 2, "B": 2, "C": 2},
+                            "P4": {"A": 4, "B": 3, "C": 3},
+                        },
+                        "process": "P0",
+                        "request": {"A": 0, "B": 0, "C": 2},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "projects/deadlock-detector-lab/deadlock_detector.py",
+                    "dashboard",
+                    "--wait-input",
+                    str(wait_payload),
+                    "--allocation-input",
+                    str(allocation_payload),
+                    "--banker-input",
+                    str(banker_payload),
+                    "--banker-contrast-input",
+                    str(banker_contrast_payload),
+                ],
+                capture_output=True,
+                text=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--banker-contrast-input requires --banker-request-input", completed.stderr)
 
     def test_cli_compares_banker_request_gallery_exports(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
