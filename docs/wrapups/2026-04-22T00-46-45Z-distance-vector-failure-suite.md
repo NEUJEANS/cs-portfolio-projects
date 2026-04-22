@@ -20,7 +20,7 @@
 - pass 3: added a reusable artifact-regeneration script and documented the regeneration path in the README
 
 ## Commit
-- commit: `0214341`
+- commit: `3123007`
 
 ## Next step
 - add an HTML or SVG rendering path for the multi-scenario suite so the scorecard can be used directly in portfolio screenshots and project pages
