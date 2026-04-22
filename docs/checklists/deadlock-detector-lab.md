@@ -83,3 +83,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-22 Banker request gallery slice
+- [x] inspect the latest deadlock-detector wrap-up and confirm the next weak spot is missing granted-vs-denied request comparison artifacts
+- [x] capture short notes for a side-by-side Banker request gallery
+- [x] refresh the Banker request decision rules and do a quick self-test for granted versus unsafe trials
+- [x] add resumable checklist coverage for this slice
+- [x] implement a new `compare-banker-requests` command with Markdown and HTML gallery exports
+- [x] add a deterministic unsafe sample request input and commit gallery artifacts under `docs/artifacts/deadlock-detector-lab/`
+- [x] refresh README usage notes for the new comparison workflow
+- [x] extend automated tests for the gallery CLI path
+- [x] run project tests and gallery artifact-generation smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

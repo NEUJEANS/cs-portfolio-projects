@@ -613,6 +613,74 @@ class DeadlockDetectorTests(unittest.TestCase):
             self.assertIsNone(result["banker_request"])
             self.assertNotIn("### Banker's request trial", markdown)
 
+    def test_cli_compares_banker_request_gallery_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            safe_payload = Path(tmpdir) / "safe-request.json"
+            unsafe_payload = Path(tmpdir) / "unsafe-request.json"
+            markdown_out = Path(tmpdir) / "gallery.md"
+            html_out = Path(tmpdir) / "gallery.html"
+
+            base_state = {
+                "available": {"A": 3, "B": 3, "C": 2},
+                "allocation": {
+                    "P0": {"A": 0, "B": 1, "C": 0},
+                    "P1": {"A": 2, "B": 0, "C": 0},
+                    "P2": {"A": 3, "B": 0, "C": 2},
+                    "P3": {"A": 2, "B": 1, "C": 1},
+                    "P4": {"A": 0, "B": 0, "C": 2},
+                },
+                "max": {
+                    "P0": {"A": 7, "B": 5, "C": 3},
+                    "P1": {"A": 3, "B": 2, "C": 2},
+                    "P2": {"A": 9, "B": 0, "C": 2},
+                    "P3": {"A": 2, "B": 2, "C": 2},
+                    "P4": {"A": 4, "B": 3, "C": 3},
+                },
+            }
+            safe_payload.write_text(
+                json.dumps({**base_state, "process": "P1", "request": {"A": 1, "B": 0, "C": 2}}),
+                encoding="utf-8",
+            )
+            unsafe_payload.write_text(
+                json.dumps({**base_state, "process": "P0", "request": {"A": 0, "B": 0, "C": 2}}),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "projects/deadlock-detector-lab/deadlock_detector.py",
+                    "compare-banker-requests",
+                    str(safe_payload),
+                    str(unsafe_payload),
+                    "--markdown-out",
+                    str(markdown_out),
+                    "--html-out",
+                    str(html_out),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            result = json.loads(completed.stdout)
+            markdown = markdown_out.read_text(encoding="utf-8")
+            html_report = html_out.read_text(encoding="utf-8")
+            self.assertEqual(result["model"], "banker-request-gallery")
+            self.assertEqual(result["decision_totals"], {"granted": 1, "denied": 1})
+            self.assertEqual(len(result["request_reports"]), 2)
+            self.assertIn("# Banker's algorithm request gallery", markdown)
+            self.assertIn("safe-request.json", markdown)
+            self.assertIn("unsafe-request.json", markdown)
+            self.assertIn("First runnable set", markdown)
+            self.assertIn("Banker's algorithm request gallery", html_report)
+            self.assertIn("Comparison table", html_report)
+            self.assertIn("safe-request.json", html_report)
+            self.assertIn("unsafe-request.json", html_report)
+            self.assertIn("First runnable set", html_report)
+            self.assertIn("algorithm request trial", html_report)
+
     def test_cli_rejects_negative_resource_counts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             payload = Path(tmpdir) / "alloc.json"

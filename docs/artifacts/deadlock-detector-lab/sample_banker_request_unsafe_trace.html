@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Banker's algorithm request trial</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 56px; }
+    .card { background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .metric { background: #ecfeff; border-radius: 14px; padding: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.95em; }
+    .table-wrap { overflow-x: auto; }
+    svg { width: 100%; height: auto; display: block; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Banker's algorithm request trial</h1>
+      <p>This artifact answers whether one concrete request should be granted while keeping the system safe.</p>
+      <div class="grid">
+        <div class="metric"><strong>Source</strong><br /><code>projects/deadlock-detector-lab/sample_banker_request_unsafe.json</code></div>
+        <div class="metric"><strong>Process</strong><br /><code>P0</code></div>
+        <div class="metric"><strong>Request</strong><br /><code>A=0, B=0, C=2</code></div>
+        <div class="metric"><strong>Decision</strong><br />denied</div>
+      </div>
+    </section>
+
+    <section class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 640" role="img" aria-labelledby="banker-request-projects-deadlock-detector-lab-sample-banker-request-unsafe-json-title banker-request-projects-deadlock-detector-lab-sample-banker-request-unsafe-json-desc">
+  <title id="banker-request-projects-deadlock-detector-lab-sample-banker-request-unsafe-json-title">Banker's algorithm request visualization for projects/deadlock-detector-lab/sample_banker_request_unsafe.json</title>
+  <desc id="banker-request-projects-deadlock-detector-lab-sample-banker-request-unsafe-json-desc">A static summary of the evaluated Banker's algorithm request, including the trial decision and per-step work evolution.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .metric-card { fill: #ecfeff; stroke: #a5f3fc; stroke-width: 1.2; }
+    .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; }
+    .accent-panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; }
+    .trace-card { fill: #fefce8; stroke: #fde68a; stroke-width: 1.2; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }
+    .section-title { fill: #0f172a; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+    .metric-value { fill: #0f172a; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1120" height="640" rx="24" />
+  <rect class="card" x="24" y="24" width="1072" height="592" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Banker&#x27;s algorithm request trial</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_banker_request_unsafe.json</text>
+<text x="1068.0" y="58.0" text-anchor="end" class="muted">denied</text>
+<rect class="metric-card" x="42.0" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="56.0" y="140.0" text-anchor="start" class="section-title">Decision</text>
+<text x="56.0" y="164.0" text-anchor="start" class="metric-value">denied</text>
+<rect class="metric-card" x="313.5" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="327.5" y="140.0" text-anchor="start" class="section-title">Safe after trial</text>
+<text x="327.5" y="164.0" text-anchor="start" class="metric-value">no</text>
+<rect class="metric-card" x="585.0" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="599.0" y="140.0" text-anchor="start" class="section-title">Safe sequence</text>
+<text x="599.0" y="164.0" text-anchor="start" class="metric-value">none</text>
+<rect class="metric-card" x="856.5" y="112.0" width="257.5" height="92.0" rx="18" />
+<text x="870.5" y="140.0" text-anchor="start" class="section-title">Trial available</text>
+<text x="870.5" y="164.0" text-anchor="start" class="metric-value">A=3, B=3, C=0</text>
+<rect class="panel" x="42.0" y="224.0" width="360.0" height="236.0" rx="18" />
+<text x="56.0" y="252.0" text-anchor="start" class="section-title">Request</text>
+<text x="56.0" y="274.0" text-anchor="start" class="tiny">Process P0: A=0, B=0, C=2</text>
+<rect class="accent-panel" x="416.0" y="224.0" width="662.0" height="236.0" rx="18" />
+<text x="430.0" y="252.0" text-anchor="start" class="section-title">Decision takeaway</text>
+<text x="430.0" y="274.0" text-anchor="start" class="tiny">Question answered: can this request be granted</text>
+<text x="430.0" y="291.0" text-anchor="start" class="tiny">while keeping the system safe?</text>
+<text x="430.0" y="325.0" text-anchor="start" class="tiny">Reason:</text>
+<text x="430.0" y="342.0" text-anchor="start" class="tiny">request would move the system into an unsafe</text>
+<text x="430.0" y="359.0" text-anchor="start" class="tiny">state</text>
+<text x="430.0" y="393.0" text-anchor="start" class="tiny">Blocking summary:</text>
+<text x="430.0" y="410.0" text-anchor="start" class="tiny">P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1;</text>
+<text x="430.0" y="427.0" text-anchor="start" class="tiny">P4: A=1, C=1</text>
+<text x="42.0" y="470.0" text-anchor="start" class="section-title">Trial safety trace</text>
+<rect class="trace-card" x="42.0" y="480.0" width="1072.0" height="112.0" rx="18" />
+<text x="56.0" y="508.0" text-anchor="start" class="section-title">No runnable step</text>
+<text x="56.0" y="530.0" text-anchor="start" class="tiny">No process can finish after applying the trial request.</text>
+</svg></section>
+
+    <section class="card">
+      <h2>Trial details</h2>
+      <p><strong>Reason:</strong> request would move the system into an unsafe state</p>
+      <p><strong>Safe sequence:</strong> <code>none</code></p>
+      <p><strong>Trial available vector:</strong> <code>A=3, B=3, C=0</code></p>
+      <p><strong>Blocking summary:</strong> <code>P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1</code></p>
+      <div class="table-wrap"><p>No runnable trace steps were found for this state.</p></div>
+    </section>
+  </main>
+</body>
+</html>

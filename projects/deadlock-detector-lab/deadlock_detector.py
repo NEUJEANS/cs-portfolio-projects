@@ -138,6 +138,33 @@ class BankerRequestAnalysis:
 
 
 @dataclass(slots=True)
+class BankerRequestReport:
+    source: str
+    analysis: BankerRequestAnalysis
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source": self.source,
+            "analysis": self.analysis.to_dict(),
+        }
+
+
+@dataclass(slots=True)
+class BankerRequestGallery:
+    request_reports: list[BankerRequestReport]
+    decision_totals: dict[str, int]
+    highlights: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model": "banker-request-gallery",
+            "decision_totals": self.decision_totals,
+            "highlights": self.highlights,
+            "request_reports": [report.to_dict() for report in self.request_reports],
+        }
+
+
+@dataclass(slots=True)
 class DetectionAvoidanceDashboard:
     wait_for: WaitForAnalysis
     allocation: AllocationAnalysis
@@ -567,6 +594,43 @@ def analyze_banker_request(payload: dict[str, object]) -> BankerRequestAnalysis:
         trial_need=trial_need,
         blocking=safety.blocking,
         trace_steps=safety.trace_steps,
+    )
+
+
+def build_banker_request_gallery(request_reports: list[BankerRequestReport]) -> BankerRequestGallery:
+    if len(request_reports) < 2:
+        raise ValueError("banker request gallery needs at least two request inputs")
+
+    granted = sum(1 for report in request_reports if report.analysis.granted)
+    denied = len(request_reports) - granted
+    highlights: list[str] = []
+
+    if granted and denied:
+        highlights.append(
+            f"This gallery contrasts {granted} granted request{'s' if granted != 1 else ''} with {denied} denied request{'s' if denied != 1 else ''}."
+        )
+    elif granted:
+        highlights.append("Every request in this gallery is safe to grant.")
+    else:
+        highlights.append("Every request in this gallery is denied before or during the safety check.")
+
+    for report in request_reports:
+        label = Path(report.source).name
+        analysis = report.analysis
+        request_text = _format_resource_vector(analysis.request)
+        if analysis.granted:
+            highlights.append(
+                f"{label}: {analysis.process} requesting {request_text} stays safe with sequence {_format_process_list(analysis.safe_sequence)}."
+            )
+        else:
+            highlights.append(
+                f"{label}: {analysis.process} requesting {request_text} is denied because {analysis.reason}; the trial leaves no runnable process and blocking is {_format_blocking_summary(analysis.blocking)}."
+            )
+
+    return BankerRequestGallery(
+        request_reports=request_reports,
+        decision_totals={"granted": granted, "denied": denied},
+        highlights=highlights,
     )
 
 
@@ -1139,6 +1203,129 @@ def render_banker_request_html(analysis: BankerRequestAnalysis, source_label: st
 """
 
 
+def render_banker_request_gallery_markdown(gallery: BankerRequestGallery) -> str:
+    lines = [
+        "# Banker's algorithm request gallery",
+        "",
+        f"- Request count: {len(gallery.request_reports)}",
+        f"- Granted: {gallery.decision_totals['granted']}",
+        f"- Denied: {gallery.decision_totals['denied']}",
+        "",
+        "## Highlights",
+        "",
+    ]
+    lines.extend(f"- {highlight}" for highlight in gallery.highlights)
+    lines.extend(
+        [
+            "",
+            "## Request comparison",
+            "",
+            "| Source | Process | Request | Decision | First runnable set | Safe sequence | Evaluated available | Blocking |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for report in gallery.request_reports:
+        analysis = report.analysis
+        evaluated_available = analysis.trial_available if analysis.trial_available is not None else analysis.available
+        lines.append(
+            f"| `{Path(report.source).name}` | `{analysis.process}` | `{_format_resource_vector(analysis.request)}` | {'granted' if analysis.granted else 'denied'} | `{_first_runnable_set(analysis)}` | `{_format_process_list(analysis.safe_sequence)}` | `{_format_resource_vector(evaluated_available)}` | `{_format_blocking_summary(analysis.blocking)}` |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_banker_request_gallery_html(gallery: BankerRequestGallery) -> str:
+    request_cards: list[str] = []
+    for report in gallery.request_reports:
+        analysis = report.analysis
+        evaluated_available = analysis.trial_available if analysis.trial_available is not None else analysis.available
+        label = Path(report.source).name
+        svg = render_banker_request_svg(analysis, report.source).strip()
+        request_cards.append(
+            f"""
+      <section class=\"card request-card {'granted' if analysis.granted else 'denied'}\">
+        <h2>{html.escape(label)}</h2>
+        <p><strong>Decision:</strong> {'granted' if analysis.granted else 'denied'}</p>
+        <p><strong>Process:</strong> <code>{html.escape(analysis.process)}</code></p>
+        <p><strong>Request:</strong> <code>{html.escape(_format_resource_vector(analysis.request))}</code></p>
+        <p><strong>Reason:</strong> {html.escape(analysis.reason)}</p>
+        <p><strong>First runnable set:</strong> <code>{html.escape(_first_runnable_set(analysis))}</code></p>
+        <p><strong>Safe sequence:</strong> <code>{html.escape(_format_process_list(analysis.safe_sequence))}</code></p>
+        <p><strong>Evaluated available:</strong> <code>{html.escape(_format_resource_vector(evaluated_available))}</code></p>
+        <p><strong>Blocking:</strong> <code>{html.escape(_format_blocking_summary(analysis.blocking))}</code></p>
+        {svg}
+      </section>
+""".rstrip()
+        )
+
+    request_rows = "\n".join(
+        "<tr>"
+        f"<td><code>{html.escape(Path(report.source).name)}</code></td>"
+        f"<td><code>{html.escape(report.analysis.process)}</code></td>"
+        f"<td><code>{html.escape(_format_resource_vector(report.analysis.request))}</code></td>"
+        f"<td>{'granted' if report.analysis.granted else 'denied'}</td>"
+        f"<td><code>{html.escape(_first_runnable_set(report.analysis))}</code></td>"
+        f"<td><code>{html.escape(_format_process_list(report.analysis.safe_sequence))}</code></td>"
+        f"<td><code>{html.escape(_format_resource_vector(report.analysis.trial_available if report.analysis.trial_available is not None else report.analysis.available))}</code></td>"
+        f"<td><code>{html.escape(_format_blocking_summary(report.analysis.blocking))}</code></td>"
+        "</tr>"
+        for report in gallery.request_reports
+    )
+    highlight_items = "\n".join(f"<li>{html.escape(highlight)}</li>" for highlight in gallery.highlights)
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>Banker's algorithm request gallery</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1380px; margin: 0 auto; padding: 32px 24px 56px; }}
+    .card {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }}
+    .request-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(620px, 1fr)); gap: 20px; align-items: start; }}
+    .metric {{ background: #eff6ff; border-radius: 14px; padding: 14px; }}
+    .request-card.granted {{ border-color: #86efac; }}
+    .request-card.denied {{ border-color: #fca5a5; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }}
+    th, td {{ border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }}
+    th {{ font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }}
+    code {{ font-family: \"SFMono-Regular\", Consolas, monospace; font-size: 0.95em; }}
+    .table-wrap {{ overflow-x: auto; }}
+    svg {{ width: 100%; height: auto; display: block; margin-top: 16px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"card\">
+      <h1>Banker's algorithm request gallery</h1>
+      <p>This gallery compares multiple request trials side by side so granted and denied paths can be explained in one glance.</p>
+      <div class=\"grid\">
+        <div class=\"metric\"><strong>Requests</strong><br />{len(gallery.request_reports)}</div>
+        <div class=\"metric\"><strong>Granted</strong><br />{gallery.decision_totals['granted']}</div>
+        <div class=\"metric\"><strong>Denied</strong><br />{gallery.decision_totals['denied']}</div>
+      </div>
+      <h2>Highlights</h2>
+      <ul>{highlight_items}</ul>
+    </section>
+
+    <section class=\"card\">
+      <h2>Comparison table</h2>
+      <div class=\"table-wrap\">
+        <table>
+          <thead><tr><th>Source</th><th>Process</th><th>Request</th><th>Decision</th><th>First runnable set</th><th>Safe sequence</th><th>Evaluated available</th><th>Blocking</th></tr></thead>
+          <tbody>{request_rows}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class=\"request-grid\">
+      {' '.join(request_cards)}
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 def render_wait_graph_svg(analysis: WaitForAnalysis, source_label: str, edges: list[tuple[str, str]]) -> str:
     diagram_id = _svg_id(f"wait-{source_label}")
     node_count = max(len(analysis.processes), 1)
@@ -1572,6 +1759,12 @@ def _format_blocking_summary(blocking: dict[str, dict[str, int]]) -> str:
     return "; ".join(parts)
 
 
+def _first_runnable_set(analysis: BankerRequestAnalysis) -> str:
+    if not analysis.trace_steps:
+        return "none"
+    return _format_process_list(analysis.trace_steps[0].runnable_processes)
+
+
 def _render_trace_steps_html_table(steps: list[BankerTraceStep]) -> str:
     if not steps:
         return "<p>No runnable trace steps were found for this state.</p>"
@@ -1891,6 +2084,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional path for a static Banker's request HTML export",
     )
 
+    banker_request_gallery_parser = subparsers.add_parser(
+        "compare-banker-requests",
+        help="compare multiple Banker's algorithm request trials side by side",
+    )
+    banker_request_gallery_parser.add_argument(
+        "inputs",
+        nargs="+",
+        help="two or more Banker's request JSON files to compare",
+    )
+    banker_request_gallery_parser.add_argument(
+        "--markdown-out",
+        help="optional path for a side-by-side Banker's request gallery markdown export",
+    )
+    banker_request_gallery_parser.add_argument(
+        "--html-out",
+        help="optional path for a side-by-side Banker's request gallery HTML export",
+    )
+
     dashboard_parser = subparsers.add_parser(
         "dashboard",
         help="build a combined deadlock detection vs avoidance dashboard from sample inputs",
@@ -1976,6 +2187,22 @@ def main(argv: list[str] | None = None) -> int:
                 svg = render_banker_request_svg(analysis, args.input)
             if getattr(args, "html_out", None):
                 html_report = render_banker_request_html(analysis, args.input)
+        elif args.command == "compare-banker-requests":
+            request_reports: list[BankerRequestReport] = []
+            for input_path in args.inputs:
+                payload = load_json(Path(input_path))
+                request_reports.append(
+                    BankerRequestReport(
+                        source=input_path,
+                        analysis=analyze_banker_request(payload),
+                    )
+                )
+            gallery = build_banker_request_gallery(request_reports)
+            result = gallery.to_dict()
+            if getattr(args, "markdown_out", None):
+                markdown = render_banker_request_gallery_markdown(gallery)
+            if getattr(args, "html_out", None):
+                html_report = render_banker_request_gallery_html(gallery)
         elif args.command == "dashboard":
             wait_payload = load_json(Path(args.wait_input))
             allocation_payload = load_json(Path(args.allocation_input))

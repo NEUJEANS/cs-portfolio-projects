@@ -103,6 +103,17 @@ python3 projects/deadlock-detector-lab/deadlock_detector.py request-banker \
   --html-out docs/artifacts/deadlock-detector-lab/sample_banker_request_trace.html
 ```
 
+Compare safe and unsafe Banker's request trials side by side:
+
+```bash
+python3 projects/deadlock-detector-lab/deadlock_detector.py compare-banker-requests \
+  projects/deadlock-detector-lab/sample_banker_request.json \
+  projects/deadlock-detector-lab/sample_banker_request_unsafe.json \
+  --markdown-out docs/artifacts/deadlock-detector-lab/sample_banker_request_gallery.md \
+  --html-out docs/artifacts/deadlock-detector-lab/sample_banker_request_gallery.html \
+  > docs/artifacts/deadlock-detector-lab/sample_banker_request_gallery.json
+```
+
 Build one combined dashboard for the wait-for graph, allocation snapshot, and Banker's traces:
 
 ```bash
@@ -150,4 +161,4 @@ python3 -m unittest projects/deadlock-detector-lab/test_deadlock_detector.py
 
 ## Future improvements
 - export Graphviz `.dot` output for teams that want to post-process the same layouts externally
-- add a safe-vs-unsafe Banker's scenario gallery so one glance shows what changed between granted and denied requests
+- add a small delta-focused callout that explicitly highlights which resource slack vanished between the granted and denied request paths

@@ -1,0 +1,451 @@
+{
+  "decision_totals": {
+    "denied": 1,
+    "granted": 1
+  },
+  "highlights": [
+    "This gallery contrasts 1 granted request with 1 denied request.",
+    "sample_banker_request.json: P1 requesting A=1, B=0, C=2 stays safe with sequence P1, P3, P4, P0, P2.",
+    "sample_banker_request_unsafe.json: P0 requesting A=0, B=0, C=2 is denied because request would move the system into an unsafe state; the trial leaves no runnable process and blocking is P0: A=4, B=1, C=1; P1: C=2; P2: A=3; P3: C=1; P4: A=1, C=1."
+  ],
+  "model": "banker-request-gallery",
+  "request_reports": [
+    {
+      "analysis": {
+        "allocation": {
+          "P0": {
+            "A": 0,
+            "B": 1,
+            "C": 0
+          },
+          "P1": {
+            "A": 3,
+            "B": 0,
+            "C": 2
+          },
+          "P2": {
+            "A": 3,
+            "B": 0,
+            "C": 2
+          },
+          "P3": {
+            "A": 2,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 0,
+            "B": 0,
+            "C": 2
+          }
+        },
+        "available": {
+          "A": 2,
+          "B": 3,
+          "C": 0
+        },
+        "blocking": {},
+        "granted": true,
+        "model": "banker-request",
+        "need": {
+          "P0": {
+            "A": 7,
+            "B": 4,
+            "C": 3
+          },
+          "P1": {
+            "A": 0,
+            "B": 2,
+            "C": 0
+          },
+          "P2": {
+            "A": 6,
+            "B": 0,
+            "C": 0
+          },
+          "P3": {
+            "A": 0,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 4,
+            "B": 3,
+            "C": 1
+          }
+        },
+        "process": "P1",
+        "reason": "request can be granted safely",
+        "request": {
+          "A": 1,
+          "B": 0,
+          "C": 2
+        },
+        "safe": true,
+        "safe_sequence": [
+          "P1",
+          "P3",
+          "P4",
+          "P0",
+          "P2"
+        ],
+        "trace_steps": [
+          {
+            "allocation_released": {
+              "A": 3,
+              "B": 0,
+              "C": 2
+            },
+            "need": {
+              "A": 0,
+              "B": 2,
+              "C": 0
+            },
+            "process": "P1",
+            "runnable_processes": [
+              "P1"
+            ],
+            "step": 1,
+            "work_after": {
+              "A": 5,
+              "B": 3,
+              "C": 2
+            },
+            "work_before": {
+              "A": 2,
+              "B": 3,
+              "C": 0
+            }
+          },
+          {
+            "allocation_released": {
+              "A": 2,
+              "B": 1,
+              "C": 1
+            },
+            "need": {
+              "A": 0,
+              "B": 1,
+              "C": 1
+            },
+            "process": "P3",
+            "runnable_processes": [
+              "P3",
+              "P4"
+            ],
+            "step": 2,
+            "work_after": {
+              "A": 7,
+              "B": 4,
+              "C": 3
+            },
+            "work_before": {
+              "A": 5,
+              "B": 3,
+              "C": 2
+            }
+          },
+          {
+            "allocation_released": {
+              "A": 0,
+              "B": 0,
+              "C": 2
+            },
+            "need": {
+              "A": 4,
+              "B": 3,
+              "C": 1
+            },
+            "process": "P4",
+            "runnable_processes": [
+              "P0",
+              "P2",
+              "P4"
+            ],
+            "step": 3,
+            "work_after": {
+              "A": 7,
+              "B": 4,
+              "C": 5
+            },
+            "work_before": {
+              "A": 7,
+              "B": 4,
+              "C": 3
+            }
+          },
+          {
+            "allocation_released": {
+              "A": 0,
+              "B": 1,
+              "C": 0
+            },
+            "need": {
+              "A": 7,
+              "B": 4,
+              "C": 3
+            },
+            "process": "P0",
+            "runnable_processes": [
+              "P0",
+              "P2"
+            ],
+            "step": 4,
+            "work_after": {
+              "A": 7,
+              "B": 5,
+              "C": 5
+            },
+            "work_before": {
+              "A": 7,
+              "B": 4,
+              "C": 5
+            }
+          },
+          {
+            "allocation_released": {
+              "A": 3,
+              "B": 0,
+              "C": 2
+            },
+            "need": {
+              "A": 6,
+              "B": 0,
+              "C": 0
+            },
+            "process": "P2",
+            "runnable_processes": [
+              "P2"
+            ],
+            "step": 5,
+            "work_after": {
+              "A": 10,
+              "B": 5,
+              "C": 7
+            },
+            "work_before": {
+              "A": 7,
+              "B": 5,
+              "C": 5
+            }
+          }
+        ],
+        "trial_allocation": {
+          "P0": {
+            "A": 0,
+            "B": 1,
+            "C": 0
+          },
+          "P1": {
+            "A": 3,
+            "B": 0,
+            "C": 2
+          },
+          "P2": {
+            "A": 3,
+            "B": 0,
+            "C": 2
+          },
+          "P3": {
+            "A": 2,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 0,
+            "B": 0,
+            "C": 2
+          }
+        },
+        "trial_available": {
+          "A": 2,
+          "B": 3,
+          "C": 0
+        },
+        "trial_need": {
+          "P0": {
+            "A": 7,
+            "B": 4,
+            "C": 3
+          },
+          "P1": {
+            "A": 0,
+            "B": 2,
+            "C": 0
+          },
+          "P2": {
+            "A": 6,
+            "B": 0,
+            "C": 0
+          },
+          "P3": {
+            "A": 0,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 4,
+            "B": 3,
+            "C": 1
+          }
+        }
+      },
+      "source": "projects/deadlock-detector-lab/sample_banker_request.json"
+    },
+    {
+      "analysis": {
+        "allocation": {
+          "P0": {
+            "A": 0,
+            "B": 1,
+            "C": 0
+          },
+          "P1": {
+            "A": 2,
+            "B": 0,
+            "C": 0
+          },
+          "P2": {
+            "A": 3,
+            "B": 0,
+            "C": 2
+          },
+          "P3": {
+            "A": 2,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 0,
+            "B": 0,
+            "C": 2
+          }
+        },
+        "available": {
+          "A": 3,
+          "B": 3,
+          "C": 2
+        },
+        "blocking": {
+          "P0": {
+            "A": 4,
+            "B": 1,
+            "C": 1
+          },
+          "P1": {
+            "C": 2
+          },
+          "P2": {
+            "A": 3
+          },
+          "P3": {
+            "C": 1
+          },
+          "P4": {
+            "A": 1,
+            "C": 1
+          }
+        },
+        "granted": false,
+        "model": "banker-request",
+        "need": {
+          "P0": {
+            "A": 7,
+            "B": 4,
+            "C": 3
+          },
+          "P1": {
+            "A": 1,
+            "B": 2,
+            "C": 2
+          },
+          "P2": {
+            "A": 6,
+            "B": 0,
+            "C": 0
+          },
+          "P3": {
+            "A": 0,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 4,
+            "B": 3,
+            "C": 1
+          }
+        },
+        "process": "P0",
+        "reason": "request would move the system into an unsafe state",
+        "request": {
+          "A": 0,
+          "B": 0,
+          "C": 2
+        },
+        "safe": false,
+        "safe_sequence": [],
+        "trace_steps": [],
+        "trial_allocation": {
+          "P0": {
+            "A": 0,
+            "B": 1,
+            "C": 2
+          },
+          "P1": {
+            "A": 2,
+            "B": 0,
+            "C": 0
+          },
+          "P2": {
+            "A": 3,
+            "B": 0,
+            "C": 2
+          },
+          "P3": {
+            "A": 2,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 0,
+            "B": 0,
+            "C": 2
+          }
+        },
+        "trial_available": {
+          "A": 3,
+          "B": 3,
+          "C": 0
+        },
+        "trial_need": {
+          "P0": {
+            "A": 7,
+            "B": 4,
+            "C": 1
+          },
+          "P1": {
+            "A": 1,
+            "B": 2,
+            "C": 2
+          },
+          "P2": {
+            "A": 6,
+            "B": 0,
+            "C": 0
+          },
+          "P3": {
+            "A": 0,
+            "B": 1,
+            "C": 1
+          },
+          "P4": {
+            "A": 4,
+            "B": 3,
+            "C": 1
+          }
+        }
+      },
+      "source": "projects/deadlock-detector-lab/sample_banker_request_unsafe.json"
+    }
+  ]
+}
