@@ -9,4 +9,4 @@
 - [x] refresh the AVL README with new usage examples and design notes
 - [x] generate committed sample artifacts under `docs/artifacts/avl-tree-lab/`
 - [x] run 3 review passes and fix findings
-- [ ] run secret scan, commit, push, and write wrap-up
+- [x] run secret scan, commit, push, and write wrap-up
