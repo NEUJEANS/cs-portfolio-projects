@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import random
 import time
@@ -484,7 +485,7 @@ def save_benchmark_csv(path: Path, payload: dict[str, Any]) -> None:
         "point_set_avg_us",
     ]
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for result in payload["strategies"]:
             writer.writerow(
@@ -503,6 +504,16 @@ def save_benchmark_csv(path: Path, payload: dict[str, Any]) -> None:
                     "point_set_avg_us": result["timings"]["point_set"]["average_microseconds"],
                 }
             )
+
+
+def _format_metric(value: float | int | None, digits: int = 3) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, int):
+        return str(value)
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.{digits}f}".rstrip("0").rstrip(".")
 
 
 def render_benchmark_markdown(payload: dict[str, Any]) -> str:
@@ -547,6 +558,177 @@ def render_benchmark_markdown(payload: dict[str, Any]) -> str:
             "- The benchmark replays the exact same mixed workload through both data structures.",
             "- Query checksums and final totals must match before the timing comparison is considered valid.",
             "- RangeFenwick stays compact and fast for prefix/range-sum style work, while the segment tree provides a useful comparison point for the same update/query mix.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_benchmark_svg(payload: dict[str, Any]) -> str:
+    width = 1040
+    height = 760
+    card_width = 290
+    card_height = 92
+    ops_bar_width = 360
+    latency_bar_width = 230
+    strategy_colors = {
+        "range-fenwick": "#2563eb",
+        "segment-tree": "#f97316",
+    }
+    strategies = payload["strategies"]
+    max_ops = max(result["operations_per_second"] for result in strategies)
+    latency_rows = [
+        ("range_sum", "Range sum μs"),
+        ("range_add", "Range add μs"),
+        ("point_set", "Point set μs"),
+    ]
+    max_latency = max(
+        result["timings"][kind]["average_microseconds"]
+        for result in strategies
+        for kind, _ in latency_rows
+    )
+
+    def strategy_color(name: str) -> str:
+        return strategy_colors.get(name, "#475569")
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        "<title id=\"title\">Fenwick vs Segment Tree benchmark chart</title>",
+        (
+            "<desc id=\"desc\">"
+            "Benchmark summary comparing RangeFenwick and a lazy segment tree, including throughput and average operation latencies."
+            "</desc>"
+        ),
+        "<style>",
+        "text { font-family: Inter, Arial, sans-serif; fill: #0f172a; }",
+        ".muted { fill: #475569; }",
+        ".subtle { fill: #64748b; }",
+        ".title { font-size: 26px; font-weight: 700; }",
+        ".section { font-size: 16px; font-weight: 700; }",
+        ".label { font-size: 13px; font-weight: 600; }",
+        ".body { font-size: 13px; }",
+        ".small { font-size: 12px; }",
+        ".value { font-size: 28px; font-weight: 700; }",
+        ".card { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1; }",
+        ".panel { fill: #ffffff; stroke: #dbe3ee; stroke-width: 1; }",
+        ".grid { stroke: #e2e8f0; stroke-width: 1; }",
+        "</style>",
+        '<rect width="100%" height="100%" fill="#f8fafc" />',
+        '<text class="title" x="40" y="48">Fenwick vs Segment Tree benchmark</text>',
+        (
+            f'<text class="body muted" x="40" y="74">'
+            f'Size {payload["size"]} • {payload["operations"]} operations/run • '
+            f'{payload["repeats"]} repeats • seed {payload["seed"]}'
+            "</text>"
+        ),
+    ]
+
+    summary_cards = [
+        ("Faster strategy", payload["faster_strategy"], f'{_format_metric(payload["speedup"])}x speedup vs slower baseline'),
+        ("Correctness", "verified" if payload["correctness_verified"] else "failed", "Query checksum and final total matched across both structures"),
+        (
+            "Operation mix",
+            f'{payload["operation_mix"]["range_sum"]}/{payload["operation_mix"]["range_add"]}/{payload["operation_mix"]["point_set"]}',
+            "range_sum / range_add / point_set operations in the shared workload",
+        ),
+    ]
+    for index, (label, value, detail) in enumerate(summary_cards):
+        x = 40 + index * (card_width + 20)
+        lines.extend(
+            [
+                f'<rect class="card" x="{x}" y="98" width="{card_width}" height="{card_height}" rx="14" />',
+                f'<text class="small subtle" x="{x + 18}" y="124">{html.escape(label)}</text>',
+                f'<text class="value" x="{x + 18}" y="160">{html.escape(str(value))}</text>',
+                f'<text class="small muted" x="{x + 18}" y="180">{html.escape(detail)}</text>',
+            ]
+        )
+
+    legend_x = 930
+    legend_y = 112
+    lines.extend(
+        [
+            '<text class="label" x="930" y="116">Legend</text>',
+        ]
+    )
+    for idx, result in enumerate(strategies):
+        y = legend_y + 22 + idx * 22
+        color = strategy_color(result["strategy"])
+        lines.extend(
+            [
+                f'<rect x="{legend_x}" y="{y}" width="12" height="12" rx="3" fill="{color}" />',
+                f'<text class="small muted" x="{legend_x + 18}" y="{y + 10}">{html.escape(result["strategy"])}</text>',
+            ]
+        )
+
+    lines.extend(
+        [
+            '<rect class="panel" x="40" y="222" width="460" height="236" rx="16" />',
+            '<text class="section" x="64" y="254">Throughput comparison</text>',
+            '<text class="small muted" x="64" y="274">Longer bars mean more operations completed per second on the same workload.</text>',
+        ]
+    )
+    ops_label_x = 64
+    ops_bar_x = 64
+    ops_value_x = ops_bar_x + ops_bar_width + 12
+    for index, result in enumerate(strategies):
+        y = 318 + index * 68
+        color = strategy_color(result["strategy"])
+        bar_width = 0 if max_ops == 0 else round((result["operations_per_second"] / max_ops) * ops_bar_width, 1)
+        lines.extend(
+            [
+                f'<text class="label" x="{ops_label_x}" y="{y - 10}">{html.escape(result["strategy"])}</text>',
+                f'<rect x="{ops_bar_x}" y="{y}" width="{ops_bar_width}" height="20" rx="10" fill="#e2e8f0" />',
+                f'<rect x="{ops_bar_x}" y="{y}" width="{bar_width}" height="20" rx="10" fill="{color}" />',
+                f'<text class="body muted" x="{ops_value_x}" y="{y + 15}">{_format_metric(result["operations_per_second"], 2)} ops/sec</text>',
+                f'<text class="small subtle" x="{ops_bar_x}" y="{y + 38}">avg {_format_metric(result["average_seconds"], 6)}s, best {_format_metric(result["best_seconds"], 6)}s</text>',
+            ]
+        )
+
+    latency_panel_x = 530
+    lines.extend(
+        [
+            f'<rect class="panel" x="{latency_panel_x}" y="222" width="470" height="380" rx="16" />',
+            f'<text class="section" x="{latency_panel_x + 24}" y="254">Per-operation latency</text>',
+            f'<text class="small muted" x="{latency_panel_x + 24}" y="274">Shorter bars are better because they show less average time spent per operation kind.</text>',
+        ]
+    )
+    for row_index, (kind, label) in enumerate(latency_rows):
+        row_top = 316 + row_index * 102
+        lines.extend(
+            [
+                f'<text class="label" x="{latency_panel_x + 24}" y="{row_top}">{html.escape(label)}</text>',
+                f'<line class="grid" x1="{latency_panel_x + 24}" y1="{row_top + 8}" x2="{latency_panel_x + 430}" y2="{row_top + 8}" />',
+            ]
+        )
+        for index, result in enumerate(strategies):
+            y = row_top + 20 + index * 30
+            value = result["timings"][kind]["average_microseconds"]
+            bar_width = 0 if max_latency == 0 else round((value / max_latency) * latency_bar_width, 1)
+            color = strategy_color(result["strategy"])
+            lines.extend(
+                [
+                    f'<text class="small muted" x="{latency_panel_x + 24}" y="{y + 12}">{html.escape(result["strategy"])}</text>',
+                    f'<rect x="{latency_panel_x + 118}" y="{y}" width="{latency_bar_width}" height="16" rx="8" fill="#e2e8f0" />',
+                    f'<rect x="{latency_panel_x + 118}" y="{y}" width="{bar_width}" height="16" rx="8" fill="{color}" />',
+                    f'<text class="small muted" x="{latency_panel_x + 360}" y="{y + 12}">{_format_metric(value)} μs</text>',
+                ]
+            )
+
+    lines.extend(
+        [
+            '<rect class="panel" x="40" y="480" width="460" height="122" rx="16" />',
+            '<text class="section" x="64" y="512">Why this chart matters</text>',
+            '<text class="body muted" x="64" y="538">• The same deterministic workload is replayed through both data structures, so the timing comparison stays apples-to-apples.</text>',
+            '<text class="body muted" x="64" y="562">• Correctness gates the benchmark, the chart is only meaningful when both structures agree on checksum and final total.</text>',
+            '<text class="body muted" x="64" y="586">• RangeFenwick stays compact and wins this sample, while the segment tree remains a strong baseline for richer range-update/query stories.</text>',
+        ]
+    )
+
+    footer_y = 642
+    lines.extend(
+        [
+            f'<text class="small subtle" x="40" y="{footer_y}">Generated by fenwick_tree_range_query_lab.py benchmark --svg-output ...</text>',
+            f'<text class="small subtle" text-anchor="end" x="1000" y="{footer_y}">viewBox 0 0 {width} {height}</text>',
+            "</svg>",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -616,6 +798,10 @@ def benchmark_command(args: argparse.Namespace) -> int:
         output = Path(args.markdown_output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(render_benchmark_markdown(payload), encoding="utf-8")
+    if args.svg_output:
+        output = Path(args.svg_output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(render_benchmark_svg(payload), encoding="utf-8")
     print(json.dumps(payload, indent=2))
     return 0
 
@@ -670,6 +856,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--output")
     benchmark_parser.add_argument("--csv-output")
     benchmark_parser.add_argument("--markdown-output")
+    benchmark_parser.add_argument("--svg-output")
     benchmark_parser.set_defaults(func=benchmark_command)
 
     return parser

@@ -6,7 +6,7 @@
 - seed: 7
 - correctness verified: True
 - faster strategy: range-fenwick
-- relative speedup: 1.538x
+- relative speedup: 1.535x
 
 ## Operation mix
 
@@ -18,8 +18,8 @@
 
 | Strategy | Avg seconds | Ops/sec | Range sum avg μs | Range add avg μs | Point set avg μs | Verified |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| range-fenwick | 0.00271 | 368938.07 | 1.832 | 2.485 | 4.408 | True |
-| segment-tree | 0.004169 | 239840.69 | 3.249 | 4.459 | 4.786 | True |
+| range-fenwick | 0.002528 | 395581.67 | 1.713 | 2.33 | 4.203 | True |
+| segment-tree | 0.003881 | 257693.68 | 3.021 | 4.162 | 4.52 | True |
 
 ## Takeaways
 

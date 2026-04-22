@@ -19,33 +19,33 @@
   },
   "correctness_verified": true,
   "faster_strategy": "range-fenwick",
-  "speedup": 1.538,
+  "speedup": 1.535,
   "strategies": [
     {
       "strategy": "range-fenwick",
       "repeats": 3,
-      "average_seconds": 0.00271,
-      "best_seconds": 0.002563,
-      "worst_seconds": 0.002813,
+      "average_seconds": 0.002528,
+      "best_seconds": 0.002502,
+      "worst_seconds": 0.002561,
       "operations": 1000,
-      "operations_per_second": 368938.07,
+      "operations_per_second": 395581.67,
       "query_checksum": 570945,
       "final_total": 18517,
       "timings": {
         "range_sum": {
           "count": 408,
-          "total_seconds": 0.002242,
-          "average_microseconds": 1.832
+          "total_seconds": 0.002097,
+          "average_microseconds": 1.713
         },
         "range_add": {
           "count": 408,
-          "total_seconds": 0.003042,
-          "average_microseconds": 2.485
+          "total_seconds": 0.002852,
+          "average_microseconds": 2.33
         },
         "point_set": {
           "count": 184,
-          "total_seconds": 0.002433,
-          "average_microseconds": 4.408
+          "total_seconds": 0.00232,
+          "average_microseconds": 4.203
         }
       },
       "verified_against_baseline": true
@@ -53,28 +53,28 @@
     {
       "strategy": "segment-tree",
       "repeats": 3,
-      "average_seconds": 0.004169,
-      "best_seconds": 0.004068,
-      "worst_seconds": 0.004275,
+      "average_seconds": 0.003881,
+      "best_seconds": 0.003838,
+      "worst_seconds": 0.003932,
       "operations": 1000,
-      "operations_per_second": 239840.69,
+      "operations_per_second": 257693.68,
       "query_checksum": 570945,
       "final_total": 18517,
       "timings": {
         "range_sum": {
           "count": 408,
-          "total_seconds": 0.003976,
-          "average_microseconds": 3.249
+          "total_seconds": 0.003698,
+          "average_microseconds": 3.021
         },
         "range_add": {
           "count": 408,
-          "total_seconds": 0.005457,
-          "average_microseconds": 4.459
+          "total_seconds": 0.005094,
+          "average_microseconds": 4.162
         },
         "point_set": {
           "count": 184,
-          "total_seconds": 0.002642,
-          "average_microseconds": 4.786
+          "total_seconds": 0.002495,
+          "average_microseconds": 4.52
         }
       },
       "verified_against_baseline": true

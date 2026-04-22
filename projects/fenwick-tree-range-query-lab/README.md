@@ -15,7 +15,7 @@ A portfolio-ready Python lab for Binary Indexed Trees (Fenwick trees) that suppo
 - JSON snapshot save/load workflow for resumable demos
 - CSV export with prefix sums for visualization or spreadsheet inspection
 - deterministic benchmark mode that replays the same mixed range-sum, range-add, and point-set workload through both a RangeFenwick implementation and a lazy segment tree baseline
-- JSON, CSV, and Markdown benchmark artifact export for README charts, blog posts, or recruiter-ready notes
+- JSON, CSV, Markdown, and standalone SVG benchmark artifact export for README charts, blog posts, recruiter-ready notes, or slide screenshots
 - tests that cover core Fenwick behavior, persistence, CLI workflows, mixed-structure correctness, and benchmark verification
 
 ## Usage
@@ -75,15 +75,17 @@ python3 fenwick_tree_range_query_lab.py benchmark \
   --max-range-width 32 \
   --output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.json \
   --csv-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.csv \
-  --markdown-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-report.md
+  --markdown-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-report.md \
+  --svg-output ../../docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-chart.svg
 ```
 
-The benchmark validates correctness before comparing timing numbers, so the same report can support both engineering discussion and portfolio storytelling.
+The benchmark validates correctness before comparing timing numbers, so the same report can support both engineering discussion and portfolio storytelling. The SVG export turns the same deterministic payload into a screenshot-friendly chart with throughput and per-operation latency bars.
 
 ## Sample committed artifacts
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.json`
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark.csv`
 - `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-report.md`
+- `docs/artifacts/fenwick-tree-range-query-lab/sample-benchmark-chart.svg`
 
 ## Test
 
@@ -92,6 +94,5 @@ python3 -m unittest projects/fenwick-tree-range-query-lab/test_fenwick_tree_rang
 ```
 
 ## Future improvements
-- add a lightweight SVG or Mermaid chart export for benchmark results
 - support floating-point values or generic monoids where inversion is available
 - add workload presets that isolate query-heavy, update-heavy, and point-set-heavy mixes

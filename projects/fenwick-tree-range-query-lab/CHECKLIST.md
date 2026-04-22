@@ -9,3 +9,12 @@
 - [x] expand tests for mixed-operation correctness and benchmark CLI coverage
 - [x] generate committed sample benchmark artifacts for the README
 - [x] document the new workflow in the project README
+
+## Vertical slice: screenshot-friendly benchmark SVG export
+- [x] confirm the next weak spot is visual benchmark storytelling after the JSON/CSV/Markdown artifact pack
+- [x] refresh lightweight SVG layout rules for stable viewBox sizing and text anchoring
+- [x] add a standalone SVG renderer for throughput and per-operation latency comparison
+- [x] wire `benchmark --svg-output` into the CLI and committed artifact workflow
+- [x] expand tests to cover the SVG renderer and CLI export path
+- [x] regenerate the committed sample benchmark artifacts, including the SVG chart
+- [x] document the chart export workflow in the project README

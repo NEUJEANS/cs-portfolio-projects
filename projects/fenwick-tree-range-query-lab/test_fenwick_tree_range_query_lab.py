@@ -15,6 +15,7 @@ from fenwick_tree_range_query_lab import (
     load_snapshot,
     load_values,
     render_benchmark_markdown,
+    render_benchmark_svg,
     run_benchmark,
     save_snapshot,
 )
@@ -151,6 +152,10 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
         markdown = render_benchmark_markdown(payload)
         self.assertIn("Fenwick vs Segment Tree Benchmark", markdown)
         self.assertIn("range-fenwick", markdown)
+        svg = render_benchmark_svg(payload)
+        self.assertIn("<svg", svg)
+        self.assertIn("Throughput comparison", svg)
+        self.assertIn("segment-tree", svg)
 
     def test_cli_build_sum_add_set_export_and_benchmark(self):
         temp_dir = ROOT / self._testMethodName
@@ -164,6 +169,7 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             benchmark_json = temp_dir / "benchmark.json"
             benchmark_csv = temp_dir / "benchmark.csv"
             benchmark_md = temp_dir / "benchmark.md"
+            benchmark_svg = temp_dir / "benchmark.svg"
             source.write_text("2\n4\n6\n8\n")
 
             build = subprocess.run(
@@ -228,6 +234,8 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
                     str(benchmark_csv),
                     "--markdown-output",
                     str(benchmark_md),
+                    "--svg-output",
+                    str(benchmark_svg),
                 ],
                 capture_output=True,
                 text=True,
@@ -238,8 +246,10 @@ class FenwickTreeRangeQueryLabTests(unittest.TestCase):
             self.assertTrue(benchmark_json.exists())
             self.assertTrue(benchmark_csv.exists())
             self.assertTrue(benchmark_md.exists())
+            self.assertTrue(benchmark_svg.exists())
             self.assertIn("segment-tree", benchmark_csv.read_text())
             self.assertIn("relative speedup", benchmark_md.read_text())
+            self.assertIn("Per-operation latency", benchmark_svg.read_text())
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()

@@ -6,6 +6,8 @@
 - [x] scaffold project folder, README, sample input, and tests
 - [x] implement point/range query support with snapshot persistence
 - [x] add CLI commands for build, sum, add, set, and export
+- [x] add deterministic benchmark comparison against a lazy segment tree baseline
+- [x] add screenshot-friendly benchmark SVG export for throughput and per-operation latency
 - [x] run tests and fix issues
 - [x] log at least 3 review passes
 - [x] run secret scan before push
