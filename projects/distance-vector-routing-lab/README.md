@@ -18,6 +18,7 @@ A compact Python simulator for Bellman-Ford-style distance-vector routing, inclu
 - classic count-to-infinity behavior vs split-horizon / poison-reverse mitigation
 - Markdown or Mermaid timeline export for per-round failure reconvergence artifacts
 - failure benchmark mode that compares reconvergence behavior across routing modes and periodic vs triggered propagation
+- curated failure benchmark suite with named scenarios for count-to-infinity, detours, larger rings, and longer bypass paths
 - JSON, CSV, or Markdown benchmark/report output suitable for docs, screenshots, notebooks, or lightweight visualizers
 - validations for malformed or asymmetric topologies
 
@@ -94,10 +95,32 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py benchmar
   --max-rounds 20
 ```
 
-Checked-in sample benchmark artifacts for that scenario live under:
+Run the built-in multi-scenario suite when you want a broader portfolio story than the tiny `A-B-C` loop:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py benchmark-failure-suite \
+  --format markdown
+```
+
+Available built-in scenario names:
+- `count-to-infinity-line`
+- `square-detour`
+- `ring-isolation`
+- `five-node-bypass`
+
+Checked-in sample benchmark artifacts live under:
 - `artifacts/distance-vector-routing-lab/failure-benchmark.json`
 - `artifacts/distance-vector-routing-lab/failure-benchmark.csv`
 - `artifacts/distance-vector-routing-lab/failure-benchmark.md`
+- `artifacts/distance-vector-routing-lab/failure-suite.json`
+- `artifacts/distance-vector-routing-lab/failure-suite.csv`
+- `artifacts/distance-vector-routing-lab/failure-suite.md`
+
+Regenerate them with:
+
+```bash
+python3 scripts/regenerate_distance_vector_routing_artifacts.py
+```
 
 ## Diagram export
 
@@ -147,6 +170,8 @@ Failure runs wrap a stable pre-failure snapshot plus a reconvergence run that st
 
 The failure benchmark command condenses that reconvergence history into one row per mode/update-strategy pair. It tracks one router/destination path, reports when the watched route first changes, when it first becomes unreachable, how high the finite metric climbs before stabilization, and which configuration settles fastest.
 
+The failure benchmark suite keeps those same per-scenario rows, then adds a scorecard across the curated scenario pack. That makes it easy to show three different interview stories with one artifact set: pure count-to-infinity escalation, a healthy detour onto an alternate path, and a larger loop where mitigation helps but does not instantly erase every transient.
+
 ## Test
 
 ```bash
@@ -167,4 +192,4 @@ python3 -m unittest projects/distance-vector-routing-lab/test_distance_vector_ro
 - render neighbor-to-neighbor advertisement messages explicitly, not only final per-round tables
 - add a built-in count-to-infinity sample scenario file plus checked-in timeline artifacts
 - add per-route timeout / garbage-collection timers closer to RIP behavior
-- extend the failure benchmark to run larger topology suites automatically
+- add HTML or SVG rendering for the multi-scenario benchmark suite

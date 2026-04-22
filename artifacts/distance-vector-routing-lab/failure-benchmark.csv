@@ -1,7 +1,7 @@
 mode,update_strategy,converged,rounds,changed_rounds,active_steps,baseline_cost,baseline_next_hop,final_cost,final_next_hop,first_changed_round,first_unreachable_round,last_route_change_round,max_cost_seen,max_finite_cost_seen
-classic,periodic,True,16,15,16,2,B,16,,2,14,14,16,14
-split-horizon,periodic,True,3,2,3,2,B,16,,2,2,2,16,2
-poison-reverse,periodic,True,3,2,3,2,B,16,,2,2,2,16,2
-classic,triggered,True,18,15,18,2,B,16,,2,15,15,16,14
-split-horizon,triggered,True,5,2,5,2,B,16,,2,2,2,16,2
-poison-reverse,triggered,True,5,2,5,2,B,16,,2,2,2,16,2
+classic,periodic,True,16,15,16,2,B,16,unreachable,2,14,14,16,14
+split-horizon,periodic,True,3,2,3,2,B,16,unreachable,2,2,2,16,2
+poison-reverse,periodic,True,3,2,3,2,B,16,unreachable,2,2,2,16,2
+classic,triggered,True,18,15,18,2,B,16,unreachable,2,15,15,16,14
+split-horizon,triggered,True,5,2,5,2,B,16,unreachable,2,2,2,16,2
+poison-reverse,triggered,True,5,2,5,2,B,16,unreachable,2,2,2,16,2

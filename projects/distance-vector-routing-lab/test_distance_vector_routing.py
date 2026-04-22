@@ -9,10 +9,13 @@ MODULE_PATH = PROJECT_DIR / "distance_vector_routing.py"
 sys.path.insert(0, str(PROJECT_DIR))
 
 from distance_vector_routing import (
+    FAILURE_SCENARIOS,
     benchmark_failure_modes,
+    benchmark_failure_suite,
     export_diagram,
     remove_link,
     render_failure_benchmark,
+    render_failure_benchmark_suite,
     render_failure_timeline,
     run_failure_simulation,
     run_outage_simulation,
@@ -309,6 +312,7 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertIn("# Failure benchmark for A → C", markdown)
         self.assertIn("| classic | periodic |", markdown)
         self.assertIn("mode,update_strategy,converged", csv_text)
+        self.assertNotIn("\r\n", csv_text)
         self.assertIn("poison-reverse,periodic", csv_text)
 
     def test_failure_benchmark_deduplicates_requested_modes_and_strategies(self):
@@ -352,6 +356,70 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         )
         self.assertIn("mode,update_strategy,converged", completed.stdout)
         self.assertIn("classic,periodic", completed.stdout)
+
+    def test_failure_suite_uses_curated_scenarios_and_scorecard(self):
+        suite = benchmark_failure_suite(
+            scenario_names=["count-to-infinity-line", "square-detour"],
+            max_rounds=20,
+        )
+        self.assertEqual(suite["suite"], "portfolio-failure-scenarios")
+        self.assertEqual(suite["scenario_names"], ["count-to-infinity-line", "square-detour"])
+        self.assertEqual(len(suite["scenarios"]), 2)
+        self.assertEqual(len(suite["rows"]), 12)
+        self.assertEqual(len(suite["scorecard"]), 6)
+
+        first_scenario = suite["scenarios"][0]
+        self.assertEqual(first_scenario["tracked_route"], {"router": "A", "destination": "C"})
+        self.assertEqual(first_scenario["event"], {"type": "remove-link", "left": "B", "right": "C"})
+
+    def test_failure_suite_rejects_unknown_scenarios(self):
+        with self.assertRaises(ValueError):
+            benchmark_failure_suite(scenario_names=["does-not-exist"])
+
+    def test_render_failure_suite_supports_markdown_and_csv(self):
+        suite = benchmark_failure_suite(
+            scenario_names=["ring-isolation"],
+            modes=["classic", "poison-reverse"],
+            update_strategies=["periodic"],
+            max_rounds=20,
+        )
+        markdown = render_failure_benchmark_suite(suite, output_format="markdown")
+        csv_text = render_failure_benchmark_suite(suite, output_format="csv")
+        self.assertIn("# Failure benchmark suite", markdown)
+        self.assertIn("Scenario: ring-isolation", markdown)
+        self.assertIn("scenario,scenario_description,removed_link", csv_text)
+        self.assertNotIn("\r\n", csv_text)
+        self.assertIn("ring-isolation", csv_text)
+
+    def test_benchmark_failure_suite_cli_supports_csv(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "benchmark-failure-suite",
+                "--scenarios",
+                "count-to-infinity-line",
+                "square-detour",
+                "--format",
+                "csv",
+                "--max-rounds",
+                "20",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("scenario,scenario_description,removed_link", completed.stdout)
+        self.assertIn("count-to-infinity-line", completed.stdout)
+        self.assertIn("square-detour", completed.stdout)
+
+    def test_curated_failure_scenarios_stay_unique(self):
+        self.assertEqual(sorted(FAILURE_SCENARIOS), [
+            "count-to-infinity-line",
+            "five-node-bypass",
+            "ring-isolation",
+            "square-detour",
+        ])
 
 
 if __name__ == "__main__":

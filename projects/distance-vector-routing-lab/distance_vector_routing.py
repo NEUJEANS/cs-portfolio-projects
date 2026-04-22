@@ -48,6 +48,83 @@ class RoundState:
         return payload
 
 
+@dataclass(frozen=True)
+class FailureScenario:
+    name: str
+    description: str
+    topology: dict[str, dict[str, int]]
+    remove_link: tuple[str, str]
+    router: str
+    destination: str
+
+    def to_dict(self) -> dict[str, object]:
+        left, right = self.remove_link
+        return {
+            "name": self.name,
+            "description": self.description,
+            "topology": {router: dict(sorted(neighbors.items())) for router, neighbors in sorted(self.topology.items())},
+            "event": {"type": "remove-link", "left": left, "right": right},
+            "tracked_route": {"router": self.router, "destination": self.destination},
+        }
+
+
+FAILURE_SCENARIOS: dict[str, FailureScenario] = {
+    "count-to-infinity-line": FailureScenario(
+        name="count-to-infinity-line",
+        description="The classic A-B-C line where removing B-C isolates C and exposes the clean two-router count-to-infinity story.",
+        topology={
+            "A": {"B": 1},
+            "B": {"A": 1, "C": 1},
+            "C": {"B": 1},
+        },
+        remove_link=("B", "C"),
+        router="A",
+        destination="C",
+    ),
+    "square-detour": FailureScenario(
+        name="square-detour",
+        description="A four-router square where the watched route survives via a longer alternate path after the primary edge disappears.",
+        topology={
+            "A": {"B": 1, "D": 4},
+            "B": {"A": 1, "C": 2},
+            "C": {"B": 2, "D": 1},
+            "D": {"A": 4, "C": 1},
+        },
+        remove_link=("B", "C"),
+        router="A",
+        destination="C",
+    ),
+    "ring-isolation": FailureScenario(
+        name="ring-isolation",
+        description="A four-router ring feeding a destination leaf, useful for showing that larger loops can still bounce even with split horizon or poison reverse.",
+        topology={
+            "A": {"B": 1, "D": 1},
+            "B": {"A": 1, "C": 1},
+            "C": {"B": 1, "D": 1, "E": 1},
+            "D": {"A": 1, "C": 1},
+            "E": {"C": 1},
+        },
+        remove_link=("C", "E"),
+        router="A",
+        destination="E",
+    ),
+    "five-node-bypass": FailureScenario(
+        name="five-node-bypass",
+        description="A five-router topology where the best path breaks, briefly inflates, then settles onto a more expensive but still reachable bypass.",
+        topology={
+            "A": {"B": 1, "D": 2},
+            "B": {"A": 1, "C": 1},
+            "C": {"B": 1, "E": 1},
+            "D": {"A": 2, "E": 2},
+            "E": {"C": 1, "D": 2},
+        },
+        remove_link=("B", "C"),
+        router="A",
+        destination="C",
+    ),
+}
+
+
 def normalize_topology(topology: Mapping[str, Mapping[str, int]]) -> dict[str, dict[str, int]]:
     normalized: dict[str, dict[str, int]] = {}
     for router, neighbors in topology.items():
@@ -929,6 +1006,155 @@ def benchmark_failure_modes(
     }
 
 
+def resolve_failure_scenarios(scenario_names: Sequence[str] | None = None) -> list[FailureScenario]:
+    selected_names = tuple(dict.fromkeys(scenario_names or tuple(FAILURE_SCENARIOS)))
+    if not selected_names:
+        raise ValueError("at least one failure scenario must be selected")
+
+    unknown = sorted(name for name in selected_names if name not in FAILURE_SCENARIOS)
+    if unknown:
+        raise ValueError(f"unknown failure scenarios: {', '.join(unknown)}")
+
+    return [FAILURE_SCENARIOS[name] for name in selected_names]
+
+
+def benchmark_failure_suite(
+    *,
+    scenario_names: Sequence[str] | None = None,
+    modes: Sequence[str] | None = None,
+    update_strategies: Sequence[str] | None = None,
+    infinity: int = INFINITY,
+    max_rounds: int = 50,
+) -> dict[str, object]:
+    scenarios = resolve_failure_scenarios(scenario_names)
+    selected_modes = tuple(dict.fromkeys(modes or ("classic", "split-horizon", "poison-reverse")))
+    selected_update_strategies = tuple(dict.fromkeys(update_strategies or ("periodic", "triggered")))
+
+    combined_rows: list[dict[str, object]] = []
+    scenario_results: list[dict[str, object]] = []
+    aggregate: dict[tuple[str, str], dict[str, float | int]] = {}
+    fastest_wins: dict[tuple[str, str], int] = {}
+    earliest_unreachable_wins: dict[tuple[str, str], int] = {}
+    lowest_peak_wins: dict[tuple[str, str], int] = {}
+
+    for scenario in scenarios:
+        left, right = scenario.remove_link
+        benchmark = benchmark_failure_modes(
+            scenario.topology,
+            left,
+            right,
+            router=scenario.router,
+            destination=scenario.destination,
+            modes=selected_modes,
+            update_strategies=selected_update_strategies,
+            infinity=infinity,
+            max_rounds=max_rounds,
+        )
+        scenario_results.append(
+            {
+                **scenario.to_dict(),
+                "rows": benchmark["rows"],
+                "summary": benchmark["summary"],
+            }
+        )
+
+        summary = benchmark["summary"]
+        fastest_key = (
+            str(summary["fastest_reconvergence"]["mode"]),
+            str(summary["fastest_reconvergence"]["update_strategy"]),
+        )
+        fastest_wins[fastest_key] = fastest_wins.get(fastest_key, 0) + 1
+
+        earliest_unreachable = summary["earliest_unreachable"]
+        if earliest_unreachable is not None:
+            earliest_key = (
+                str(earliest_unreachable["mode"]),
+                str(earliest_unreachable["update_strategy"]),
+            )
+            earliest_unreachable_wins[earliest_key] = earliest_unreachable_wins.get(earliest_key, 0) + 1
+
+        lowest_peak_key = (
+            str(summary["lowest_peak_cost"]["mode"]),
+            str(summary["lowest_peak_cost"]["update_strategy"]),
+        )
+        lowest_peak_wins[lowest_peak_key] = lowest_peak_wins.get(lowest_peak_key, 0) + 1
+
+        for row in benchmark["rows"]:
+            combined_row = {
+                "scenario": scenario.name,
+                "scenario_description": scenario.description,
+                "tracked_router": scenario.router,
+                "tracked_destination": scenario.destination,
+                "removed_link": f"{left}<->{right}",
+                **row,
+            }
+            combined_rows.append(combined_row)
+
+            key = (str(row["mode"]), str(row["update_strategy"]))
+            slot = aggregate.setdefault(
+                key,
+                {
+                    "scenario_count": 0,
+                    "non_converged_runs": 0,
+                    "rounds_total": 0,
+                    "last_route_change_total": 0,
+                    "max_finite_cost_total": 0,
+                    "max_finite_cost_count": 0,
+                },
+            )
+            slot["scenario_count"] += 1
+            if not row["converged"]:
+                slot["non_converged_runs"] += 1
+            slot["rounds_total"] += int(row["rounds"])
+            slot["last_route_change_total"] += int(row["last_route_change_round"])
+            if row["max_finite_cost_seen"] is not None:
+                slot["max_finite_cost_total"] += int(row["max_finite_cost_seen"])
+                slot["max_finite_cost_count"] += 1
+
+    scorecard: list[dict[str, object]] = []
+    for update_strategy in selected_update_strategies:
+        for mode in selected_modes:
+            key = (mode, update_strategy)
+            slot = aggregate.get(key)
+            if slot is None:
+                continue
+            scenario_count = int(slot["scenario_count"])
+            finite_cost_count = int(slot["max_finite_cost_count"])
+            scorecard.append(
+                {
+                    "mode": mode,
+                    "update_strategy": update_strategy,
+                    "scenario_count": scenario_count,
+                    "non_converged_runs": int(slot["non_converged_runs"]),
+                    "average_rounds": round(float(slot["rounds_total"]) / scenario_count, 2),
+                    "average_last_route_change_round": round(
+                        float(slot["last_route_change_total"]) / scenario_count,
+                        2,
+                    ),
+                    "average_max_finite_cost": (
+                        None
+                        if finite_cost_count == 0
+                        else round(float(slot["max_finite_cost_total"]) / finite_cost_count, 2)
+                    ),
+                    "fastest_reconvergence_wins": fastest_wins.get(key, 0),
+                    "earliest_unreachable_wins": earliest_unreachable_wins.get(key, 0),
+                    "lowest_peak_cost_wins": lowest_peak_wins.get(key, 0),
+                }
+            )
+
+    return {
+        "suite": "portfolio-failure-scenarios",
+        "infinity": infinity,
+        "max_rounds": max_rounds,
+        "scenario_names": [scenario.name for scenario in scenarios],
+        "modes": list(selected_modes),
+        "update_strategies": list(selected_update_strategies),
+        "rows": combined_rows,
+        "scorecard": scorecard,
+        "scenarios": scenario_results,
+    }
+
+
 def render_failure_benchmark(benchmark: Mapping[str, object], *, output_format: str) -> str:
     rows = benchmark["rows"]
     if not isinstance(rows, list):
@@ -957,10 +1183,13 @@ def render_failure_benchmark(benchmark: Mapping[str, object], *, output_format: 
 
     if output_format == "csv":
         buffer = io.StringIO()
-        writer = csv.DictWriter(buffer, fieldnames=columns)
+        writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
         writer.writeheader()
         for row in rows:
-            writer.writerow({column: row.get(column) for column in columns})
+            csv_row = {column: row.get(column) for column in columns}
+            if csv_row["final_next_hop"] is None:
+                csv_row["final_next_hop"] = "unreachable"
+            writer.writerow(csv_row)
         return buffer.getvalue().rstrip()
 
     tracked_route = benchmark["tracked_route"]
@@ -1013,6 +1242,157 @@ def render_failure_benchmark(benchmark: Mapping[str, object], *, output_format: 
             f"- lowest peak finite tracked-route cost: `{summary['lowest_peak_cost']['mode']}` + `{summary['lowest_peak_cost']['update_strategy']}` with max finite cost {summary['lowest_peak_cost']['max_finite_cost_seen']}",
         ]
     )
+    return "\n".join(lines)
+
+
+def render_failure_benchmark_suite(suite: Mapping[str, object], *, output_format: str) -> str:
+    rows = suite["rows"]
+    scenarios = suite["scenarios"]
+    scorecard = suite["scorecard"]
+    if not isinstance(rows, list) or not isinstance(scenarios, list) or not isinstance(scorecard, list):
+        raise ValueError("suite payload must include rows, scenarios, and scorecard lists")
+
+    if output_format == "json":
+        return json.dumps(suite, indent=2, sort_keys=True)
+
+    if output_format == "csv":
+        columns = [
+            "scenario",
+            "scenario_description",
+            "removed_link",
+            "tracked_router",
+            "tracked_destination",
+            "mode",
+            "update_strategy",
+            "converged",
+            "rounds",
+            "changed_rounds",
+            "active_steps",
+            "baseline_cost",
+            "baseline_next_hop",
+            "final_cost",
+            "final_next_hop",
+            "first_changed_round",
+            "first_unreachable_round",
+            "last_route_change_round",
+            "max_cost_seen",
+            "max_finite_cost_seen",
+            "min_cost_seen",
+        ]
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            csv_row = {column: row.get(column) for column in columns}
+            if csv_row["final_next_hop"] is None:
+                csv_row["final_next_hop"] = "unreachable"
+            writer.writerow(csv_row)
+        return buffer.getvalue().rstrip()
+
+    lines = [
+        "# Failure benchmark suite",
+        "",
+        f"Infinity metric: {suite['infinity']}, max rounds: {suite['max_rounds']}",
+        "",
+        f"Curated scenarios: {len(scenarios)}",
+        "",
+        "## Scenario roster",
+        "",
+        "| scenario | tracked route | link removal | description |",
+        "| --- | --- | --- | --- |",
+    ]
+    for scenario in scenarios:
+        tracked_route = scenario["tracked_route"]
+        event = scenario["event"]
+        lines.append(
+            f"| {scenario['name']} | {tracked_route['router']} → {tracked_route['destination']} | {event['left']} ↔ {event['right']} | {scenario['description']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Strategy scorecard",
+            "",
+            "| mode | update strategy | scenarios | non-converged | avg rounds | avg last route change | avg max finite cost | fastest wins | earliest unreachable wins | lowest peak wins |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in scorecard:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(row["mode"]),
+                    str(row["update_strategy"]),
+                    str(row["scenario_count"]),
+                    str(row["non_converged_runs"]),
+                    str(row["average_rounds"]),
+                    str(row["average_last_route_change_round"]),
+                    str(row["average_max_finite_cost"]),
+                    str(row["fastest_reconvergence_wins"]),
+                    str(row["earliest_unreachable_wins"]),
+                    str(row["lowest_peak_cost_wins"]),
+                ]
+            )
+            + " |"
+        )
+
+    for scenario in scenarios:
+        tracked_route = scenario["tracked_route"]
+        event = scenario["event"]
+        lines.extend(
+            [
+                "",
+                f"## Scenario: {scenario['name']}",
+                "",
+                scenario["description"],
+                "",
+                f"- tracked route: `{tracked_route['router']} → {tracked_route['destination']}`",
+                f"- link removal: `{event['left']} ↔ {event['right']}`",
+                "",
+                "| mode | update strategy | converged | rounds | changed rounds | active steps | baseline | final | first change | first unreachable | last route change | max cost | max finite cost |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for row in scenario["rows"]:
+            baseline = f"{row['baseline_cost']} via {row['baseline_next_hop']}"
+            final_next_hop = row["final_next_hop"] if row["final_next_hop"] is not None else "unreachable"
+            final = f"{row['final_cost']} via {final_next_hop}"
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        str(row["mode"]),
+                        str(row["update_strategy"]),
+                        str(row["converged"]),
+                        str(row["rounds"]),
+                        str(row["changed_rounds"]),
+                        str(row["active_steps"]),
+                        baseline,
+                        final,
+                        str(row["first_changed_round"]),
+                        str(row["first_unreachable_round"]),
+                        str(row["last_route_change_round"]),
+                        str(row["max_cost_seen"]),
+                        str(row["max_finite_cost_seen"]),
+                    ]
+                )
+                + " |"
+            )
+        summary = scenario["summary"]
+        lines.extend(
+            [
+                "",
+                f"- fastest reconvergence: `{summary['fastest_reconvergence']['mode']}` + `{summary['fastest_reconvergence']['update_strategy']}` in {summary['fastest_reconvergence']['rounds']} rounds",
+                (
+                    "- earliest unreachable: none"
+                    if summary["earliest_unreachable"] is None
+                    else f"- earliest unreachable: `{summary['earliest_unreachable']['mode']}` + `{summary['earliest_unreachable']['update_strategy']}` at round {summary['earliest_unreachable']['first_unreachable_round']}"
+                ),
+                f"- lowest peak finite tracked-route cost: `{summary['lowest_peak_cost']['mode']}` + `{summary['lowest_peak_cost']['update_strategy']}` with max finite cost {summary['lowest_peak_cost']['max_finite_cost_seen']}",
+            ]
+        )
+
     return "\n".join(lines)
 
 
@@ -1153,6 +1533,33 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--silent-routers", nargs="*", default=[])
     benchmark_parser.add_argument("--route-timeout", type=int)
 
+    suite_parser = subparsers.add_parser(
+        "benchmark-failure-suite",
+        help="run the built-in failure scenario suite across routing modes and update strategies",
+    )
+    suite_parser.add_argument(
+        "--scenarios",
+        nargs="*",
+        default=list(FAILURE_SCENARIOS),
+        choices=list(FAILURE_SCENARIOS),
+        help="optional subset of built-in curated scenarios",
+    )
+    suite_parser.add_argument(
+        "--modes",
+        nargs="*",
+        default=["classic", "split-horizon", "poison-reverse"],
+        choices=["classic", "split-horizon", "poison-reverse"],
+    )
+    suite_parser.add_argument(
+        "--update-strategies",
+        nargs="*",
+        default=["periodic", "triggered"],
+        choices=["periodic", "triggered"],
+    )
+    suite_parser.add_argument("--format", dest="suite_format", default="json", choices=["json", "csv", "markdown"])
+    suite_parser.add_argument("--infinity", type=int, default=INFINITY)
+    suite_parser.add_argument("--max-rounds", type=int, default=50)
+
     return parser
 
 
@@ -1167,88 +1574,99 @@ def cli(argv: Sequence[str] | None = None) -> int:
     if getattr(args, "route_timeout", None) is not None and args.route_timeout <= 0:
         parser.error("--route-timeout must be positive")
 
-    topology = parse_topology(args.topology)
-    if args.command == "simulate":
-        payload: object = run_simulation(
-            topology,
-            mode=args.mode,
-            infinity=args.infinity,
-            max_rounds=args.max_rounds,
-            update_strategy=args.update_strategy,
-            silent_routers=args.silent_routers,
-            route_timeout=args.route_timeout,
-        )
-    elif args.command == "simulate-failure":
-        left, right = args.remove_link
-        payload = run_failure_simulation(
-            topology,
-            left,
-            right,
-            mode=args.mode,
-            infinity=args.infinity,
-            max_rounds=args.max_rounds,
-            update_strategy=args.update_strategy,
-            silent_routers=args.silent_routers,
-            route_timeout=args.route_timeout,
-        )
-    elif args.command == "simulate-outage":
-        payload = run_outage_simulation(
-            topology,
-            silent_routers=args.silent_routers,
-            mode=args.mode,
-            infinity=args.infinity,
-            max_rounds=args.max_rounds,
-            update_strategy=args.update_strategy,
-            route_timeout=args.route_timeout,
-        )
-    elif args.command == "export-timeline":
-        left, right = args.remove_link
-        failure = run_failure_simulation(
-            topology,
-            left,
-            right,
-            mode=args.mode,
-            infinity=args.infinity,
-            max_rounds=args.max_rounds,
-            update_strategy=args.update_strategy,
-            silent_routers=args.silent_routers,
-            route_timeout=args.route_timeout,
-        )
-        payload = render_failure_timeline(
-            failure,
-            destination=args.destination,
-            diagram_format=args.timeline_format,
-            routers=args.routers,
-        )
-    elif args.command == "benchmark-failure":
-        left, right = args.remove_link
-        benchmark = benchmark_failure_modes(
-            topology,
-            left,
-            right,
-            router=args.router,
-            destination=args.destination,
+    if args.command == "benchmark-failure-suite":
+        suite = benchmark_failure_suite(
+            scenario_names=args.scenarios,
             modes=args.modes,
             update_strategies=args.update_strategies,
             infinity=args.infinity,
             max_rounds=args.max_rounds,
-            silent_routers=args.silent_routers,
-            route_timeout=args.route_timeout,
         )
-        payload = render_failure_benchmark(benchmark, output_format=args.benchmark_format)
+        payload = render_failure_benchmark_suite(suite, output_format=args.suite_format)
     else:
-        payload = export_diagram(
-            topology,
-            snapshot=args.snapshot,
-            diagram_format=args.diagram_format,
-            mode=args.mode,
-            infinity=args.infinity,
-            max_rounds=args.max_rounds,
-            update_strategy=args.update_strategy,
-            silent_routers=args.silent_routers,
-            route_timeout=args.route_timeout,
-            router=args.router,
-        )
+        topology = parse_topology(args.topology)
+
+        if args.command == "simulate":
+            payload: object = run_simulation(
+                topology,
+                mode=args.mode,
+                infinity=args.infinity,
+                max_rounds=args.max_rounds,
+                update_strategy=args.update_strategy,
+                silent_routers=args.silent_routers,
+                route_timeout=args.route_timeout,
+            )
+        elif args.command == "simulate-failure":
+            left, right = args.remove_link
+            payload = run_failure_simulation(
+                topology,
+                left,
+                right,
+                mode=args.mode,
+                infinity=args.infinity,
+                max_rounds=args.max_rounds,
+                update_strategy=args.update_strategy,
+                silent_routers=args.silent_routers,
+                route_timeout=args.route_timeout,
+            )
+        elif args.command == "simulate-outage":
+            payload = run_outage_simulation(
+                topology,
+                silent_routers=args.silent_routers,
+                mode=args.mode,
+                infinity=args.infinity,
+                max_rounds=args.max_rounds,
+                update_strategy=args.update_strategy,
+                route_timeout=args.route_timeout,
+            )
+        elif args.command == "export-timeline":
+            left, right = args.remove_link
+            failure = run_failure_simulation(
+                topology,
+                left,
+                right,
+                mode=args.mode,
+                infinity=args.infinity,
+                max_rounds=args.max_rounds,
+                update_strategy=args.update_strategy,
+                silent_routers=args.silent_routers,
+                route_timeout=args.route_timeout,
+            )
+            payload = render_failure_timeline(
+                failure,
+                destination=args.destination,
+                diagram_format=args.timeline_format,
+                routers=args.routers,
+            )
+        elif args.command == "benchmark-failure":
+            left, right = args.remove_link
+            benchmark = benchmark_failure_modes(
+                topology,
+                left,
+                right,
+                router=args.router,
+                destination=args.destination,
+                modes=args.modes,
+                update_strategies=args.update_strategies,
+                infinity=args.infinity,
+                max_rounds=args.max_rounds,
+                silent_routers=args.silent_routers,
+                route_timeout=args.route_timeout,
+            )
+            payload = render_failure_benchmark(benchmark, output_format=args.benchmark_format)
+        else:
+            payload = export_diagram(
+                topology,
+                snapshot=args.snapshot,
+                diagram_format=args.diagram_format,
+                mode=args.mode,
+                infinity=args.infinity,
+                max_rounds=args.max_rounds,
+                update_strategy=args.update_strategy,
+                silent_routers=args.silent_routers,
+                route_timeout=args.route_timeout,
+                router=args.router,
+            )
 
     if isinstance(payload, str):
         print(payload)
