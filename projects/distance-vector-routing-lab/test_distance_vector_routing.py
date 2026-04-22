@@ -9,8 +9,10 @@ MODULE_PATH = PROJECT_DIR / "distance_vector_routing.py"
 sys.path.insert(0, str(PROJECT_DIR))
 
 from distance_vector_routing import (
+    benchmark_failure_modes,
     export_diagram,
     remove_link,
+    render_failure_benchmark,
     render_failure_timeline,
     run_failure_simulation,
     run_outage_simulation,
@@ -268,6 +270,88 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertIn("sequenceDiagram", completed.stdout)
         self.assertIn("participant A as A", completed.stdout)
         self.assertIn("Note over A: C cost=6 via B", completed.stdout)
+
+    def test_failure_benchmark_compares_modes_and_strategies(self):
+        benchmark = benchmark_failure_modes(
+            LOOP_PRONE,
+            "B",
+            "C",
+            router="A",
+            destination="C",
+            max_rounds=20,
+        )
+        self.assertEqual(benchmark["benchmark"], "failure-mode-comparison")
+        self.assertEqual(benchmark["tracked_route"], {"router": "A", "destination": "C"})
+        self.assertEqual(len(benchmark["rows"]), 6)
+
+        rows = {(row["mode"], row["update_strategy"]): row for row in benchmark["rows"]}
+        self.assertGreater(rows[("classic", "periodic")]["first_unreachable_round"], 2)
+        self.assertEqual(rows[("poison-reverse", "periodic")]["first_unreachable_round"], 2)
+        self.assertLess(
+            rows[("poison-reverse", "periodic")]["max_finite_cost_seen"],
+            rows[("classic", "periodic")]["max_finite_cost_seen"],
+        )
+        self.assertIn(benchmark["summary"]["fastest_reconvergence"]["update_strategy"], {"periodic", "triggered"})
+
+    def test_render_failure_benchmark_supports_markdown_and_csv(self):
+        benchmark = benchmark_failure_modes(
+            LOOP_PRONE,
+            "B",
+            "C",
+            router="A",
+            destination="C",
+            modes=["classic", "poison-reverse"],
+            update_strategies=["periodic"],
+            max_rounds=20,
+        )
+        markdown = render_failure_benchmark(benchmark, output_format="markdown")
+        csv_text = render_failure_benchmark(benchmark, output_format="csv")
+        self.assertIn("# Failure benchmark for A → C", markdown)
+        self.assertIn("| classic | periodic |", markdown)
+        self.assertIn("mode,update_strategy,converged", csv_text)
+        self.assertIn("poison-reverse,periodic", csv_text)
+
+    def test_failure_benchmark_deduplicates_requested_modes_and_strategies(self):
+        benchmark = benchmark_failure_modes(
+            LOOP_PRONE,
+            "B",
+            "C",
+            router="A",
+            destination="C",
+            modes=["classic", "classic"],
+            update_strategies=["periodic", "periodic"],
+            max_rounds=20,
+        )
+        self.assertEqual(benchmark["modes"], ["classic"])
+        self.assertEqual(benchmark["update_strategies"], ["periodic"])
+        self.assertEqual(len(benchmark["rows"]), 1)
+
+    def test_benchmark_failure_cli_supports_csv(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "benchmark-failure",
+                "--topology",
+                json.dumps(LOOP_PRONE),
+                "--remove-link",
+                "B",
+                "C",
+                "--router",
+                "A",
+                "--destination",
+                "C",
+                "--format",
+                "csv",
+                "--max-rounds",
+                "20",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("mode,update_strategy,converged", completed.stdout)
+        self.assertIn("classic,periodic", completed.stdout)
 
 
 if __name__ == "__main__":

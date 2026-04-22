@@ -17,7 +17,8 @@ A compact Python simulator for Bellman-Ford-style distance-vector routing, inclu
 - optional silent-router outage simulation with learned-route aging and timeout invalidation
 - classic count-to-infinity behavior vs split-horizon / poison-reverse mitigation
 - Markdown or Mermaid timeline export for per-round failure reconvergence artifacts
-- JSON output suitable for docs, screenshots, notebooks, or lightweight visualizers
+- failure benchmark mode that compares reconvergence behavior across routing modes and periodic vs triggered propagation
+- JSON, CSV, or Markdown benchmark/report output suitable for docs, screenshots, notebooks, or lightweight visualizers
 - validations for malformed or asymmetric topologies
 
 ## Usage
@@ -81,6 +82,23 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py export-t
   --max-rounds 20
 ```
 
+Benchmark that failure across classic, split-horizon, and poison-reverse with both periodic and triggered propagation strategies:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py benchmark-failure \
+  --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}' \
+  --remove-link B C \
+  --router A \
+  --destination C \
+  --format markdown \
+  --max-rounds 20
+```
+
+Checked-in sample benchmark artifacts for that scenario live under:
+- `artifacts/distance-vector-routing-lab/failure-benchmark.json`
+- `artifacts/distance-vector-routing-lab/failure-benchmark.csv`
+- `artifacts/distance-vector-routing-lab/failure-benchmark.md`
+
 ## Diagram export
 
 Render the input topology as Mermaid for markdown-native docs:
@@ -127,6 +145,8 @@ Steady-state runs return mode/config metadata, the normalized topology snapshot,
 
 Failure runs wrap a stable pre-failure snapshot plus a reconvergence run that starts from those previously learned routes on the broken topology. That makes count-to-infinity behavior visible in classic mode instead of hiding it behind a fresh post-failure recomputation.
 
+The failure benchmark command condenses that reconvergence history into one row per mode/update-strategy pair. It tracks one router/destination path, reports when the watched route first changes, when it first becomes unreachable, how high the finite metric climbs before stabilization, and which configuration settles fastest.
+
 ## Test
 
 ```bash
@@ -139,10 +159,12 @@ python3 -m unittest projects/distance-vector-routing-lab/test_distance_vector_ro
 - what split horizon suppresses and what poison reverse actively advertises as unreachable
 - how periodic full-table rounds differ from triggered route-change propagation
 - why round snapshots are useful for deterministic tests and teaching demos
+- how periodic vs triggered propagation changes reconvergence work even when final routes match
+- how failure benchmarks make loop-mitigation trade-offs concrete instead of anecdotal
 - how failure-driven reconvergence reveals more systems understanding than a static shortest-path answer
 
 ## Future improvements
 - render neighbor-to-neighbor advertisement messages explicitly, not only final per-round tables
 - add a built-in count-to-infinity sample scenario file plus checked-in timeline artifacts
 - add per-route timeout / garbage-collection timers closer to RIP behavior
-- compare convergence length across modes on larger benchmark scenarios
+- extend the failure benchmark to run larger topology suites automatically

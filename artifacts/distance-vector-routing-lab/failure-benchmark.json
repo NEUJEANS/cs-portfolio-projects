@@ -1,0 +1,161 @@
+{
+  "benchmark": "failure-mode-comparison",
+  "event": {
+    "left": "B",
+    "right": "C",
+    "type": "remove-link"
+  },
+  "modes": [
+    "classic",
+    "split-horizon",
+    "poison-reverse"
+  ],
+  "rows": [
+    {
+      "active_steps": 16,
+      "baseline_cost": 2,
+      "baseline_next_hop": "B",
+      "changed_rounds": 15,
+      "converged": true,
+      "final_cost": 16,
+      "final_next_hop": null,
+      "first_changed_round": 2,
+      "first_unreachable_round": 14,
+      "last_route_change_round": 14,
+      "max_cost_seen": 16,
+      "max_finite_cost_seen": 14,
+      "min_cost_seen": 2,
+      "mode": "classic",
+      "rounds": 16,
+      "update_strategy": "periodic"
+    },
+    {
+      "active_steps": 3,
+      "baseline_cost": 2,
+      "baseline_next_hop": "B",
+      "changed_rounds": 2,
+      "converged": true,
+      "final_cost": 16,
+      "final_next_hop": null,
+      "first_changed_round": 2,
+      "first_unreachable_round": 2,
+      "last_route_change_round": 2,
+      "max_cost_seen": 16,
+      "max_finite_cost_seen": 2,
+      "min_cost_seen": 2,
+      "mode": "split-horizon",
+      "rounds": 3,
+      "update_strategy": "periodic"
+    },
+    {
+      "active_steps": 3,
+      "baseline_cost": 2,
+      "baseline_next_hop": "B",
+      "changed_rounds": 2,
+      "converged": true,
+      "final_cost": 16,
+      "final_next_hop": null,
+      "first_changed_round": 2,
+      "first_unreachable_round": 2,
+      "last_route_change_round": 2,
+      "max_cost_seen": 16,
+      "max_finite_cost_seen": 2,
+      "min_cost_seen": 2,
+      "mode": "poison-reverse",
+      "rounds": 3,
+      "update_strategy": "periodic"
+    },
+    {
+      "active_steps": 18,
+      "baseline_cost": 2,
+      "baseline_next_hop": "B",
+      "changed_rounds": 15,
+      "converged": true,
+      "final_cost": 16,
+      "final_next_hop": null,
+      "first_changed_round": 2,
+      "first_unreachable_round": 15,
+      "last_route_change_round": 15,
+      "max_cost_seen": 16,
+      "max_finite_cost_seen": 14,
+      "min_cost_seen": 2,
+      "mode": "classic",
+      "rounds": 18,
+      "update_strategy": "triggered"
+    },
+    {
+      "active_steps": 5,
+      "baseline_cost": 2,
+      "baseline_next_hop": "B",
+      "changed_rounds": 2,
+      "converged": true,
+      "final_cost": 16,
+      "final_next_hop": null,
+      "first_changed_round": 2,
+      "first_unreachable_round": 2,
+      "last_route_change_round": 2,
+      "max_cost_seen": 16,
+      "max_finite_cost_seen": 2,
+      "min_cost_seen": 2,
+      "mode": "split-horizon",
+      "rounds": 5,
+      "update_strategy": "triggered"
+    },
+    {
+      "active_steps": 5,
+      "baseline_cost": 2,
+      "baseline_next_hop": "B",
+      "changed_rounds": 2,
+      "converged": true,
+      "final_cost": 16,
+      "final_next_hop": null,
+      "first_changed_round": 2,
+      "first_unreachable_round": 2,
+      "last_route_change_round": 2,
+      "max_cost_seen": 16,
+      "max_finite_cost_seen": 2,
+      "min_cost_seen": 2,
+      "mode": "poison-reverse",
+      "rounds": 5,
+      "update_strategy": "triggered"
+    }
+  ],
+  "summary": {
+    "earliest_unreachable": {
+      "first_unreachable_round": 2,
+      "mode": "poison-reverse",
+      "update_strategy": "periodic"
+    },
+    "fastest_reconvergence": {
+      "last_route_change_round": 2,
+      "mode": "poison-reverse",
+      "rounds": 3,
+      "update_strategy": "periodic"
+    },
+    "lowest_peak_cost": {
+      "max_finite_cost_seen": 2,
+      "mode": "poison-reverse",
+      "update_strategy": "periodic"
+    }
+  },
+  "topology": {
+    "A": {
+      "B": 1
+    },
+    "B": {
+      "A": 1,
+      "C": 1
+    },
+    "C": {
+      "B": 1
+    }
+  },
+  "tracked_route": {
+    "destination": "C",
+    "router": "A"
+  },
+  "update_strategies": [
+    "periodic",
+    "triggered"
+  ]
+}
