@@ -1669,6 +1669,9 @@ def build_facet_ranking_detail_bundle_paths(
         "index_html": bundle_dir / "index.html",
         "manifest_json": bundle_dir / "manifest.json",
         "slice_dir": bundle_dir / "slices",
+        "screenshot_dir": bundle_dir / "screenshots",
+        "screenshot_slice_dir": bundle_dir / "screenshots" / "slices",
+        "index_png": bundle_dir / "screenshots" / "index.png",
         "bundle_zip": bundle_dir / "facet-ranking-detail-bundle.zip",
     }
 
@@ -2244,6 +2247,7 @@ def write_facet_ranking_detail_bundle_zip(
     paths: dict[str, Path],
     *,
     slice_paths: list[Path],
+    screenshot_paths: list[Path] | None = None,
 ) -> None:
     bundle_dir = paths["bundle_dir"]
     bundle_zip_path = paths["bundle_zip"]
@@ -2251,6 +2255,7 @@ def write_facet_ranking_detail_bundle_zip(
     ordered_files = [
         paths["index_html"],
         paths["manifest_json"],
+        *sorted(screenshot_paths or []),
         *sorted(slice_paths),
     ]
     with zipfile.ZipFile(bundle_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -2274,6 +2279,10 @@ def format_facet_ranking_detail_bundle_index_html(
         (str(bundle_manifest["bundle_files"]["bundle_zip"]), "Download ZIP packet"),
         (str(bundle_manifest["bundle_files"]["manifest_json"]), "Open manifest JSON"),
     ]
+    if bundle_manifest["bundle_files"].get("index_png"):
+        nav_links.append(
+            (str(bundle_manifest["bundle_files"]["index_png"]), "Open PNG snapshot"),
+        )
     if bundle_manifest.get("gallery_html"):
         nav_links.insert(
             0,
@@ -2322,6 +2331,11 @@ def format_facet_ranking_detail_bundle_index_html(
                     '</div>',
                     '<div class="detail-links">',
                     f'<a href="{escape(str(slice_entry["detail_html"]), quote=True)}">Open detail page</a>',
+                    (
+                        f'<a href="{escape(str(slice_entry["detail_png"]), quote=True)}">Open PNG snapshot</a>'
+                        if slice_entry.get("detail_png")
+                        else ''
+                    ),
                     (
                         f'<a href="{escape(str(slice_entry["gallery_focus_href"]), quote=True)}">Open gallery focus</a>'
                         if slice_entry.get("gallery_focus_href")
@@ -2410,6 +2424,7 @@ def format_facet_ranking_detail_slice_html(
     manifest_href: str,
     bundle_zip_href: str,
     gallery_focus_href: str | None = None,
+    slice_png_href: str | None = None,
     related_links: list[dict[str, str]] | None = None,
 ) -> str:
     facet_pills = "".join(
@@ -2471,6 +2486,8 @@ def format_facet_ranking_detail_slice_html(
         (bundle_zip_href, 'Download ZIP packet'),
         (manifest_href, 'Open manifest JSON'),
     ]
+    if slice_png_href:
+        nav_links.append((slice_png_href, 'Open PNG snapshot'))
     if gallery_focus_href:
         nav_links.insert(1, (gallery_focus_href, 'Open gallery focus'))
     related_links_html = ""
@@ -2559,6 +2576,11 @@ def write_facet_ranking_detail_bundle(
     source_label: str,
     related_links: list[dict[str, str]] | None = None,
     gallery_output_path: str | None = None,
+    generate_pngs: bool = False,
+    png_width: int = 1440,
+    png_height: int | None = None,
+    png_capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
 ) -> dict[str, object]:
     bundle_data = build_facet_ranking_groups(result)
     faceting = bundle_data["faceting"]
@@ -2568,6 +2590,14 @@ def write_facet_ranking_detail_bundle(
     paths["slice_dir"].mkdir(parents=True, exist_ok=True)
     for stale_slice_path in paths["slice_dir"].glob("*.html"):
         stale_slice_path.unlink()
+    if generate_pngs:
+        paths["screenshot_slice_dir"].mkdir(parents=True, exist_ok=True)
+        if paths["index_png"].exists():
+            paths["index_png"].unlink()
+        for stale_slice_png_path in paths["screenshot_slice_dir"].glob("*.png"):
+            stale_slice_png_path.unlink()
+    elif paths["screenshot_dir"].exists():
+        shutil.rmtree(paths["screenshot_dir"])
 
     time_window = result.get("time_window")
     coverage_label = "full log span"
@@ -2601,9 +2631,11 @@ def write_facet_ranking_detail_bundle(
 
     slice_entries: list[dict[str, object]] = []
     slice_paths: list[Path] = []
+    screenshot_paths: list[Path] = []
     for group in facet_groups_sorted:
         slice_path = paths["slice_dir"] / f'{group["card_id"]}.html'
         slice_paths.append(slice_path)
+        slice_png_path = paths["screenshot_slice_dir"] / f'{group["card_id"]}.png'
         gallery_focus_href = None
         if gallery_output_path:
             gallery_focus_href = (
@@ -2630,14 +2662,35 @@ def write_facet_ranking_detail_bundle(
                 manifest_href=relative_output_path(paths["manifest_json"], base_dir=slice_path.parent),
                 bundle_zip_href=relative_output_path(paths["bundle_zip"], base_dir=slice_path.parent),
                 gallery_focus_href=gallery_focus_href,
+                slice_png_href=(
+                    relative_output_path(slice_png_path, base_dir=slice_path.parent)
+                    if generate_pngs
+                    else None
+                ),
                 related_links=related_links_for_slice,
             ),
         )
+        if generate_pngs:
+            render_html_png(
+                slice_path,
+                slice_png_path,
+                row_count=max(1, int(group["rendered_row_count"])),
+                width=png_width,
+                height=png_height,
+                capture_ms=png_capture_ms,
+                chrome_binary=chrome_binary,
+            )
+            screenshot_paths.append(slice_png_path)
         slice_entries.append(
             {
                 "facet_label": str(group["facet_label"]),
                 "card_id": str(group["card_id"]),
                 "detail_html": relative_output_path(slice_path, base_dir=paths["bundle_dir"]),
+                "detail_png": (
+                    relative_output_path(slice_png_path, base_dir=paths["bundle_dir"])
+                    if generate_pngs
+                    else None
+                ),
                 "gallery_focus_href": (
                     f'{gallery_href}#{group["card_id"]}' if gallery_href else None
                 ),
@@ -2661,6 +2714,11 @@ def write_facet_ranking_detail_bundle(
             "index_html": "index.html",
             "manifest_json": "manifest.json",
             "bundle_zip": paths["bundle_zip"].name,
+            "index_png": (
+                relative_output_path(paths["index_png"], base_dir=paths["bundle_dir"])
+                if generate_pngs
+                else None
+            ),
         },
         "slices": slice_entries,
     }
@@ -2668,11 +2726,26 @@ def write_facet_ranking_detail_bundle(
         paths["index_html"],
         format_facet_ranking_detail_bundle_index_html(bundle_manifest),
     )
+    if generate_pngs:
+        render_html_png(
+            paths["index_html"],
+            paths["index_png"],
+            row_count=max(1, len(slice_entries)),
+            width=png_width,
+            height=png_height,
+            capture_ms=png_capture_ms,
+            chrome_binary=chrome_binary,
+        )
+        screenshot_paths.insert(0, paths["index_png"])
     write_text_output(
         paths["manifest_json"],
         json.dumps(bundle_manifest, indent=2, sort_keys=True),
     )
-    write_facet_ranking_detail_bundle_zip(paths, slice_paths=slice_paths)
+    write_facet_ranking_detail_bundle_zip(
+        paths,
+        slice_paths=slice_paths,
+        screenshot_paths=screenshot_paths,
+    )
     return bundle_manifest
 
 
@@ -5269,6 +5342,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--facet-ranking-gallery-png",
+        help=(
+            "Optional path for a standalone PNG snapshot captured from "
+            "--facet-ranking-gallery-html (requires --facet-ranking-gallery-html and "
+            "Chrome/Chromium)"
+        ),
+    )
+    parser.add_argument(
         "--facet-ranking-gallery-link",
         action="append",
         default=[],
@@ -5283,6 +5364,15 @@ def build_parser() -> argparse.ArgumentParser:
             "Optional output directory for a self-contained facet detail bundle with "
             "index, manifest, focused per-slice HTML pages, and a ZIP packet "
             "(requires --facet-field)"
+        ),
+    )
+    parser.add_argument(
+        "--facet-ranking-detail-bundle-pngs",
+        action="store_true",
+        help=(
+            "Also capture the facet detail bundle index and focused slice pages as PNG "
+            "snapshots under bundle_dir/screenshots/ (requires "
+            "--facet-ranking-detail-bundle-dir and Chrome/Chromium)"
         ),
     )
     parser.add_argument(
@@ -5475,20 +5565,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--chrome-binary",
         help=(
-            "Optional Chrome/Chromium binary to use for --*-card-png exports"
+            "Optional Chrome/Chromium binary to use for PNG capture exports"
         ),
     )
     parser.add_argument(
         "--card-png-width",
         type=int,
         default=1440,
-        help="Viewport width for --*-card-png exports (default: 1440)",
+        help="Viewport width for PNG capture exports (default: 1440)",
     )
     parser.add_argument(
         "--card-png-height",
         type=int,
         help=(
-            "Optional fixed viewport height for --*-card-png exports; defaults to an "
+            "Optional fixed viewport height for PNG capture exports; defaults to an "
             "auto-sized capture"
         ),
     )
@@ -5497,7 +5587,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1500,
         help=(
-            "Virtual-time budget in milliseconds before capturing --*-card-png exports "
+            "Virtual-time budget in milliseconds before capturing PNG exports "
             "(default: 1500)"
         ),
     )
@@ -5643,6 +5733,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--facet-ranking-gallery-link requires --facet-ranking-gallery-html"
         )
+    if args.facet_ranking_gallery_png and not args.facet_ranking_gallery_html:
+        parser.error(
+            "--facet-ranking-gallery-png requires --facet-ranking-gallery-html"
+        )
+    if args.facet_ranking_detail_bundle_pngs and not args.facet_ranking_detail_bundle_dir:
+        parser.error(
+            "--facet-ranking-detail-bundle-pngs requires --facet-ranking-detail-bundle-dir"
+        )
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -5652,7 +5750,9 @@ def main(argv: list[str] | None = None) -> int:
         args.top_referrer_facet_csv,
         args.top_user_agent_facet_csv,
         args.facet_ranking_gallery_html,
+        args.facet_ranking_gallery_png,
         args.facet_ranking_detail_bundle_dir,
+        args.facet_ranking_detail_bundle_pngs,
         args.upstream_path_latency_facet_csv,
         args.time_bucket_facet_csv,
     ]
@@ -5852,6 +5952,17 @@ def main(argv: list[str] | None = None) -> int:
                 gallery_output_path=args.facet_ranking_gallery_html,
             ),
         )
+    if args.facet_ranking_gallery_png:
+        gallery_data = build_facet_ranking_groups(result)
+        render_html_png(
+            args.facet_ranking_gallery_html,
+            args.facet_ranking_gallery_png,
+            row_count=max(1, len(gallery_data["facet_groups"])),
+            width=args.card_png_width,
+            height=args.card_png_height,
+            capture_ms=args.card_png_capture_ms,
+            chrome_binary=args.chrome_binary,
+        )
     if args.facet_ranking_detail_bundle_dir:
         write_facet_ranking_detail_bundle(
             args.facet_ranking_detail_bundle_dir,
@@ -5859,6 +5970,11 @@ def main(argv: list[str] | None = None) -> int:
             source_label=Path(args.logfile).name,
             related_links=facet_ranking_gallery_links,
             gallery_output_path=args.facet_ranking_gallery_html,
+            generate_pngs=args.facet_ranking_detail_bundle_pngs,
+            png_width=args.card_png_width,
+            png_height=args.card_png_height,
+            png_capture_ms=args.card_png_capture_ms,
+            chrome_binary=args.chrome_binary,
         )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(

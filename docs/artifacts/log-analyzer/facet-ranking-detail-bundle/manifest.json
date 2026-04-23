@@ -2,6 +2,7 @@
   "bundle_files": {
     "bundle_zip": "facet-ranking-detail-bundle.zip",
     "index_html": "index.html",
+    "index_png": "screenshots/index.png",
     "manifest_json": "manifest.json"
   },
   "coverage_detail": "Window filter inactive",
@@ -44,6 +45,7 @@
       ],
       "card_id": "facet-env-prod-region-us-east-1",
       "detail_html": "slices/facet-env-prod-region-us-east-1.html",
+      "detail_png": "screenshots/slices/facet-env-prod-region-us-east-1.png",
       "facet_label": "env=prod, region=us-east-1",
       "facets": {
         "env": "prod",
@@ -63,6 +65,7 @@
       ],
       "card_id": "facet-env-staging-region-us-west-2",
       "detail_html": "slices/facet-env-staging-region-us-west-2.html",
+      "detail_png": "screenshots/slices/facet-env-staging-region-us-west-2.png",
       "facet_label": "env=staging, region=us-west-2",
       "facets": {
         "env": "staging",
@@ -82,6 +85,7 @@
       ],
       "card_id": "facet-env-preview-region-missing",
       "detail_html": "slices/facet-env-preview-region-missing.html",
+      "detail_png": "screenshots/slices/facet-env-preview-region-missing.png",
       "facet_label": "env=preview, region=(missing)",
       "facets": {
         "env": "preview",

@@ -1,5 +1,19 @@
 # Log Analyzer Checklist
 
+## Facet gallery/detail PNG slice (2026-04-23 06:32 UTC run)
+- [x] confirm repo sync before editing and continue the queued raster-ready gallery/detail follow-up instead of starting a different project
+- [x] do a brief Chrome headless research check plus a short screenshot self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--facet-ranking-gallery-png` so the committed ranking gallery can ship as a screenshot-ready PNG alongside the HTML artifact
+- [x] add `--facet-ranking-detail-bundle-pngs` so the bundle index and per-slice detail pages can emit deterministic PNG snapshots under `screenshots/`
+- [x] extend automated coverage for PNG bundle/gallery success paths, manifest/ZIP contents, and validation errors
+- [x] refresh the committed sample gallery/detail-bundle artifacts so the new PNG outputs are reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for richer bundle/gallery summary cards or comparison-style facet dashboards
+
 ## Card PNG slice (2026-04-22 03:28 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer card-artifact follow-up instead of starting a different project
 - [x] do a brief Chrome headless / Python `tempfile` research check because PNG exports were the next highest-value artifact gap

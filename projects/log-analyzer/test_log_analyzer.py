@@ -2699,6 +2699,113 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertTrue((bundle_dir / 'slices' / 'facet-env-prod-region-us-east-1.html').exists())
             self.assertFalse((bundle_dir / 'slices' / 'facet-env-staging-region-us-west-2.html').exists())
 
+    @unittest.skipUnless(CHROME_BINARY, 'Chrome/Chromium required for PNG capture tests')
+    def test_cli_facet_ranking_gallery_png_export_generates_png(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            log_path = temp_root / 'facet-ranking.log'
+            gallery_html_path = temp_root / 'exports' / 'facet-ranking-gallery.html'
+            gallery_png_path = temp_root / 'exports' / 'facet-ranking-gallery.png'
+            log_path.write_text(
+                '\n'.join(
+                    [
+                        '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                        '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+                    ]
+                ) + '\n',
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / 'log_analyzer.py'),
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                    '--top',
+                    '2',
+                    '--facet-ranking-gallery-html',
+                    str(gallery_html_path),
+                    '--facet-ranking-gallery-png',
+                    str(gallery_png_path),
+                    '--chrome-binary',
+                    CHROME_BINARY,
+                ],
+                cwd=temp_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(gallery_html_path.exists())
+            png_bytes = gallery_png_path.read_bytes()
+            self.assertGreater(len(png_bytes), 1024)
+            self.assertEqual(png_bytes[:8], b'\x89PNG\r\n\x1a\n')
+
+    @unittest.skipUnless(CHROME_BINARY, 'Chrome/Chromium required for PNG capture tests')
+    def test_write_facet_ranking_detail_bundle_can_emit_png_snapshots(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+            ],
+            top_n=2,
+            facet_fields=['env', 'region'],
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            artifact_dir = temp_root / 'docs' / 'artifacts' / 'log-analyzer'
+            artifact_dir.mkdir(parents=True)
+            gallery_path = artifact_dir / 'facet-ranking-gallery.html'
+            gallery_path.write_text('<!doctype html>', encoding='utf-8')
+            bundle_dir = artifact_dir / 'facet-ranking-detail-bundle'
+
+            manifest = write_facet_ranking_detail_bundle(
+                bundle_dir,
+                result,
+                source_label='facet-ranking-sample.log',
+                gallery_output_path=str(gallery_path),
+                generate_pngs=True,
+                chrome_binary=CHROME_BINARY,
+            )
+
+            index_png_path = bundle_dir / 'screenshots' / 'index.png'
+            slice_png_path = bundle_dir / 'screenshots' / 'slices' / 'facet-env-prod-region-us-east-1.png'
+            self.assertTrue(index_png_path.exists())
+            self.assertTrue(slice_png_path.exists())
+            self.assertEqual(index_png_path.read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
+            self.assertEqual(slice_png_path.read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
+            self.assertEqual(manifest['bundle_files']['index_png'], 'screenshots/index.png')
+            self.assertEqual(
+                manifest['slices'][0]['detail_png'],
+                'screenshots/slices/facet-env-prod-region-us-east-1.png',
+            )
+
+            with zipfile.ZipFile(bundle_dir / 'facet-ranking-detail-bundle.zip') as archive:
+                self.assertEqual(
+                    archive.namelist(),
+                    [
+                        'index.html',
+                        'manifest.json',
+                        'screenshots/index.png',
+                        'screenshots/slices/facet-env-prod-region-us-east-1.png',
+                        'screenshots/slices/facet-env-staging-region-us-west-2.png',
+                        'slices/facet-env-prod-region-us-east-1.html',
+                        'slices/facet-env-staging-region-us-west-2.html',
+                    ],
+                )
+
+            index_html = (bundle_dir / 'index.html').read_text(encoding='utf-8')
+            slice_html = (bundle_dir / 'slices' / 'facet-env-prod-region-us-east-1.html').read_text(encoding='utf-8')
+            self.assertIn('href="screenshots/index.png"', index_html)
+            self.assertIn('Open PNG snapshot', slice_html)
+            self.assertIn('../screenshots/slices/facet-env-prod-region-us-east-1.png', slice_html)
+
     def test_cli_writes_facet_ranking_detail_bundle_with_gallery_backlinks(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
@@ -2751,6 +2858,54 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('href="../facet-ranking-gallery.html"', bundle_index_html)
             self.assertIn('href="../release-comparison-card.html"', bundle_index_html)
 
+    @unittest.skipUnless(CHROME_BINARY, 'Chrome/Chromium required for PNG capture tests')
+    def test_cli_writes_facet_ranking_detail_bundle_png_snapshots(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            log_path = temp_root / 'facet-ranking.log'
+            artifact_dir = temp_root / 'docs' / 'artifacts' / 'log-analyzer'
+            artifact_dir.mkdir(parents=True)
+            bundle_dir = artifact_dir / 'facet-ranking-detail-bundle'
+            log_path.write_text(
+                '\n'.join(
+                    [
+                        '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                        '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+                    ]
+                ) + '\n',
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / 'log_analyzer.py'),
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                    '--top',
+                    '2',
+                    '--facet-ranking-detail-bundle-dir',
+                    str(bundle_dir),
+                    '--facet-ranking-detail-bundle-pngs',
+                    '--chrome-binary',
+                    CHROME_BINARY,
+                ],
+                cwd=temp_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            manifest = json.loads((bundle_dir / 'manifest.json').read_text(encoding='utf-8'))
+            self.assertEqual(manifest['bundle_files']['index_png'], 'screenshots/index.png')
+            self.assertTrue((bundle_dir / 'screenshots' / 'index.png').exists())
+            self.assertTrue(
+                (bundle_dir / 'screenshots' / 'slices' / 'facet-env-prod-region-us-east-1.png').exists()
+            )
+
     def test_cli_rejects_facet_ranking_detail_bundle_without_facet_field(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -2773,6 +2928,57 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('facet-specific export flags require at least one --facet-field', completed.stderr)
+
+    def test_cli_rejects_facet_ranking_gallery_png_without_gallery_html(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            png_path = Path(tmpdir) / 'exports' / 'facet-ranking-gallery.png'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-ranking-gallery-png',
+                    str(png_path),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--facet-ranking-gallery-png requires --facet-ranking-gallery-html', completed.stderr)
+
+    def test_cli_rejects_facet_ranking_detail_bundle_pngs_without_bundle_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-ranking-detail-bundle-pngs',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn(
+                '--facet-ranking-detail-bundle-pngs requires --facet-ranking-detail-bundle-dir',
+                completed.stderr,
+            )
 
     def test_cli_rejects_preset_gallery_link_without_gallery_output(self):
         completed = subprocess.run(

@@ -36,10 +36,12 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - supports standalone `--time-bucket-card-svg`, `--time-bucket-card-html`, and `--time-bucket-card-png` exports for presentation-ready mini trend cards, browser-friendly artifact pages, chat/slide-friendly raster artifacts, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path/top-referrer/top-user-agent rankings, hotspot/trend breakdowns, dedicated CSV exports, and browser-friendly ranking galleries
 - supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page, then explore the exported gallery with built-in search, per-field filters, sort presets, hide-empty controls, shareable URL state, and per-slice deep links
+- supports `--facet-ranking-gallery-png` so the same gallery export can also ship a screenshot-ready PNG overview for slide decks, chat uploads, and README thumbnails
 - supports `--facet-ranking-detail-bundle-dir` so the same facet-aware ranking run can also emit a self-contained packet with an index page, manifest JSON, focused per-slice HTML pages, and a deterministic ZIP bundle for download/review handoff workflows
+- supports `--facet-ranking-detail-bundle-pngs` so detail-bundle packets can include a bundle-index PNG plus one focused PNG per facet slice under `screenshots/`
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg`, `--facet-compare-card-html`, and `--facet-compare-card-png` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--facet-ranking-gallery-html`, `--facet-ranking-gallery-link`, `--facet-ranking-detail-bundle-dir`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--time-bucket-card-png`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--facet-compare-card-png`, `--chrome-binary`, `--card-png-width`, `--card-png-height`, `--card-png-capture-ms`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--facet-ranking-gallery-html`, `--facet-ranking-gallery-png`, `--facet-ranking-gallery-link`, `--facet-ranking-detail-bundle-dir`, `--facet-ranking-detail-bundle-pngs`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--time-bucket-card-png`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--facet-compare-card-png`, `--chrome-binary`, `--card-png-width`, `--card-png-height`, `--card-png-capture-ms`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -63,7 +65,9 @@ python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --h
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 python3 log_analyzer.py access.log --facet-field env --facet-field region --top-ip-facet-csv ip-facets.csv --top-path-facet-csv path-facets.csv --top-referrer-facet-csv referrer-facets.csv --top-user-agent-facet-csv user-agent-facets.csv
 python3 log_analyzer.py access.log --facet-field env --facet-field region --facet-ranking-gallery-link 'Comparison card HTML=release-comparison-card.html' --facet-ranking-gallery-link 'Top referrers CSV=top-referrers-by-facet.csv' --facet-ranking-gallery-html facet-ranking-gallery.html
+python3 log_analyzer.py access.log --facet-field env --facet-field region --facet-ranking-gallery-html facet-ranking-gallery.html --facet-ranking-gallery-png facet-ranking-gallery.png
 python3 log_analyzer.py access.log --facet-field env --facet-field region --facet-ranking-gallery-html facet-ranking-gallery.html --facet-ranking-detail-bundle-dir facet-ranking-detail-bundle
+python3 log_analyzer.py access.log --facet-field env --facet-field region --facet-ranking-gallery-html facet-ranking-gallery.html --facet-ranking-detail-bundle-dir facet-ranking-detail-bundle --facet-ranking-detail-bundle-pngs
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html
@@ -186,6 +190,7 @@ Behavior:
 - the gallery requires at least one `--facet-field` and reuses the normal per-facet ranking output instead of creating a separate analysis path
 - it groups the rendered tables by facet label so each environment/release slice gets one card with top IPs, paths, referrers, and user agents together
 - it adds summary cards for facet-slice count, populated ranking families, rendered rows, largest-slice request volume, and related artifact links so screenshots still explain the scope at a glance
+- `--facet-ranking-gallery-png` captures a screenshot-ready PNG from the same self-contained HTML gallery so raster exports stay aligned with the browser artifact without extra rendering code
 - the exported page includes built-in search, exact per-field filters, traffic/label sort presets, a hide-empty toggle, and shareable URL state so the committed artifact remains useful even when many facet slices exist
 - each card gets a deterministic fragment ID plus a focused-view deep link / copy-link flow, which makes reviewer notes and GitHub Pages screenshots easier to share without regenerating the artifact
 - related links are rewritten relative to the gallery output path when they point at local files, which makes committed artifact bundles portable inside `docs/` or other nested folders
@@ -193,8 +198,9 @@ Behavior:
 
 Examples:
 - `--facet-field env --facet-field region --facet-ranking-gallery-html facet-ranking-gallery.html`
-- `--facet-field env --facet-field region --facet-ranking-gallery-link 'Comparison card HTML=release-comparison-card.html' --facet-ranking-gallery-link 'Top referrers CSV=top-referrers-by-facet.csv' --facet-ranking-gallery-html docs/artifacts/log-analyzer/facet-ranking-gallery.html`
-- sample committed artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-gallery.html` plus the existing `top-*-by-facet.csv` files and comparison-card bundle
+- `--facet-field env --facet-field region --facet-ranking-gallery-html facet-ranking-gallery.html --facet-ranking-gallery-png facet-ranking-gallery.png`
+- `--facet-field env --facet-field region --facet-ranking-gallery-link 'Comparison card HTML=release-comparison-card.html' --facet-ranking-gallery-link 'Top referrers CSV=top-referrers-by-facet.csv' --facet-ranking-gallery-html docs/artifacts/log-analyzer/facet-ranking-gallery.html --facet-ranking-gallery-png docs/artifacts/log-analyzer/facet-ranking-gallery.png`
+- sample committed artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-gallery.html`, `docs/artifacts/log-analyzer/facet-ranking-gallery.png`, plus the existing `top-*-by-facet.csv` files and comparison-card bundle
 
 ## Facet ranking detail bundles
 Use `--facet-ranking-detail-bundle-dir` when you want the same facet-ranking run to also emit one focused HTML page per facet slice, plus a bundle index/manifest and downloadable ZIP packet that can be handed to reviewers without asking them to hunt through the gallery.
@@ -202,14 +208,15 @@ Use `--facet-ranking-detail-bundle-dir` when you want the same facet-ranking run
 Behavior:
 - the bundle requires at least one `--facet-field` and reuses the same grouped facet-ranking data that powers the gallery, so the focused pages stay aligned with the CSV/gallery outputs
 - it writes `index.html`, `manifest.json`, one `slices/<card-id>.html` page per facet slice, and a deterministic `facet-ranking-detail-bundle.zip` archive inside the target directory
+- `--facet-ranking-detail-bundle-pngs` also captures `screenshots/index.png` plus one `screenshots/slices/<card-id>.png` file per facet slice, links them from the HTML/manifest outputs, and includes them in the ZIP packet
 - when `--facet-ranking-gallery-html` is also present, the index and slice pages link back to the gallery plus the exact focused card hash for each slice
 - repeatable `--facet-ranking-gallery-link LABEL=TARGET` values are reused as related artifact links inside the bundle so comparison cards and CSV downloads stay one click away
 - the deterministic ZIP metadata makes reruns stable for Git diffs and review handoffs, even when the packet is regenerated from the same inputs multiple times
 
 Examples:
 - `--facet-field env --facet-field region --facet-ranking-detail-bundle-dir facet-ranking-detail-bundle`
-- `--facet-field env --facet-field region --facet-ranking-gallery-html docs/artifacts/log-analyzer/facet-ranking-gallery.html --facet-ranking-detail-bundle-dir docs/artifacts/log-analyzer/facet-ranking-detail-bundle`
-- sample committed artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-detail-bundle/` with `index.html`, `manifest.json`, per-slice pages, and the ZIP packet
+- `--facet-field env --facet-field region --facet-ranking-gallery-html docs/artifacts/log-analyzer/facet-ranking-gallery.html --facet-ranking-detail-bundle-dir docs/artifacts/log-analyzer/facet-ranking-detail-bundle --facet-ranking-detail-bundle-pngs`
+- sample committed artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-detail-bundle/` with `index.html`, `manifest.json`, `screenshots/`, per-slice pages, and the ZIP packet
 
 ## Facet comparisons for release reviews
 Use `--facet-compare-field FIELD --facet-compare-values LEFT RIGHT` when you want two deployment, release, or environment values compared side by side without losing the normal global summary. This is useful for portfolio screenshots and release-review notes such as `env=prod` vs `env=staging` or `release=2026.04` vs `release=2026.05`.
@@ -424,6 +431,6 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 ```
 
 ## Future Improvements
-- consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
-- consider PNG export helpers or raster-ready focused-slice capture helpers now that downloadable per-facet detail bundles exist
 - consider facet-aware comparison-card/gallery views that go beyond ranking tables for heavier release-review narratives
+- consider lightweight summary tiles or scorecards for the facet gallery/bundle index so overview screenshots explain busiest slices even faster
+- consider optional contact-sheet style multi-slice PNG exports for large facet bundles where reviewers want one raster sheet instead of opening each focused page
