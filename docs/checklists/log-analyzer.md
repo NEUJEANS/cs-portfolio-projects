@@ -11,7 +11,7 @@
 - [x] run targeted tests and smoke checks
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider a follow-up slice for richer bundle/gallery summary cards or comparison-style facet dashboards
 
 ## Card PNG slice (2026-04-22 03:28 UTC run)
