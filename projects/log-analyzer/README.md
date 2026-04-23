@@ -13,6 +13,7 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - renders standalone SVG and HTML mini trend cards directly from active time buckets so GitHub Pages / slides can show release or incident snapshots without spreadsheet cleanup
 - splits hotspot and trend views by named deployment/environment fields such as `env=prod`, `region=us-east-1`, or `release=2026.04` when richer log formats include them
 - turns facet-aware rankings into browser-friendly gallery pages so students can show per-slice IP/path/referrer/user-agent evidence beside release-review artifacts without opening CSV files
+- adds lightweight per-slice scorecards to facet galleries and bundle indexes so overview screenshots explain the busiest slices before a reviewer opens the full tables
 - compares two facet values side by side (for example `prod` vs `staging`) with request/error/latency deltas plus aligned time-bucket rows for release reviews
 - handles malformed lines, missing byte counts, and optional latency fields safely
 
@@ -35,9 +36,9 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
 - supports standalone `--time-bucket-card-svg`, `--time-bucket-card-html`, and `--time-bucket-card-png` exports for presentation-ready mini trend cards, browser-friendly artifact pages, chat/slide-friendly raster artifacts, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path/top-referrer/top-user-agent rankings, hotspot/trend breakdowns, dedicated CSV exports, and browser-friendly ranking galleries
-- supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page, then explore the exported gallery with built-in search, per-field filters, sort presets, hide-empty controls, shareable URL state, and per-slice deep links
+- supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page, then explore the exported gallery with built-in search, per-field filters, sort presets, hide-empty controls, shareable URL state, per-slice deep links, and lightweight scorecards for the busiest slice details
 - supports `--facet-ranking-gallery-png` so the same gallery export can also ship a screenshot-ready PNG overview for slide decks, chat uploads, and README thumbnails
-- supports `--facet-ranking-detail-bundle-dir` so the same facet-aware ranking run can also emit a self-contained packet with an index page, manifest JSON, focused per-slice HTML pages, and a deterministic ZIP bundle for download/review handoff workflows
+- supports `--facet-ranking-detail-bundle-dir` so the same facet-aware ranking run can also emit a self-contained packet with an index page, manifest JSON, focused per-slice HTML pages, lightweight slice scorecards, and a deterministic ZIP bundle for download/review handoff workflows
 - supports `--facet-ranking-detail-bundle-pngs` so detail-bundle packets can include a bundle-index PNG plus one focused PNG per facet slice under `screenshots/`
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg`, `--facet-compare-card-html`, and `--facet-compare-card-png` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
@@ -189,6 +190,7 @@ Use `--facet-ranking-gallery-html` when you want the facet-aware ranking tables 
 Behavior:
 - the gallery requires at least one `--facet-field` and reuses the normal per-facet ranking output instead of creating a separate analysis path
 - it groups the rendered tables by facet label so each environment/release slice gets one card with top IPs, paths, referrers, and user agents together
+- each slice card also surfaces an `At a glance` scorecard built from the strongest top-path/referrer/user-agent/IP rows so overview screenshots explain the slice before a reviewer opens the full tables
 - it adds summary cards for facet-slice count, populated ranking families, rendered rows, largest-slice request volume, and related artifact links so screenshots still explain the scope at a glance
 - `--facet-ranking-gallery-png` captures a screenshot-ready PNG from the same self-contained HTML gallery so raster exports stay aligned with the browser artifact without extra rendering code
 - the exported page includes built-in search, exact per-field filters, traffic/label sort presets, a hide-empty toggle, and shareable URL state so the committed artifact remains useful even when many facet slices exist
@@ -208,6 +210,7 @@ Use `--facet-ranking-detail-bundle-dir` when you want the same facet-ranking run
 Behavior:
 - the bundle requires at least one `--facet-field` and reuses the same grouped facet-ranking data that powers the gallery, so the focused pages stay aligned with the CSV/gallery outputs
 - it writes `index.html`, `manifest.json`, one `slices/<card-id>.html` page per facet slice, and a deterministic `facet-ranking-detail-bundle.zip` archive inside the target directory
+- the bundle index reuses those same per-slice `At a glance` scorecards so the packet overview can highlight the dominant path/referrer/user-agent/IP rows without opening each detail page
 - `--facet-ranking-detail-bundle-pngs` also captures `screenshots/index.png` plus one `screenshots/slices/<card-id>.png` file per facet slice, links them from the HTML/manifest outputs, and includes them in the ZIP packet
 - when `--facet-ranking-gallery-html` is also present, the index and slice pages link back to the gallery plus the exact focused card hash for each slice
 - repeatable `--facet-ranking-gallery-link LABEL=TARGET` values are reused as related artifact links inside the bundle so comparison cards and CSV downloads stay one click away
@@ -432,5 +435,4 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 
 ## Future Improvements
 - consider facet-aware comparison-card/gallery views that go beyond ranking tables for heavier release-review narratives
-- consider lightweight summary tiles or scorecards for the facet gallery/bundle index so overview screenshots explain busiest slices even faster
 - consider optional contact-sheet style multi-slice PNG exports for large facet bundles where reviewers want one raster sheet instead of opening each focused page

@@ -1,6 +1,19 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-23 06:32 UTC run)
+## Current slice (2026-04-23 07:04 UTC run)
+- [x] resume the queued `log-analyzer` facet gallery/detail overview follow-up after confirming `main` still matches `origin/main`
+- [x] keep building on the existing facet-ranking gallery/detail artifacts instead of switching projects because quick-read summary tiles were the clearest remaining presentation gap
+- [x] do a brief HTML/CSS scorecard research refresh plus a short render/self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add lightweight `At a glance` scorecards to facet gallery cards so overview screenshots show the dominant path/referrer/user-agent/IP rows without opening full tables
+- [x] reuse the same scorecard highlights inside the facet detail bundle index/manifest so download packets stay quick to scan and resumable
+- [x] extend automated coverage for scorecard rendering in gallery HTML and bundle manifests/index pages
+- [x] refresh README/checklists/research/learning/review docs and regenerate committed sample gallery/detail-bundle artifacts
+- [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
+- [x] run secret scan before push
+- [x] commit, push, and write the wrap-up
+
+## Previous slice (2026-04-23 06:32 UTC run)
 - [x] resume the queued `log-analyzer` facet gallery/detail PNG follow-up after confirming `main` still matches `origin/main`
 - [x] keep building on the existing facet-ranking gallery/detail artifacts instead of switching projects because raster-ready screenshots were the clearest remaining presentation gap
 - [x] do a brief Chrome headless research refresh plus a short screenshot self-test plan before coding
@@ -64,5 +77,5 @@
 - [ ] consider facet-aware comparison cards or gallery views for referrer/user-agent heavy release reviews beyond the current ranking-focused page
 - [x] add PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
 - [x] add raster-ready focused-slice exports or screenshot helpers for facet-ranking galleries/detail bundles now that trend/comparison card PNG exports exist
-- [ ] consider lightweight summary tiles or scorecards for the facet gallery/bundle index so overview screenshots explain busiest slices faster
+- [x] add lightweight summary tiles or scorecards for the facet gallery/bundle index so overview screenshots explain busiest slices faster
 - [ ] consider optional contact-sheet style multi-slice PNG exports for large facet bundles where reviewers want one raster sheet instead of opening each focused page

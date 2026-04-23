@@ -1566,6 +1566,7 @@ def build_facet_ranking_category_specs(result: dict[str, object]) -> list[dict[s
             "description": "Which source IPs dominate each deployment or environment slice.",
             "rows": list(result.get("top_ips_by_facet", [])),
             "value_field": "ip",
+            "scorecard_label": "Top IP",
         },
         {
             "title": "Top paths",
@@ -1573,6 +1574,7 @@ def build_facet_ranking_category_specs(result: dict[str, object]) -> list[dict[s
             "description": "Which endpoints absorb the most traffic inside each facet slice.",
             "rows": list(result.get("top_paths_by_facet", [])),
             "value_field": "path",
+            "scorecard_label": "Top path",
         },
         {
             "title": "Top referrers",
@@ -1580,6 +1582,7 @@ def build_facet_ranking_category_specs(result: dict[str, object]) -> list[dict[s
             "description": "Which upstream pages or campaign links feed each slice when combined logs are available.",
             "rows": list(result.get("top_referrers_by_facet", [])),
             "value_field": "referrer",
+            "scorecard_label": "Top referrer",
         },
         {
             "title": "Top user agents",
@@ -1587,8 +1590,89 @@ def build_facet_ranking_category_specs(result: dict[str, object]) -> list[dict[s
             "description": "Which browser, bot, or client strings dominate each slice.",
             "rows": list(result.get("top_user_agents_by_facet", [])),
             "value_field": "user_agent",
+            "scorecard_label": "Top user agent",
         },
     ]
+
+
+def build_facet_ranking_scorecard_highlights(
+    group: dict[str, object],
+    category_specs: list[dict[str, object]],
+    *,
+    limit: int = 3,
+) -> list[dict[str, object]]:
+    highlights_by_family: dict[str, dict[str, object]] = {}
+    for spec in category_specs:
+        rows = list(group["categories"].get(spec["title"], []))
+        if not rows:
+            continue
+        top_row = rows[0]
+        highlights_by_family[str(spec["family_key"])] = {
+            "family_key": str(spec["family_key"]),
+            "label": str(spec["scorecard_label"]),
+            "value": str(top_row[spec["value_field"]]),
+            "count": int(top_row["count"]),
+        }
+
+    ordered_family_keys = [
+        "top-paths",
+        "top-referrers",
+        "top-user-agents",
+        "top-ips",
+    ]
+    highlights: list[dict[str, object]] = []
+    for family_key in ordered_family_keys:
+        highlight = highlights_by_family.get(family_key)
+        if not highlight:
+            continue
+        highlights.append(highlight)
+        if len(highlights) >= limit:
+            return highlights
+
+    for spec in category_specs:
+        family_key = str(spec["family_key"])
+        highlight = highlights_by_family.get(family_key)
+        if not highlight:
+            continue
+        if any(
+            str(existing["family_key"]) == family_key for existing in highlights
+        ):
+            continue
+        highlights.append(highlight)
+        if len(highlights) >= limit:
+            break
+    return highlights
+
+
+def format_facet_ranking_scorecard_highlights_html(
+    highlights: list[dict[str, object]],
+) -> str:
+    if not highlights:
+        return ""
+    highlight_cards = "".join(
+        "".join(
+            [
+                '<div class="slice-scorecard-item">',
+                f'<span class="slice-scorecard-label">{escape(str(highlight["label"]))}</span>',
+                f'<code>{escape(str(highlight["value"]))}</code>',
+                (
+                    '<span class="slice-scorecard-count">'
+                    f'{int(highlight["count"])} hits'
+                    '</span>'
+                ),
+                '</div>',
+            ]
+        )
+        for highlight in highlights
+    )
+    return "".join(
+        [
+            '<section class="slice-scorecard">',
+            '<p class="slice-scorecard-title">At a glance</p>',
+            f'<div class="slice-scorecard-grid">{highlight_cards}</div>',
+            '</section>',
+        ]
+    )
 
 
 def build_facet_ranking_groups(result: dict[str, object]) -> dict[str, object]:
@@ -1645,6 +1729,10 @@ def build_facet_ranking_groups(result: dict[str, object]) -> dict[str, object]:
         group["rendered_row_count"] = sum(
             len(group["categories"].get(str(spec["title"]), []))
             for spec in category_specs
+        )
+        group["scorecard_highlights"] = build_facet_ranking_scorecard_highlights(
+            group,
+            category_specs,
         )
 
     return {
@@ -1830,6 +1918,9 @@ def format_facet_ranking_gallery_html(
                 '</div>',
             ]
         )
+        scorecard_html = format_facet_ranking_scorecard_highlights_html(
+            list(group["scorecard_highlights"])
+        )
         ranking_sections: list[str] = []
         for spec in category_specs:
             rows = list(group["categories"].get(spec["title"], []))
@@ -1904,6 +1995,7 @@ def format_facet_ranking_gallery_html(
                     '</div>',
                     facet_stats,
                     f'<div class="facet-pill-row">{facet_pills}</div>' if facet_pills else '',
+                    scorecard_html,
                     *ranking_sections,
                     '</article>',
                 ]
@@ -2202,6 +2294,13 @@ def format_facet_ranking_gallery_html(
     .facet-pill-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
     .facet-pill {{ display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }}
     .facet-pill strong {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }}
+    .slice-scorecard {{ margin: 0.1rem 0 1rem; padding: 0.9rem; border: 1px solid #dbeafe; border-radius: 1rem; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }}
+    .slice-scorecard-title {{ margin: 0 0 0.65rem; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1d4ed8; }}
+    .slice-scorecard-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.6rem; }}
+    .slice-scorecard-item {{ background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.7rem 0.75rem; }}
+    .slice-scorecard-label {{ display: block; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #475569; }}
+    .slice-scorecard-item code {{ display: block; margin-top: 0.35rem; font-size: 0.86rem; }}
+    .slice-scorecard-count {{ display: inline-block; margin-top: 0.45rem; color: #1d4ed8; font-size: 0.8rem; font-weight: 700; }}
     .ranking-block + .ranking-block {{ margin-top: 1rem; }}
     .ranking-block h3 {{ margin: 0 0 0.2rem; font-size: 1rem; }}
     .caption {{ color: #475569; margin: 0 0 0.65rem; }}
@@ -2317,6 +2416,9 @@ def format_facet_ranking_detail_bundle_index_html(
             )
             for field_name, field_value in slice_entry["facets"].items()
         )
+        scorecard_html = format_facet_ranking_scorecard_highlights_html(
+            list(slice_entry.get("scorecard_highlights") or [])
+        )
         slice_cards.append(
             "".join(
                 [
@@ -2329,6 +2431,7 @@ def format_facet_ranking_detail_bundle_index_html(
                     f'<span class="stat-chip"><strong>{slice_entry["family_count"]}</strong><span>ranking families</span></span>',
                     f'<span class="stat-chip"><strong>{slice_entry["rendered_row_count"]}</strong><span>rendered rows</span></span>',
                     '</div>',
+                    scorecard_html,
                     '<div class="detail-links">',
                     f'<a href="{escape(str(slice_entry["detail_html"]), quote=True)}">Open detail page</a>',
                     (
@@ -2382,6 +2485,13 @@ def format_facet_ranking_detail_bundle_index_html(
     .stat-chip {{ display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 7.6rem; }}
     .stat-chip strong {{ font-size: 1.02rem; }}
     .stat-chip span {{ font-size: 0.8rem; color: #475569; }}
+    .slice-scorecard {{ margin: 0.1rem 0 1rem; padding: 0.9rem; border: 1px solid #dbeafe; border-radius: 1rem; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }}
+    .slice-scorecard-title {{ margin: 0 0 0.65rem; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1d4ed8; }}
+    .slice-scorecard-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.6rem; }}
+    .slice-scorecard-item {{ background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.7rem 0.75rem; }}
+    .slice-scorecard-label {{ display: block; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #475569; }}
+    .slice-scorecard-item code {{ display: block; margin-top: 0.35rem; font-size: 0.86rem; }}
+    .slice-scorecard-count {{ display: inline-block; margin-top: 0.45rem; color: #1d4ed8; font-size: 0.8rem; font-weight: 700; }}
     .detail-links {{ display: flex; flex-wrap: wrap; gap: 0.55rem; }}
     .related-links ul {{ margin: 0.75rem 0 0; padding-left: 1.1rem; }}
     .related-links li + li {{ margin-top: 0.45rem; }}
@@ -2699,6 +2809,7 @@ def write_facet_ranking_detail_bundle(
                 "family_count": len(group["available_family_labels"]),
                 "rendered_row_count": int(group["rendered_row_count"]),
                 "available_family_labels": list(group["available_family_labels"]),
+                "scorecard_highlights": list(group["scorecard_highlights"]),
             }
         )
 

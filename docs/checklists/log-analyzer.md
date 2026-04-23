@@ -1,5 +1,20 @@
 # Log Analyzer Checklist
 
+## Facet gallery/detail scorecards slice (2026-04-23 07:04 UTC run)
+- [x] confirm repo sync before editing and continue the queued facet-gallery/detail overview follow-up instead of starting a different project
+- [x] do a brief HTML/CSS scorecard research check plus a short render/self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add lightweight `At a glance` scorecards to facet gallery cards using the existing top-path/referrer/user-agent/IP rows
+- [x] reuse the same scorecard highlights in the detail-bundle index and manifest so reviewer packets stay easy to scan
+- [x] extend automated coverage for gallery scorecards plus bundle manifest/index rendering
+- [x] refresh the committed sample gallery/detail-bundle artifacts so the new overview tiles are reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [x] consider a follow-up slice for richer bundle/gallery summary cards or comparison-style facet dashboards
+- [ ] consider a follow-up slice for optional contact-sheet style multi-slice PNG exports
+
 ## Facet gallery/detail PNG slice (2026-04-23 06:32 UTC run)
 - [x] confirm repo sync before editing and continue the queued raster-ready gallery/detail follow-up instead of starting a different project
 - [x] do a brief Chrome headless research check plus a short screenshot self-test plan before coding
@@ -12,7 +27,7 @@
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider a follow-up slice for richer bundle/gallery summary cards or comparison-style facet dashboards
+- [x] consider a follow-up slice for richer bundle/gallery summary cards or comparison-style facet dashboards
 
 ## Card PNG slice (2026-04-22 03:28 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer card-artifact follow-up instead of starting a different project

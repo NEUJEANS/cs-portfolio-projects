@@ -54,6 +54,26 @@
       "family_count": 4,
       "gallery_focus_href": "../facet-ranking-gallery.html#facet-env-prod-region-us-east-1",
       "rendered_row_count": 8,
+      "scorecard_highlights": [
+        {
+          "count": 2,
+          "family_key": "top-paths",
+          "label": "Top path",
+          "value": "/api/report"
+        },
+        {
+          "count": 2,
+          "family_key": "top-referrers",
+          "label": "Top referrer",
+          "value": "https://status.example.com/deploy"
+        },
+        {
+          "count": 2,
+          "family_key": "top-user-agents",
+          "label": "Top user agent",
+          "value": "Mozilla/5.0 (prod)"
+        }
+      ],
       "total_count": 3
     },
     {
@@ -74,6 +94,26 @@
       "family_count": 4,
       "gallery_focus_href": "../facet-ranking-gallery.html#facet-env-staging-region-us-west-2",
       "rendered_row_count": 8,
+      "scorecard_highlights": [
+        {
+          "count": 2,
+          "family_key": "top-paths",
+          "label": "Top path",
+          "value": "/api/export"
+        },
+        {
+          "count": 2,
+          "family_key": "top-referrers",
+          "label": "Top referrer",
+          "value": "https://staging.example.com/replay"
+        },
+        {
+          "count": 2,
+          "family_key": "top-user-agents",
+          "label": "Top user agent",
+          "value": "curl/8.7 staging"
+        }
+      ],
       "total_count": 3
     },
     {
@@ -94,6 +134,26 @@
       "family_count": 4,
       "gallery_focus_href": "../facet-ranking-gallery.html#facet-env-preview-region-missing",
       "rendered_row_count": 4,
+      "scorecard_highlights": [
+        {
+          "count": 2,
+          "family_key": "top-paths",
+          "label": "Top path",
+          "value": "/preview"
+        },
+        {
+          "count": 2,
+          "family_key": "top-referrers",
+          "label": "Top referrer",
+          "value": "https://preview.example.com/home"
+        },
+        {
+          "count": 2,
+          "family_key": "top-user-agents",
+          "label": "Top user agent",
+          "value": "PreviewBot/1.0"
+        }
+      ],
       "total_count": 2
     }
   ],
